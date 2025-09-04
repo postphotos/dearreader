@@ -1,15 +1,14 @@
 import {
     marshalErrorLike,
-    RPCHost, RPCReflection,
+    RPCHost,
     HashManager,
-    AssertionFailureError, ParamValidationError, Defer,
+    AssertionFailureError, Defer,
 } from 'civkit';
 import { singleton } from 'tsyringe';
-import { AsyncContext, CloudHTTPv2, FirebaseStorageBucketControl, Logger, OutputServerEventStream, RPCReflect } from '../shared/index';
+import { AsyncContext, FirebaseStorageBucketControl, Logger } from '../shared/index';
 import _ from 'lodash';
 import { PageSnapshot, PuppeteerControl, ScrappingOptions } from '../services/puppeteer';
 import { Request, Response } from 'express';
-const pNormalizeUrl = import("@esm2cjs/normalize-url");
 // import { AltTextService } from '../services/alt-text';
 import TurndownService from 'turndown';
 // import { Crawled } from '../db/crawled';
@@ -22,16 +21,14 @@ import { CrawlerOptions, CrawlerOptionsHeaderOnly } from '../dto/scrapping-optio
 import { DomainBlockade } from '../db/domain-blockade';
 import { JSDomControl } from '../services/jsdom';
 
-console.log('Initializing CrawlerHost');
-
-const md5Hasher = new HashManager('md5', 'hex');
-
-// const logger = new Logger('Crawler');
-
 import { TransferProtocolMetadata } from 'civkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { URL } from 'url';
+
+console.log('Initializing CrawlerHost');
+
+const md5Hasher = new HashManager('md5', 'hex');
 
 function sendResponse<T>(res: Response, data: T, meta: TransferProtocolMetadata): T {
     if (meta.code) {
@@ -78,7 +75,7 @@ export interface FormattedPage {
 }
 
 const indexProto = {
-    toString: function (): string {
+    toString: function (this: FormattedPage): string {
         console.log('Converting index to string');
         return _(this)
             .toPairs()
@@ -113,7 +110,7 @@ export class CrawlerHost extends RPCHost {
             puppeteerControl: !!puppeteerControl,
             jsdomControl: !!jsdomControl,
             firebaseObjectStorage: !!firebaseObjectStorage,
-            threadLocal: !!threadLocal
+            threadLocal: !!threadLocal,
         });
 
         puppeteerControl.on('crawled', async (snapshot: PageSnapshot, options: ScrappingOptions & { url: URL; }) => {
@@ -206,7 +203,7 @@ export class CrawlerHost extends RPCHost {
                     const alt = cleanAttribute(node.getAttribute('alt')) || '';
 
                     if (options.url) {
-                        const refUrl = new URL(options.url);
+                        const refUrl = new URL(options.url.toString());
                         const mappedUrl = new URL(`blob:${refUrl.origin}/${md5Hasher.hash(src)}`);
 
                         return `![${alt}](${mappedUrl})`;
@@ -287,8 +284,9 @@ export class CrawlerHost extends RPCHost {
 
     getGeneralSnapshotMixins(snapshot: PageSnapshot) {
         console.log('Getting general snapshot mixins');
-        let inferred;
+        let inferred: any;
         const mixin: any = {};
+
         if (this.threadLocal.get('withImagesSummary')) {
             console.log('Generating image summary');
             inferred ??= this.jsdomControl.inferSnapshot(snapshot);
@@ -329,16 +327,15 @@ export class CrawlerHost extends RPCHost {
     async formatSnapshot(mode: string | 'markdown' | 'html' | 'text' | 'screenshot' | 'pageshot', snapshot: PageSnapshot & {
         screenshotUrl?: string;
         pageshotUrl?: string;
-    }, nominalUrl?: URL) {
+    }, nominalUrl?: URL): Promise<FormattedPage> {
         console.log('Formatting snapshot', { mode, url: nominalUrl?.toString() });
-        const host = this.threadLocal.get('host') || '192.168.178.100:1337';
 
         if (mode === 'screenshot') {
             if (snapshot.screenshot && !snapshot.screenshotUrl) {
                 console.log('Saving screenshot');
                 const fileName = `screenshot-${randomUUID()}.png`;
-                const filePath = await this.saveFileLocally(fileName, snapshot.screenshot);
-                snapshot.screenshotUrl = `http://${host}/instant-screenshots/${fileName}`;
+                await this.saveFileLocally(fileName, snapshot.screenshot);
+                snapshot.screenshotUrl = `/instant-screenshots/${fileName}`;
                 console.log('Screenshot saved and URL generated', { screenshotUrl: snapshot.screenshotUrl });
             }
 
@@ -346,7 +343,7 @@ export class CrawlerHost extends RPCHost {
                 ...this.getGeneralSnapshotMixins(snapshot),
                 screenshotUrl: snapshot.screenshotUrl,
                 toString() {
-                    return this.screenshotUrl;
+                    return this.screenshotUrl!;
                 }
             } as FormattedPage;
         }
@@ -354,8 +351,8 @@ export class CrawlerHost extends RPCHost {
             if (snapshot.pageshot && !snapshot.pageshotUrl) {
                 console.log('Saving pageshot');
                 const fileName = `pageshot-${randomUUID()}.png`;
-                const filePath = await this.saveFileLocally(fileName, snapshot.pageshot);
-                snapshot.pageshotUrl = `http://${host}/instant-screenshots/${fileName}`;
+                await this.saveFileLocally(fileName, snapshot.pageshot);
+                snapshot.pageshotUrl = `/instant-screenshots/${fileName}`;
                 console.log('Pageshot saved and URL generated', { pageshotUrl: snapshot.pageshotUrl });
             }
 
@@ -364,7 +361,7 @@ export class CrawlerHost extends RPCHost {
                 html: snapshot.html,
                 pageshotUrl: snapshot.pageshotUrl,
                 toString() {
-                    return this.pageshotUrl;
+                    return this.pageshotUrl!;
                 }
             } as FormattedPage;
         }
@@ -374,12 +371,10 @@ export class CrawlerHost extends RPCHost {
                 ...this.getGeneralSnapshotMixins(snapshot),
                 html: snapshot.html,
                 toString() {
-                    return this.html;
+                    return this.html!;
                 }
             } as FormattedPage;
         }
-
-        let pdfMode = false;
 
         if (mode === 'text') {
             console.log('Formatting as text');
@@ -387,25 +382,27 @@ export class CrawlerHost extends RPCHost {
                 ...this.getGeneralSnapshotMixins(snapshot),
                 text: snapshot.text,
                 toString() {
-                    return this.text;
+                    return this.text!;
                 }
             } as FormattedPage;
         }
-        const imgDataUrlToObjectUrl = !Boolean(this.threadLocal.get('keepImgDataUrl'));
 
+        const imgDataUrlToObjectUrl = !Boolean(this.threadLocal.get('keepImgDataUrl'));
         let contentText = '';
         const imageSummary = {} as { [k: string]: string; };
         const imageIdxTrack = new Map<string, number[]>();
+
         do {
-            if (pdfMode) {
+            const isPdfMode = snapshot.pdfs && snapshot.pdfs.length > 0;
+            if (isPdfMode) {
                 console.log('PDF mode detected');
                 contentText = snapshot.parsed?.content || snapshot.text;
                 break;
             }
 
             if (
-                snapshot.maxElemDepth! > 256 ||
-                snapshot.elemCount! > 70_000
+                (snapshot.maxElemDepth && snapshot.maxElemDepth > 256) ||
+                (snapshot.elemCount && snapshot.elemCount > 70_000)
             ) {
                 console.log('Degrading to text to protect the server');
                 this.logger.warn('Degrading to text to protect the server', { url: snapshot.href });
@@ -417,97 +414,77 @@ export class CrawlerHost extends RPCHost {
             const jsDomElementOfHTML = this.jsdomControl.snippetToElement(snapshot.html, snapshot.href);
             let toBeTurnedToMd = jsDomElementOfHTML;
             let turnDownService = this.getTurndown({ url: snapshot.rebase || nominalUrl, imgDataUrlToObjectUrl });
+
             if (mode !== 'markdown' && snapshot.parsed?.content) {
                 console.log('Processing parsed content for non-markdown mode');
                 const jsDomElementOfParsed = this.jsdomControl.snippetToElement(snapshot.parsed.content, snapshot.href);
-                console.log('Created jsDomElementOfParsed');
                 const par1 = this.jsdomControl.runTurndown(turnDownService, jsDomElementOfHTML);
-                console.log('Generated par1 from jsDomElementOfHTML');
-                const par2 = snapshot.parsed.content ? this.jsdomControl.runTurndown(turnDownService, jsDomElementOfParsed) : '';
-                console.log('Generated par2 from jsDomElementOfParsed');
+                const par2 = this.jsdomControl.runTurndown(turnDownService, jsDomElementOfParsed);
 
-                // If Readability did its job
                 if (par2.length >= 0.3 * par1.length) {
                     console.log('Readability seems to have done its job, adjusting turnDownService');
                     turnDownService = this.getTurndown({ noRules: true, url: snapshot.rebase || nominalUrl, imgDataUrlToObjectUrl });
-                    if (snapshot.parsed.content) {
-                        console.log('Using parsed content for toBeTurnedToMd');
-                        toBeTurnedToMd = jsDomElementOfParsed;
-                    }
+                    toBeTurnedToMd = jsDomElementOfParsed;
                 } else {
                     console.log('Readability output not sufficient, using original HTML');
                 }
-            } else {
-                console.log('Skipping parsed content processing');
             }
 
             for (const plugin of this.turnDownPlugins) {
-                turnDownService = turnDownService.use(plugin);
+                turnDownService.use(plugin);
             }
+
             const urlToAltMap: { [k: string]: string | undefined; } = {};
             if (snapshot.imgs?.length && this.threadLocal.get('withGeneratedAlt')) {
-                const tasks = _.uniqBy((snapshot.imgs || []), 'src').map(async (x) => {
-                    const r = "ALT TEXT!!!"
+                const tasks = _.uniqBy(snapshot.imgs, 'src').map(async (x) => {
+                    const r = "ALT TEXT!!!"; // Placeholder for actual alt text generation
                     if (r && x.src) {
                         urlToAltMap[x.src.trim()] = r;
                     }
                 });
-
                 await Promise.all(tasks);
-            }
-            let imgIdx = 0;
-            turnDownService.addRule('img-generated-alt', {
-                filter: 'img',
-                replacement: (_content, node: any) => {
-                    let linkPreferredSrc = (node.getAttribute('src') || '').trim();
-                    if (!linkPreferredSrc || linkPreferredSrc.startsWith('data:')) {
-                        const dataSrc = (node.getAttribute('data-src') || '').trim();
-                        if (dataSrc && !dataSrc.startsWith('data:')) {
-                            linkPreferredSrc = dataSrc;
+
+                let imgIdx = 0;
+                turnDownService.addRule('img-generated-alt', {
+                    filter: 'img',
+                    replacement: (_content, node: any) => {
+                        let linkPreferredSrc = (node.getAttribute('src') || '').trim();
+                        if (!linkPreferredSrc || linkPreferredSrc.startsWith('data:')) {
+                            const dataSrc = (node.getAttribute('data-src') || '').trim();
+                            if (dataSrc && !dataSrc.startsWith('data:')) {
+                                linkPreferredSrc = dataSrc;
+                            }
                         }
-                    }
 
-                    let src;
-                    try {
-                        src = new URL(linkPreferredSrc, snapshot.rebase || nominalUrl).toString();
-                    } catch (_err) {
-                        void 0;
-                    }
-                    const alt = cleanAttribute(node.getAttribute('alt'));
-                    if (!src) {
-                        return '';
-                    }
-                    const mapped = urlToAltMap[src];
-                    const imgSerial = ++imgIdx;
-                    const idxArr = imageIdxTrack.has(src) ? imageIdxTrack.get(src)! : [];
-                    idxArr.push(imgSerial);
-                    imageIdxTrack.set(src, idxArr);
+                        let src: string | undefined;
+                        try {
+                            src = new URL(linkPreferredSrc, snapshot.rebase || nominalUrl).toString();
+                        } catch (_err) {
+                            void 0;
+                        }
+                        const alt = cleanAttribute(node.getAttribute('alt'));
+                        if (!src) {
+                            return '';
+                        }
+                        const mapped = urlToAltMap[src];
+                        const imgSerial = ++imgIdx;
+                        const idxArr = imageIdxTrack.has(src) ? imageIdxTrack.get(src)! : [];
+                        idxArr.push(imgSerial);
+                        imageIdxTrack.set(src, idxArr);
 
-                    if (mapped) {
                         imageSummary[src] = mapped || alt;
 
-                        if (src?.startsWith('data:') && imgDataUrlToObjectUrl) {
-                            const mappedUrl = new URL(`blob:${nominalUrl?.origin || ''}/${md5Hasher.hash(src)}`);
-                            mappedUrl.protocol = 'blob:';
+                        const effectiveAlt = `Image ${imgIdx}: ${mapped || alt}`;
 
-                            return `![Image ${imgIdx}: ${mapped || alt}](${mappedUrl})`;
+                        if (src.startsWith('data:') && imgDataUrlToObjectUrl) {
+                            const mappedUrl = `blob:${nominalUrl?.origin || ''}/${md5Hasher.hash(src)}`;
+                            return `![${effectiveAlt}](${mappedUrl})`;
                         }
 
-                        return `![Image ${imgIdx}: ${mapped || alt}](${src})`;
+                        return `![${effectiveAlt}](${src})`;
                     }
-
-                    imageSummary[src] = alt || '';
-
-                    if (src?.startsWith('data:') && imgDataUrlToObjectUrl) {
-                        const mappedUrl = new URL(`blob:${nominalUrl?.origin || ''}/${md5Hasher.hash(src)}`);
-                        mappedUrl.protocol = 'blob:';
-
-                        return alt ? `![Image ${imgIdx}: ${alt}](${mappedUrl})` : `![Image ${imgIdx}](${mappedUrl})`;
-                    }
-
-                    return alt ? `![Image ${imgIdx}: ${alt}](${src})` : `![Image ${imgIdx}](${src})`;
-                }
-            });
+                });
+            }
 
             if (toBeTurnedToMd) {
                 try {
@@ -523,23 +500,21 @@ export class CrawlerHost extends RPCHost {
                 }
             }
 
-            if (
-                !contentText || (contentText.startsWith('<') && contentText.endsWith('>'))
-                && toBeTurnedToMd !== jsDomElementOfHTML
-            ) {
+            if ((!contentText || (contentText.startsWith('<') && contentText.endsWith('>'))) && toBeTurnedToMd !== jsDomElementOfHTML) {
                 try {
-                    contentText = this.jsdomControl.runTurndown(turnDownService, snapshot.html);
+                    contentText = this.jsdomControl.runTurndown(turnDownService, jsDomElementOfHTML);
                 } catch (err) {
-                    this.logger.warn(`Turndown failed to run, retrying without plugins`, { err });
+                    this.logger.warn(`Turndown failed to run on fallback, retrying without plugins`, { err });
                     const vanillaTurnDownService = this.getTurndown({ url: snapshot.rebase || nominalUrl, imgDataUrlToObjectUrl });
                     try {
-                        contentText = this.jsdomControl.runTurndown(vanillaTurnDownService, snapshot.html);
+                        contentText = this.jsdomControl.runTurndown(vanillaTurnDownService, jsDomElementOfHTML);
                     } catch (err2) {
-                        this.logger.warn(`Turndown failed to run, giving up`, { err: err2 });
+                        this.logger.warn(`Turndown fallback failed, giving up`, { err: err2 });
                     }
                 }
             }
-            if (!contentText || (contentText.startsWith('<') || contentText.endsWith('>'))) {
+
+            if (!contentText || (contentText.startsWith('<') && contentText.endsWith('>'))) {
                 contentText = snapshot.text;
             }
         } while (false);
@@ -552,7 +527,7 @@ export class CrawlerHost extends RPCHost {
             content: cleanText,
             publishedTime: snapshot.parsed?.publishedTime || undefined,
 
-            toString() {
+            toString(): string {
                 if (mode === 'markdown') {
                     return this.content as string;
                 }
@@ -604,57 +579,63 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
                     ).fromPairs()
                     .value();
         }
-        if (this.threadLocal.get('withLinksSummary')) {
+
+        // Always include links for JSON responses or when explicitly requested
+        const acceptHeader = this.threadLocal.get('accept') || '';
+        const returnFormat = this.threadLocal.get('x-return-format');
+        const wantsJson = acceptHeader.includes('application/json') || returnFormat === 'json' || this.threadLocal.get('withLinksSummary');
+
+        if (wantsJson) {
             formatted.links = _.invert(this.jsdomControl.inferSnapshot(snapshot).links || {});
         }
 
-        return formatted as FormattedPage;
+        return formatted;
     }
 
     async crawl(req: Request, res: Response) {
         this.logger.info(`Crawl request received for URL: ${req.url}`);
         console.log('Crawl method called with request:', req.url);
         const ctx = { req, res };
-        console.log(`req.headers: ${JSON.stringify(req.headers)}`);
 
         try {
-            const crawlerOptionsHeaderOnly = CrawlerOptionsHeaderOnly.from(req);
-            const crawlerOptionsParamsAllowed = CrawlerOptions.from(req.method === 'POST' ? req.body : req.query, req);
             const noSlashURL = ctx.req.url.slice(1);
-            const crawlerOptions = ctx.req.method === 'GET' ? crawlerOptionsHeaderOnly : crawlerOptionsParamsAllowed;
+
+            // Handle favicon.ico request early
+            if (noSlashURL === 'favicon.ico') {
+                console.log('Favicon request detected');
+                return sendResponse(res, 'Favicon not available', { contentType: 'text/plain', code: 404 });
+            }
+
+            const crawlerOptions = req.method === 'POST' ?
+                CrawlerOptions.from(req.body, req) :
+                CrawlerOptions.from(req.query, req);
             console.log('Crawler options:', crawlerOptions);
 
-            // Check if the request is for a screenshot
+            // Store request headers for formatSnapshot to use
+            this.threadLocal.set('accept', req.headers.accept || '');
+            this.threadLocal.set('x-return-format', req.headers['x-return-format'] || '');
+
+            // Check if the request is for a local screenshot
             if (noSlashURL.startsWith('instant-screenshots/')) {
                 return this.serveScreenshot(noSlashURL, res);
             }
 
-            // Handle favicon.ico request
-            if (noSlashURL === 'favicon.ico') {
-                console.log('Favicon request detected');
-                return sendResponse(res, 'Favicon not available', { contentType: 'text/plain', envelope: null, code: 404 });
-            }
-
-            // Extract the actual URL to crawl
-            const urlToCrawl = noSlashURL.startsWith('http') ? noSlashURL : `http://${noSlashURL}`;
-
-            // Validate URL
+            const urlToCrawl = noSlashURL;
             let parsedUrl: URL;
+
             try {
                 parsedUrl = new URL(urlToCrawl);
                 if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
                     throw new Error('Invalid protocol');
                 }
-                // Check if the TLD is valid
                 if (!this.isValidTLD(parsedUrl.hostname)) {
                     throw new Error('Invalid TLD');
                 }
             } catch (error) {
                 console.log('Invalid URL:', urlToCrawl, error);
-                return sendResponse(res, 'Invalid URL or TLD', { contentType: 'text/plain', envelope: null, code: 400 });
+                return sendResponse(res, 'Invalid URL or TLD', { contentType: 'text/plain', code: 400 });
             }
 
-            // Prevent circular crawling
             this.puppeteerControl.circuitBreakerHosts.add(ctx.req.hostname.toLowerCase());
             console.log('Added to circuit breaker hosts:', ctx.req.hostname.toLowerCase());
 
@@ -662,17 +643,17 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
             console.log('Configured crawl options:', crawlOpts);
 
             let lastScrapped: PageSnapshot | undefined;
+            const scrapIterator = this.scrap(parsedUrl, crawlOpts, crawlerOptions);
 
             try {
-                for await (const scrapped of this.scrap(parsedUrl, crawlOpts, crawlerOptions)) {
+                for await (const scrapped of scrapIterator) {
                     lastScrapped = scrapped;
                     if (crawlerOptions.waitForSelector || ((!scrapped?.parsed?.content || !scrapped.title?.trim()) && !scrapped?.pdfs?.length)) {
                         continue;
                     }
 
-                    const formatted = await this.formatSnapshot(crawlerOptions.respondWith, scrapped, parsedUrl);
-
                     if (crawlerOptions.timeout === undefined) {
+                        const formatted = await this.formatSnapshot(crawlerOptions.respondWith, scrapped, parsedUrl);
                         return this.sendFormattedResponse(res, formatted, crawlerOptions.respondWith);
                     }
                 }
@@ -690,11 +671,11 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
                     const formatted = await this.formatSnapshot(crawlerOptions.respondWith, errorSnapshot, parsedUrl);
                     return this.sendFormattedResponse(res, formatted, crawlerOptions.respondWith);
                 }
-                throw scrapError; // Re-throw if it's not a handled error
+                throw scrapError;
             }
 
             if (!lastScrapped) {
-                return sendResponse(res, 'No content available', { contentType: 'text/plain', envelope: null, code: 404 });
+                return sendResponse(res, 'No content available', { contentType: 'text/plain', code: 404 });
             }
 
             const formatted = await this.formatSnapshot(crawlerOptions.respondWith, lastScrapped, parsedUrl);
@@ -702,12 +683,14 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
 
         } catch (error) {
             console.error('Error in crawl method:', error);
-            return sendResponse(res, 'Internal server error', { contentType: 'text/plain', envelope: null, code: 500 });
+            return sendResponse(res, 'Internal server error', { contentType: 'text/plain', code: 500 });
         }
     }
 
     private isValidTLD(hostname: string): boolean {
         const parts = hostname.split('.');
+        // Simple check: at least two parts, and the last part (TLD) is at least 2 chars.
+        // This is not foolproof but prevents many common typos and invalid domains.
         return parts.length > 1 && parts[parts.length - 1].length >= 2;
     }
 
@@ -718,22 +701,57 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
             return res.sendFile(fullPath);
         } else {
             console.log(`Screenshot not found: ${fullPath}`);
-            return sendResponse(res, 'Screenshot not found', { contentType: 'text/plain', envelope: null, code: 404 });
+            return sendResponse(res, 'Screenshot not found', { contentType: 'text/plain', code: 404 });
         }
     }
 
-    private sendFormattedResponse(res: Response, formatted: any, respondWith: string) {
-        if (respondWith === 'screenshot' && Reflect.get(formatted, 'screenshotUrl')) {
-            return sendResponse(res, `${formatted}`,
-                { code: 302, envelope: null, headers: { Location: Reflect.get(formatted, 'screenshotUrl') } }
-            );
+    private sendFormattedResponse(res: Response, formatted: FormattedPage, respondWith: string) {
+        // Check if client wants JSON response
+        const acceptHeader = this.threadLocal.get('accept') || '';
+        const returnFormat = this.threadLocal.get('x-return-format') || '';
+        const wantsJson = acceptHeader.includes('application/json') || returnFormat === 'json';
+
+        if (respondWith === 'screenshot' && formatted.screenshotUrl) {
+            return sendResponse(res, `${formatted}`, { code: 302, headers: { Location: formatted.screenshotUrl } });
         }
-        if (respondWith === 'pageshot' && Reflect.get(formatted, 'pageshotUrl')) {
-            return sendResponse(res, `${formatted}`,
-                { code: 302, envelope: null, headers: { Location: Reflect.get(formatted, 'pageshotUrl') } }
-            );
+        if (respondWith === 'pageshot' && formatted.pageshotUrl) {
+            return sendResponse(res, `${formatted}`, { code: 302, headers: { Location: formatted.pageshotUrl } });
         }
-        return sendResponse(res, `${formatted}`, { contentType: 'text/plain', envelope: null });
+
+        if (wantsJson) {
+            // Return Jina-like JSON format
+            const jsonResponse = {
+                code: 200,
+                status: 20000,
+                data: {
+                    title: formatted.title,
+                    description: formatted.title, // Using title as description for now
+                    url: formatted.url,
+                    content: formatted.content,
+                    links: formatted.links || {},
+                    metadata: {
+                        lang: 'en', // Default to English
+                        description: formatted.title,
+                        'og:title': formatted.title,
+                        'og:description': formatted.title,
+                        'og:type': 'website',
+                        'og:url': formatted.url,
+                        viewport: 'width=device-width, initial-scale=1.0'
+                    },
+                    usage: {
+                        tokens: Math.ceil((formatted.content?.length || 0) / 4) // Rough token estimation
+                    }
+                },
+                meta: {
+                    usage: {
+                        tokens: Math.ceil((formatted.content?.length || 0) / 4)
+                    }
+                }
+            };
+            return sendResponse(res, jsonResponse, { contentType: 'application/json' });
+        }
+
+        return sendResponse(res, `${formatted}`, { contentType: 'text/plain' });
     }
 
     getUrlDigest(urlToCrawl: URL) {
@@ -742,16 +760,12 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
             normalizedURL.hash = '';
         }
         const normalizedUrl = normalizedURL.toString().toLowerCase();
-        const digest = md5Hasher.hash(normalizedUrl.toString());
-
-        return digest;
+        return md5Hasher.hash(normalizedUrl);
     }
 
-    async *scrap(urlToCrawl: URL, crawlOpts?: ExtraScrappingOptions, crawlerOpts?: CrawlerOptions) {
+    async *scrap(urlToCrawl: URL, crawlOpts?: ExtraScrappingOptions, crawlerOpts?: CrawlerOptions): AsyncGenerator<PageSnapshot | undefined> {
         this.logger.info(`Starting scrap for URL: ${urlToCrawl.toString()}`);
-        console.log('Starting scrap for URL:', urlToCrawl.toString());
-        console.log('Crawl options:', crawlOpts);
-        console.log('Crawler options:', crawlerOpts);
+        console.log('Starting scrap for URL:', urlToCrawl.toString(), { crawlOpts, crawlerOpts });
 
         if (crawlerOpts?.html) {
             console.log('Using provided HTML');
@@ -761,55 +775,46 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
                 title: '',
                 text: '',
             } as PageSnapshot;
-
             yield this.jsdomControl.narrowSnapshot(fakeSnapshot, crawlOpts);
-
             return;
         }
+
+        const scrapIterator = this.puppeteerControl.scrap(urlToCrawl, crawlOpts);
 
         if (crawlOpts?.targetSelector || crawlOpts?.removeSelector || crawlOpts?.withIframe) {
-            console.log('Using custom selectors or iframe');
-            for await (const x of this.puppeteerControl.scrap(urlToCrawl, crawlOpts)) {
-                console.log('Narrowing snapshot');
-                yield this.jsdomControl.narrowSnapshot(x, crawlOpts);
+            console.log('Using custom selectors or iframe narrowing');
+            for await (const x of scrapIterator) {
+                if (x) {
+                    yield this.jsdomControl.narrowSnapshot(x, crawlOpts);
+                }
             }
-
-            return;
+        } else {
+            console.log('Using default scraping method');
+            yield* scrapIterator;
         }
-
-        console.log('Using default scraping method');
-        yield* this.puppeteerControl.scrap(urlToCrawl, crawlOpts);
     }
-
-
 
     async *scrapMany(urls: URL[], options?: ExtraScrappingOptions, crawlerOpts?: CrawlerOptions) {
         const iterators = urls.map((url) => this.scrap(url, options, crawlerOpts));
-
-        const results: (PageSnapshot | undefined)[] = iterators.map((_x) => undefined);
-
-        let nextDeferred = Defer();
+        const results: (PageSnapshot | undefined)[] = Array(iterators.length).fill(undefined);
         let concluded = false;
+        let nextDeferred = Defer();
 
         const handler = async (it: AsyncGenerator<PageSnapshot | undefined>, idx: number) => {
             try {
                 for await (const x of it) {
                     results[idx] = x;
-
                     if (x) {
                         nextDeferred.resolve();
                         nextDeferred = Defer();
                     }
-
                 }
             } catch (err: any) {
                 this.logger.warn(`Failed to scrap ${urls[idx]}`, { err: marshalErrorLike(err) });
             }
         };
 
-        Promise.all(
-            iterators.map((it, idx) => handler(it, idx))
-        ).finally(() => {
+        Promise.all(iterators.map(handler)).finally(() => {
             concluded = true;
             nextDeferred.resolve();
         });
@@ -817,41 +822,41 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
         yield results;
 
         try {
-                        while (!concluded) {
+            while (!concluded) {
                 await nextDeferred.promise;
-
                 yield results;
             }
         } finally {
             for (const x of iterators) {
-                x.return();
+                x.return(undefined);
             }
         }
     }
 
-    configure(opts: CrawlerOptions, req: Request, urlToCrawl: URL) {
-
+    configure(opts: CrawlerOptions, req: Request, urlToCrawl: URL): ExtraScrappingOptions {
         this.threadLocal.set('withGeneratedAlt', opts.withGeneratedAlt);
         this.threadLocal.set('withLinksSummary', opts.withLinksSummary);
         this.threadLocal.set('withImagesSummary', opts.withImagesSummary);
         this.threadLocal.set('keepImgDataUrl', opts.keepImgDataUrl);
         this.threadLocal.set('cacheTolerance', opts.cacheTolerance);
         this.threadLocal.set('userAgent', opts.userAgent);
-        this.threadLocal.set('host', req.headers.host || '192.168.178.100:1337');
+        this.threadLocal.set('host', req.headers.host || '127.0.0.1:1337');
         if (opts.timeout) {
             this.threadLocal.set('timeout', opts.timeout * 1000);
         }
 
-        const cookies = req.headers['x-set-cookie'] ?
-            (Array.isArray(req.headers['x-set-cookie']) ? req.headers['x-set-cookie'] : [req.headers['x-set-cookie']])
+        const cookieHeader = req.headers['x-set-cookie'];
+        const cookies = cookieHeader ?
+            (Array.isArray(cookieHeader) ? cookieHeader : [cookieHeader])
                 .map(cookie => {
-                    const [name, value] = cookie.split('=');
+                    const [name, ...valueParts] = cookie.split('=');
+                    const value = valueParts.join('=');
                     return { name, value, url: urlToCrawl.toString() };
                 })
             : [];
 
         console.log('Cookies:', cookies);
-        const crawlOpts: ExtraScrappingOptions = {
+        return {
             proxyUrl: opts.proxyUrl,
             cookies: cookies,
             favorScreenshot: ['screenshot', 'pageshot'].includes(opts.respondWith),
@@ -862,34 +867,27 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
             timeoutMs: opts.timeout ? opts.timeout * 1000 : undefined,
             withIframe: opts.withIframe,
         };
-
-        return crawlOpts;
     }
 
     async simpleCrawl(mode: string, url: URL, opts?: ExtraScrappingOptions) {
         const it = this.scrap(url, { ...opts, minIntervalMs: 500 });
 
-        let lastSnapshot;
+        let lastSnapshot: PageSnapshot | undefined;
         let goodEnough = false;
         try {
             for await (const x of it) {
                 lastSnapshot = x;
-
                 if (goodEnough) {
                     break;
                 }
-
                 if (lastSnapshot?.parsed?.content) {
-                    // After it's good enough, wait for next snapshot;
                     goodEnough = true;
                 }
             }
-
         } catch (err) {
             if (lastSnapshot) {
                 return this.formatSnapshot(mode, lastSnapshot, url);
             }
-
             throw err;
         }
 
@@ -910,8 +908,7 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
             }
             const filePath = path.join(localDir, fileName);
             console.log(`Writing file to: ${filePath}`);
-            await fs.promises.writeFile(filePath, content);
-            console.log(`File successfully written to: ${filePath}`);
+            await fs.promises.writeFile(filePath, new Uint8Array(content));
             return filePath;
         } catch (error) {
             console.error(`Error saving file locally: ${error}`);

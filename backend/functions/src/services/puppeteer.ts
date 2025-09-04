@@ -4,14 +4,46 @@ import { container, singleton } from 'tsyringe';
 import { AsyncService, Defer, marshalErrorLike, AssertionFailureError, delay, maxConcurrency } from 'civkit';
 import { Logger } from '../shared/index';
 
-import type { Browser, CookieParam, Page } from 'puppeteer';
+import type { Browser, Protocol, Page, BrowserContext } from 'puppeteer';
 import puppeteer from 'puppeteer-extra';
+
+// Define CookieParam type since it's not exported from puppeteer
+export interface CookieParam {
+    name: string;
+    value: string;
+    url?: string;
+    domain?: string;
+    path?: string;
+    secure?: boolean;
+    httpOnly?: boolean;
+    sameSite?: 'Strict' | 'Lax' | 'None';
+    expires?: number;
+}
 
 import puppeteerBlockResources from 'puppeteer-extra-plugin-block-resources';
 import puppeteerPageProxy from 'puppeteer-extra-plugin-page-proxy';
 import { SecurityCompromiseError, ServiceCrashedError } from '../shared/errors';
-import { TimeoutError } from 'puppeteer';
+// import { TimeoutError } from 'puppeteer';
 import tldExtract from 'tld-extract';
+import puppeteerStealth from 'puppeteer-extra-plugin-stealth';
+
+// Queue for managing concurrent requests
+interface QueuedRequest {
+    resolve: (value: Page) => void;
+    reject: (error: any) => void;
+    priority: number;
+    timestamp: number;
+}
+
+// Page wrapper with context tracking
+interface ManagedPage {
+    page: Page;
+    context: BrowserContext;
+    sn: number;
+    createdAt: number;
+    inUse: boolean;
+    lastUsed: number;
+}
 
 // Add this new function for cookie validation
 const validateCookie = (cookie: CookieParam) => {
@@ -81,8 +113,6 @@ export interface ScrappingOptions {
     timeoutMs?: number;
 }
 
-
-const puppeteerStealth = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(puppeteerStealth());
 // const puppeteerUAOverride = require('puppeteer-extra-plugin-stealth/evasions/user-agent-override');
 // puppeteer.use(puppeteerUAOverride({
@@ -214,32 +244,322 @@ export class PuppeteerControl extends AsyncService {
 
     _sn = 0;
     browser!: Browser;
-    logger = new Logger('CHANGE_LOGGER_NAME')
+    logger = new Logger('CHANGE_LOGGER_NAME');
 
     private __healthCheckInterval?: NodeJS.Timeout;
 
+    // New queue-based system
+    private requestQueue: QueuedRequest[] = [];
+    private pagePool: ManagedPage[] = [];
+    private maxConcurrentPages = 10; // Configurable max concurrent pages
+    private currentActivePages = 0;
+    private processing = false;
+    private readonly PAGE_TIMEOUT = 300 * 1000; // 5 minutes
+    private readonly PAGE_IDLE_TIMEOUT = 60 * 1000; // 1 minute for idle pages
+
     __loadedPage: Page[] = [];
 
-    finalizerMap = new WeakMap<Page, ReturnType<typeof setTimeout>>();
+    finalizerMap = new WeakMap<Page, ReturnType<typeof global.setTimeout>>();
     snMap = new WeakMap<Page, number>();
     livePages = new Set<Page>();
-    lastPageCratedAt: number = 0;
+    lastPageCreatedAt: number = 0;
 
     circuitBreakerHosts: Set<string> = new Set();
 
+    // Map to store snapshot handlers for each page
+    snapshotHandlers = new WeakMap<Page, (snapshot: PageSnapshot) => void>();
+
     constructor(
     ) {
-        super(...arguments);
-        this.setMaxListeners(2 * Math.floor(os.totalmem() / (256 * 1024 * 1024)) + 1); 148 - 95;
+        super();
+        this.setMaxListeners(2 * Math.floor(os.totalmem() / (256 * 1024 * 1024)) + 1);
 
         this.on('crippled', () => {
             this.__loadedPage.length = 0;
             this.livePages.clear();
+            this.pagePool.forEach(mp => this.destroyManagedPage(mp));
+            this.pagePool.length = 0;
+            this.currentActivePages = 0;
+            // Reject all queued requests
+            this.requestQueue.forEach(req => req.reject(new ServiceCrashedError({ message: 'Browser crashed' })));
+            this.requestQueue.length = 0;
         });
+
+        // Start cleanup interval
+        setInterval(() => this.cleanupIdlePages(), 30_000);
     }
 
     briefPages() {
         this.logger.info(`Status: ${this.livePages.size} pages alive: ${Array.from(this.livePages).map((x) => this.snMap.get(x)).sort().join(', ')}; ${this.__loadedPage.length} idle pages: ${this.__loadedPage.map((x) => this.snMap.get(x)).sort().join(', ')}`);
+        this.logger.info(`Pool status: ${this.pagePool.length} total pages, ${this.currentActivePages} active, ${this.requestQueue.length} queued`);
+    }
+
+    // New queue-based page management
+    private async createManagedPage(): Promise<ManagedPage> {
+        const sn = this._sn++;
+        let context: BrowserContext;
+        let page: Page;
+
+        try {
+            context = this.browser.defaultBrowserContext();
+            page = await context.newPage();
+        } catch (error) {
+            this.logger.error(`Failed to create page ${sn}:`, { error: marshalErrorLike(error as Error) });
+            throw error;
+        }
+
+        const managedPage: ManagedPage = {
+            page,
+            context,
+            sn,
+            createdAt: Date.now(),
+            inUse: false,
+            lastUsed: Date.now()
+        };
+
+        this.snMap.set(page, sn);
+        this.logger.info(`Page ${sn} created.`);
+
+        // Setup page with the same configuration as before
+        await this.setupPage(page, sn);
+
+        return managedPage;
+    }
+
+    private async setupPage(page: Page, sn: number): Promise<void> {
+        const preparations: any[] = [];
+
+        preparations.push(page.setBypassCSP(true));
+        preparations.push(page.setViewport({ width: 1024, height: 1024 }));
+        preparations.push(page.exposeFunction('reportSnapshot', (snapshot: PageSnapshot) => {
+            if (snapshot.href === 'about:blank') {
+                return;
+            }
+            const handler = this.snapshotHandlers.get(page);
+            if (handler) {
+                handler(snapshot);
+            }
+        }));
+        preparations.push(page.evaluateOnNewDocument(SCRIPT_TO_INJECT_INTO_FRAME));
+        preparations.push(page.setRequestInterception(true));
+
+        await Promise.all(preparations);
+        await page.goto('about:blank', { waitUntil: 'domcontentloaded' });
+
+        // Set up request handling (same as before)
+        this.setupPageRequestHandling(page, sn);
+
+        this.livePages.add(page);
+        this.lastPageCreatedAt = Date.now();
+    }
+
+    private setupPageRequestHandling(page: Page, sn: number): void {
+        const domainSet = new Set<string>();
+        let reqCounter = 0;
+        let t0: number | undefined;
+        let halt = false;
+
+        page.on('request', (req: any) => {
+            reqCounter++;
+            if (halt) {
+                return req.abort('blockedbyclient', 1000);
+            }
+            t0 ??= Date.now();
+            const requestUrl = req.url();
+            if (!requestUrl.startsWith("http:") && !requestUrl.startsWith("https:") && requestUrl !== 'about:blank') {
+                return req.abort('blockedbyclient', 1000);
+            }
+
+            try {
+                const tldParsed = tldExtract(requestUrl);
+                domainSet.add(tldParsed.domain);
+            } catch (error) {
+                this.logger.warn(`Failed to parse TLD for URL: ${requestUrl}. Using fallback method.`);
+                const simpleDomain = this.extractDomain(requestUrl);
+                domainSet.add(simpleDomain);
+            }
+
+            const parsedUrl = new URL(requestUrl);
+
+            if (this.circuitBreakerHosts.has(parsedUrl.hostname.toLowerCase())) {
+                page.emit('abuse', { url: requestUrl, page, sn, reason: `Abusive request: ${requestUrl}` });
+                return req.abort('blockedbyclient', 1000);
+            }
+
+            if (
+                parsedUrl.hostname === 'localhost' ||
+                parsedUrl.hostname.startsWith('127.')
+            ) {
+                page.emit('abuse', { url: requestUrl, page, sn, reason: `Suspicious action: Request to localhost: ${requestUrl}` });
+                return req.abort('blockedbyclient', 1000);
+            }
+
+            const dt = Math.ceil((Date.now() - t0) / 1000);
+            const rps = reqCounter / dt;
+
+            if (reqCounter > 1000) {
+                if (rps > 60 || reqCounter > 2000) {
+                    page.emit('abuse', { url: requestUrl, page, sn, reason: `DDoS attack suspected: Too many requests` });
+                    halt = true;
+                    return req.abort('blockedbyclient', 1000);
+                }
+            }
+
+            if (domainSet.size > 200) {
+                page.emit('abuse', { url: requestUrl, page, sn, reason: `DDoS attack suspected: Too many domains` });
+                halt = true;
+                return req.abort('blockedbyclient', 1000);
+            }
+
+            const continueArgs = req.continueRequestOverrides
+                ? [req.continueRequestOverrides(), 0] as const
+                : [];
+
+            return req.continue(continueArgs[0], continueArgs[1]);
+        });
+
+        // Add the page load handling script
+        page.evaluateOnNewDocument(`
+let lastTextLength = 0;
+const handlePageLoad = () => {
+    if (window.haltSnapshot) {
+        return;
+    }
+    const thisTextLength = (document.body.innerText || '').length;
+    const deltaLength = Math.abs(thisTextLength - lastTextLength);
+    if (10 * deltaLength < lastTextLength) {
+        return;
+    }
+    lastTextLength = thisTextLength;
+    const snapshot = reportSnapshot ? reportSnapshot(giveSnapshot()) : null;
+};
+
+let handlePageLoadCallCounter = 0;
+
+window.addEventListener("load", () => {
+    const handlePageLoadCallSeq = ++handlePageLoadCallCounter;
+    setTimeout(() => {
+        if (handlePageLoadCallSeq !== handlePageLoadCallCounter) {
+            return;
+        }
+        handlePageLoad();
+    }, 100);
+});
+
+new MutationObserver(() => {
+    const handlePageLoadCallSeq = ++handlePageLoadCallCounter;
+    setTimeout(() => {
+        if (handlePageLoadCallSeq !== handlePageLoadCallCounter) {
+            return;
+        }
+        handlePageLoad();
+    }, 500);
+}).observe(document.body || document.documentElement, { attributes: true, childList: true, subtree: true });
+`);
+    }
+
+    private destroyManagedPage(managedPage: ManagedPage): Promise<void> {
+        return new Promise<void>((resolve) => {
+            const { page, context, sn } = managedPage;
+
+            if (this.finalizerMap.has(page)) {
+                clearTimeout(this.finalizerMap.get(page)!);
+                this.finalizerMap.delete(page);
+            }
+
+            this.logger.info(`Destroying managed page ${sn}`);
+            this.livePages.delete(page);
+            this.snMap.delete(page);
+
+            // Remove from pool
+            const index = this.pagePool.indexOf(managedPage);
+            if (index !== -1) {
+                this.pagePool.splice(index, 1);
+            }
+
+            if (managedPage.inUse) {
+                this.currentActivePages--;
+            }
+
+            if (page.isClosed()) {
+                resolve();
+                return;
+            }
+
+            Promise.race([
+                (async () => {
+                    try {
+                        await page.close();
+                        await context.close();
+                    } catch (error) {
+                        this.logger.warn(`Error closing page ${sn}:`, { error: marshalErrorLike(error as Error) });
+                    }
+                })(),
+                delay(5000)
+            ]).finally(() => {
+                resolve();
+            });
+        });
+    }
+
+    private cleanupIdlePages(): void {
+        const now = Date.now();
+        const idlePages = this.pagePool.filter(mp =>
+            !mp.inUse && (now - mp.lastUsed) > this.PAGE_IDLE_TIMEOUT
+        );
+
+        idlePages.forEach(mp => {
+            this.logger.info(`Cleaning up idle page ${mp.sn}`);
+            this.destroyManagedPage(mp);
+        });
+    }
+
+    private processQueue(): void {
+        if (this.processing || this.requestQueue.length === 0) {
+            return;
+        }
+
+        this.processing = true;
+
+        // Sort queue by priority and timestamp
+        this.requestQueue.sort((a, b) => {
+            if (a.priority !== b.priority) {
+                return b.priority - a.priority; // Higher priority first
+            }
+            return a.timestamp - b.timestamp; // Earlier timestamp first
+        });
+
+        while (this.requestQueue.length > 0 && this.currentActivePages < this.maxConcurrentPages) {
+            const request = this.requestQueue.shift()!;
+
+            // Find available page or create new one
+            let availablePage = this.pagePool.find(mp => !mp.inUse);
+
+            if (availablePage) {
+                availablePage.inUse = true;
+                availablePage.lastUsed = Date.now();
+                this.currentActivePages++;
+                request.resolve(availablePage.page);
+            } else if (this.pagePool.length < this.maxConcurrentPages) {
+                // Create new page asynchronously
+                this.createManagedPage()
+                    .then(managedPage => {
+                        this.pagePool.push(managedPage);
+                        managedPage.inUse = true;
+                        this.currentActivePages++;
+                        request.resolve(managedPage.page);
+                    })
+                    .catch(error => {
+                        request.reject(error as Error);
+                    });
+            } else {
+                // Put request back in queue (shouldn't happen if logic is correct)
+                this.requestQueue.unshift(request);
+                break;
+            }
+        }
+
+        this.processing = false;
     }
 
     override async init() {
@@ -250,7 +570,7 @@ export class PuppeteerControl extends AsyncService {
         await this.dependencyReady();
 
         if (this.browser) {
-            if (this.browser.connected) {
+            if (this.browser.isConnected()) {
                 await this.browser.close();
             } else {
                 this.browser.process()?.kill('SIGKILL');
@@ -260,12 +580,31 @@ export class PuppeteerControl extends AsyncService {
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--single-process'
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-features=TranslateUI',
+            '--disable-ipc-flooding-protection',
+            '--disable-web-security',
+            '--disable-features=VizDisplayCompositor',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu',
+            '--headless=new',
+            '--disable-extensions',
+            '--disable-default-apps',
+            '--disable-sync',
+            '--no-default-browser-check',
+            '--disable-background-networking',
+            '--disable-component-update'
         ];
 
         this.browser = await puppeteer.launch({
             args: args,
-            timeout: 10_000
+            timeout: 10_000,
+            handleSIGINT: false,
+            handleSIGTERM: false,
+            handleSIGHUP: false
         }).catch((err: any) => {
             this.logger.error(`Unknown firebase issue, just die fast.`, { err });
             process.nextTick(() => {
@@ -289,7 +628,7 @@ export class PuppeteerControl extends AsyncService {
 
     @maxConcurrency(1)
     async healthCheck() {
-        if (Date.now() - this.lastPageCratedAt <= 10_000) {
+        if (Date.now() - this.lastPageCreatedAt <= 10_000) {
             this.briefPages();
             return;
         }
@@ -330,7 +669,7 @@ export class PuppeteerControl extends AsyncService {
 
     async newPage() {
         await this.serviceReady();
-        const dedicatedContext = await this.browser.createBrowserContext();
+        const dedicatedContext = this.browser.defaultBrowserContext();
         const sn = this._sn++;
         const page = await dedicatedContext.newPage();
         const preparations: any[] = [];
@@ -343,7 +682,10 @@ export class PuppeteerControl extends AsyncService {
             if (snapshot.href === 'about:blank') {
                 return;
             }
-            page.emit('snapshot', snapshot);
+            const handler = this.snapshotHandlers.get(page);
+            if (handler) {
+                handler(snapshot);
+            }
         }));
         preparations.push(page.evaluateOnNewDocument(SCRIPT_TO_INJECT_INTO_FRAME));
         preparations.push(page.setRequestInterception(true));
@@ -357,7 +699,7 @@ export class PuppeteerControl extends AsyncService {
         let t0: number | undefined;
         let halt = false;
 
-        page.on('request', (req) => {
+        page.on('request', (req: any) => {
             reqCounter++;
             if (halt) {
                 return req.abort('blockedbyclient', 1000);
@@ -443,37 +785,61 @@ document.addEventListener('load', handlePageLoad);
 
         this.snMap.set(page, sn);
         this.logger.info(`Page ${sn} created.`);
-        this.lastPageCratedAt = Date.now();
+        this.lastPageCreatedAt = Date.now();
         this.livePages.add(page);
 
         return page;
     }
 
-    async getNextPage() {
-        let thePage: Page | undefined;
-        if (this.__loadedPage.length) {
-            thePage = this.__loadedPage.shift();
-            if (this.__loadedPage.length <= 1) {
-                this.newPage()
-                    .then((r) => this.__loadedPage.push(r))
-                    .catch((err) => {
-                        this.logger.warn(`Failed to load new page ahead of time`, { err: marshalErrorLike(err) });
-                    });
-            }
+    async getNextPage(priority: number = 0): Promise<Page> {
+        return new Promise<Page>((resolve, reject) => {
+            const request: QueuedRequest = {
+                resolve,
+                reject,
+                priority,
+                timestamp: Date.now()
+            };
+
+            this.requestQueue.push(request);
+
+            // Set timeout for request
+            const timeout = setTimeout(() => {
+                const index = this.requestQueue.indexOf(request);
+                if (index !== -1) {
+                    this.requestQueue.splice(index, 1);
+                    reject(new Error('Page request timeout'));
+                }
+            }, 30000); // 30 second timeout
+
+            request.resolve = ((originalResolve) => {
+                return (page: Page) => {
+                    clearTimeout(timeout);
+                    originalResolve(page);
+                };
+            })(resolve);
+
+            request.reject = ((originalReject) => {
+                return (error: any) => {
+                    clearTimeout(timeout);
+                    originalReject(error);
+                };
+            })(reject);
+
+            // Process queue
+            this.processQueue();
+        });
+    }
+
+    releasePage(page: Page): void {
+        const managedPage = this.pagePool.find(mp => mp.page === page);
+        if (managedPage && managedPage.inUse) {
+            managedPage.inUse = false;
+            managedPage.lastUsed = Date.now();
+            this.currentActivePages--;
+
+            // Try to process more requests
+            this.processQueue();
         }
-
-        if (!thePage) {
-            thePage = await this.newPage();
-        }
-
-        const timer = setTimeout(() => {
-            this.logger.warn(`Page is not allowed to live past 5 minutes, ditching page ${this.snMap.get(thePage!)}...`);
-            this.ditchPage(thePage!);
-        }, 300 * 1000);
-
-        this.finalizerMap.set(thePage, timer);
-
-        return thePage;
     }
 
     async ditchPage(page: Page) {
@@ -506,284 +872,215 @@ document.addEventListener('load', handlePageLoad);
         let snapshot: PageSnapshot | undefined;
         let screenshot: Buffer | undefined;
         let pageshot: Buffer | undefined;
-        const page = await this.getNextPage();
-        const sn = this.snMap.get(page);
-        this.logger.info(`Page ${sn}: Scraping ${url}`, { url });
+        let page: Page | null = null;
 
-        if (options?.proxyUrl) {
-            this.logger.info(`Page ${sn}: Using proxy:`, options.proxyUrl);
-            await page.useProxy(options.proxyUrl);
-        }
+        try {
+            page = await this.getNextPage(1); // Higher priority for scraping requests
+            const sn = this.snMap.get(page);
+            this.logger.info(`Page ${sn}: Scraping ${url}`, { url });
 
-        if (options?.cookies) {
-            this.logger.info(`Page ${sn}: Attempting to set cookies:`, JSON.stringify(options.cookies, null, 2));
-            try {
-                options.cookies.forEach(validateCookie);
-                await page.setCookie(...options.cookies);
-            } catch (error) {
-                this.logger.error(`Page ${sn}: Error setting cookies:`, error);
-                this.logger.info(`Page ${sn}: Problematic cookies:`, JSON.stringify(options.cookies, null, 2));
-                throw error;
+            if (options?.proxyUrl) {
+                this.logger.info(`Page ${sn}: Proxy not supported in current setup:`, options.proxyUrl);
+                // await page.useProxy(options.proxyUrl);
             }
-        }
 
-        if (options?.overrideUserAgent) {
-            await page.setUserAgent(options.overrideUserAgent);
-        }
+            if (options?.cookies) {
+                this.logger.info(`Page ${sn}: Attempting to set cookies:`, JSON.stringify(options.cookies, null, 2));
+                try {
+                    options.cookies.forEach(validateCookie);
+                    await page.setCookie(...options.cookies);
+                } catch (error) {
+                    this.logger.error(`Page ${sn}: Error setting cookies:`, error);
+                    this.logger.info(`Page ${sn}: Problematic cookies:`, JSON.stringify(options.cookies, null, 2));
+                    throw error;
+                }
+            }
 
-        let nextSnapshotDeferred = Defer();
-        const crippleListener = () => nextSnapshotDeferred.reject(new ServiceCrashedError({ message: `Browser crashed, try again` }));
-        this.once('crippled', crippleListener);
-        nextSnapshotDeferred.promise.finally(() => {
-            this.off('crippled', crippleListener);
-        });
-        let finalized = false;
-        const hdl = (s: any) => {
-            if (snapshot === s) {
-                return;
+            if (options?.overrideUserAgent) {
+                await page.setUserAgent(options.overrideUserAgent);
             }
-            snapshot = s;
-            if (s?.maxElemDepth && s.maxElemDepth > 256) {
-                return;
-            }
-            if (s?.elemCount && s.elemCount > 10_000) {
-                return;
-            }
-            nextSnapshotDeferred.resolve(s);
-            nextSnapshotDeferred = Defer();
+
+            let nextSnapshotDeferred = Defer();
+            const crippleListener = () => nextSnapshotDeferred.reject(new ServiceCrashedError({ message: `Browser crashed, try again` }));
             this.once('crippled', crippleListener);
             nextSnapshotDeferred.promise.finally(() => {
                 this.off('crippled', crippleListener);
             });
-        };
-        page.on('snapshot', hdl);
-        page.once('abuse', (event: any) => {
-            this.emit('abuse', { ...event, url: parsedUrl });
-            nextSnapshotDeferred.reject(
-                new SecurityCompromiseError(`Abuse detected: ${event.reason}`)
-            );
-        });
 
-        const timeout = options?.timeoutMs || 30_000;
-
-        try {
-            let waitForPromise: Promise<any> | undefined;
-            let gotoPromise: Promise<PageSnapshot | void>;
-
-            gotoPromise = page.goto(url, {
-                waitUntil: ['load', 'domcontentloaded', 'networkidle0'],
-                timeout,
-            })
-            .catch((err: any) => {
-                if (err instanceof TimeoutError || err.message.includes('ERR_NAME_NOT_RESOLVED')) {
-                    this.logger.warn(`Page ${sn}: Browsing of ${url} failed`, { err: marshalErrorLike(err) });
-                    return {
-                        title: 'Error: Unable to access page',
-                        href: url,
-                        html: '',
-                        text: `Failed to access the page: ${err.message}`,
-                        error: err.message
-                    } as PageSnapshot;
+            const hdl = (s: any) => {
+                if (snapshot === s) {
+                    return;
                 }
-                if (err.message && (err.message.includes('Invalid TLD') || err.message.includes('ERR_NAME_NOT_RESOLVED'))) {
-                    this.logger.warn(`Page ${sn}: Invalid domain or TLD for ${url}`, { err: marshalErrorLike(err) });
-                    return new AssertionFailureError({
-                        message: `Invalid domain or TLD for ${url}: ${err}`,
-                        cause: err,
-                    });
+                snapshot = s;
+                if (s?.maxElemDepth && s.maxElemDepth > 256) {
+                    return;
                 }
-
-                this.logger.warn(`Page ${sn}: Browsing of ${url} failed`, { err: marshalErrorLike(err) });
-                return Promise.reject(new AssertionFailureError({
-                    message: `Failed to goto ${url}: ${err}`,
-                    cause: err,
-                }));
-            }).then(async (stuff) => {
-                // This check is necessary because without snapshot, the condition of the page is unclear
-                // Calling evaluate directly may stall the process.
-                if (!snapshot) {
-                    if (stuff instanceof Error) {
-                        finalized = true;
-                        throw stuff;
-                    }
+                if (s?.elemCount && s.elemCount > 10_000) {
+                    return;
                 }
-                try {
-                    const pSubFrameSnapshots = this.snapshotChildFrames(page);
-                    snapshot = await page.evaluate('giveSnapshot(true)') as PageSnapshot;
-                    screenshot = await page.screenshot();
-                    if (snapshot) {
-                        snapshot.childFrames = await pSubFrameSnapshots;
-                    }
-                } catch (err: any) {
-                    this.logger.warn(`Page ${sn}: Failed to finalize ${url}`, { err: marshalErrorLike(err) });
-                    if (stuff instanceof Error) {
-                        finalized = true;
-                        throw stuff;
-                    }
-                }
-                if (!snapshot?.html) {
-                    if (stuff instanceof Error) {
-                        finalized = true;
-                        throw stuff;
-                    }
-                }
-                try {
-                    if ((!snapshot?.title || !snapshot?.parsed?.content) && !(snapshot?.pdfs?.length)) {
-                        const salvaged = await this.salvage(url, page);
-                        if (salvaged) {
-                            const pSubFrameSnapshots = this.snapshotChildFrames(page);
-                            snapshot = await page.evaluate('giveSnapshot(true)') as PageSnapshot;
-                            screenshot = await page.screenshot();
-                            pageshot = await page.screenshot({ fullPage: true });
-                            if (snapshot) {
-                                snapshot.childFrames = await pSubFrameSnapshots;
-                            }
-                        }
-                    }
-                } catch (err: any) {
-                    this.logger.warn(`Page ${sn}: Failed to salvage ${url}`, { err: marshalErrorLike(err) });
-                }
-
-                finalized = true;
-                if (snapshot?.html) {
-                    this.logger.info(`Page ${sn}: Snapshot of ${url} done`, { url, title: snapshot?.title, href: snapshot?.href });
-                    this.emit(
-                        'crawled',
-                        { ...snapshot, screenshot, pageshot },
-                        { ...options, url: parsedUrl }
-                    );
-                }
-            });
-
-            if (options?.waitForSelector) {
-                console.log('Waiting for selector', options.waitForSelector);
-                const t0 = Date.now();
-                waitForPromise = nextSnapshotDeferred.promise.then(() => {
-                    const t1 = Date.now();
-                    const elapsed = t1 - t0;
-                    const remaining = timeout - elapsed;
-                    const thisTimeout = remaining > 100 ? remaining : 100;
-                    const p = (Array.isArray(options.waitForSelector) ?
-                        Promise.all(options.waitForSelector.map((x) => page.waitForSelector(x, { timeout: thisTimeout }))) :
-                        page.waitForSelector(options.waitForSelector!, { timeout: thisTimeout }))
-                        .then(async () => {
-                            const pSubFrameSnapshots = this.snapshotChildFrames(page);
-                            snapshot = await page.evaluate('giveSnapshot(true)') as PageSnapshot;
-                            screenshot = await page.screenshot();
-                            pageshot = await page.screenshot({ fullPage: true });
-                            if (snapshot) {
-                                snapshot.childFrames = await pSubFrameSnapshots;
-                            }
-                            finalized = true;
-                        })
-                        .catch((err) => {
-                            this.logger.warn(`Page ${sn}: Failed to wait for selector ${options.waitForSelector}`, { err: marshalErrorLike(err) });
-                            waitForPromise = undefined;
-                        });
-                    return p as any;
+                nextSnapshotDeferred.resolve(s);
+                nextSnapshotDeferred = Defer();
+                this.once('crippled', crippleListener);
+                nextSnapshotDeferred.promise.finally(() => {
+                    this.off('crippled', crippleListener);
                 });
-            }
+            };
+            this.snapshotHandlers.set(page, hdl);
+            // page.once('abuse', (event: any) => {
+            //     this.emit('abuse', { ...event, url: parsedUrl });
+            //     nextSnapshotDeferred.reject(
+            //         new SecurityCompromiseError(`Abuse detected: ${event.reason}`)
+            //     );
+            // });
+
+            const timeout = options?.timeoutMs || 30_000;
 
             try {
-                let lastHTML = snapshot?.html;
-                while (true) {
-                    const ckpt = [nextSnapshotDeferred.promise, gotoPromise];
-                    if (waitForPromise) {
-                        ckpt.push(waitForPromise);
+                let waitForPromise: Promise<any> | undefined;
+                let gotoPromise: Promise<PageSnapshot | any | null | void>;
+
+                gotoPromise = page.goto(url, {
+                    waitUntil: ['load', 'domcontentloaded', 'networkidle0'],
+                    timeout,
+                })
+                .catch((err: any) => {
+                    if (err.name === 'TimeoutError' || err.message?.includes('ERR_NAME_NOT_RESOLVED') || err.message?.includes('Navigation timeout')) {
+                        this.logger.warn(`Page ${sn}: Browsing of ${url} failed`, { err: marshalErrorLike(err) });
+                        return {
+                            title: 'Error: Unable to access page',
+                            href: url,
+                            html: '',
+                            text: err.message,
+                            screenshot,
+                            pageshot,
+                            error: err.message
+                        } as PageSnapshot;
+                    } else {
+                        throw err;
                     }
-                    if (options?.minIntervalMs) {
-                        ckpt.push(delay(options.minIntervalMs));
-                    }
-                    let error;
-                    await Promise.race(ckpt).catch((err) => {
-                        if (err.message && (err.message.includes('Invalid TLD') || err.message.includes('ERR_NAME_NOT_RESOLVED'))) {
-                            this.logger.warn(`Invalid domain or TLD encountered: ${err.message}`);
-                            error = new AssertionFailureError({
-                                message: `Invalid domain or TLD for ${url}: ${err.message}`,
-                                cause: err,
-                            });
-                        } else {
-                            error = err;
+                });
+
+                if (Array.isArray(options?.waitForSelector)) {
+                    if (options!.waitForSelector!.length === 1) {
+                        console.log('Waiting for selector', options.waitForSelector);
+                        try {
+                            waitForPromise = page!.waitForSelector(options.waitForSelector[0], { timeout });
+                        } catch (err: any) {
+                            this.logger.warn(`Page ${sn}: Could not wait for selector`, { err: marshalErrorLike(err) });
                         }
-                    });
-                    if (finalized && !error) {
-                        if (!snapshot && !screenshot) {
-                            if (error) {
-                                throw error;
-                            }
-                            throw new AssertionFailureError(`Could not extract any meaningful content from the page`);
+                    } else if (options!.waitForSelector!.length > 1) {
+                        try {
+                            waitForPromise = Promise.race(options.waitForSelector.map(selector => page!.waitForSelector(selector, { timeout })));
+                        } catch (err: any) {
+                            this.logger.warn(`Page ${sn}: Could not wait for any selector`, { err: marshalErrorLike(err) });
                         }
-                        yield { ...snapshot, screenshot, pageshot } as PageSnapshot;
-                        break;
                     }
-                    if (options?.favorScreenshot && snapshot?.title && snapshot?.html !== lastHTML) {
-                        screenshot = await page.screenshot();
-                        pageshot = await page.screenshot({ fullPage: true });
-                        lastHTML = snapshot.html;
-                    }
-                    if (snapshot || screenshot) {
-                        yield { ...snapshot, screenshot, pageshot } as PageSnapshot;
-                    }
-                    if (error) {
-                        if (error instanceof AssertionFailureError &&
-                            (error.message.includes('Invalid TLD') || error.message.includes('ERR_NAME_NOT_RESOLVED'))) {
-                            this.logger.warn(`Continuing despite Invalid domain or TLD: ${error.message}`);
-                            yield {
-                                title: '',
-                                href: url,
-                                html: '',
-                                text: '',
-                                screenshot,
-                                pageshot,
-                                error: 'Invalid domain or TLD'
-                            } as PageSnapshot;
-                            break;
-                        } else {
-                            throw error;
-                        }
+                } else if (typeof options?.waitForSelector === 'string') {
+                    try {
+                        waitForPromise = page.waitForSelector(options.waitForSelector, { timeout });
+                    } catch (err: any) {
+                        this.logger.warn(`Page ${sn}: Could not wait for selector`, { err: marshalErrorLike(err) });
                     }
                 }
-            } catch (error: any) {
-                if (error.message && (error.message.includes('Invalid TLD') || error.message.includes('ERR_NAME_NOT_RESOLVED'))) {
-                    this.logger.warn(`Invalid domain or TLD encountered: ${error.message}`);
-                    yield {
-                        title: '',
+
+                if (waitForPromise) {
+                    await Promise.all([gotoPromise, waitForPromise]);
+                } else {
+                    await gotoPromise;
+                }
+
+                let goodSnapshot = false;
+                try {
+                    const threshold = options?.favorScreenshot ? 0 : 200;
+                    let waitCound = 0;
+                    while (!snapshot || snapshot.text.length <= threshold) {
+                        const nextSnapshot = await Promise.race([
+                            nextSnapshotDeferred.promise,
+                            delay(200)
+                        ]);
+                        waitCound++;
+                        if (nextSnapshot) {
+                            goodSnapshot = true;
+                            break;
+                        }
+                        if (waitCound >= 50) {
+                            break;
+                        }
+                    }
+                } catch (err: any) {
+                    if (err.constructor === SecurityCompromiseError) {
+                        throw err;
+                    }
+                    this.logger.warn(`Page ${sn}: No snapshot available, moving on`, { err: marshalErrorLike(err) });
+                    snapshot = {
+                        title: 'Error: Scraping Failed',
                         href: url,
                         html: '',
                         text: '',
                         screenshot,
                         pageshot,
-                        error: 'Invalid domain or TLD'
+                        error: 'No snapshot available'
                     } as PageSnapshot;
-                } else {
-                    throw error;
                 }
+
+                if (snapshot) {
+                    this.logger.info(`Page ${sn}: Snapshot of ${url} done`, { url, title: snapshot.title, href: snapshot.href });
+                    yield snapshot;
+                }
+
+                if (!goodSnapshot) {
+                    try {
+                        screenshot = await page.screenshot() as Buffer;
+                        pageshot = await page.screenshot({ fullPage: true }) as Buffer;
+                        const title = await page.title().catch(() => 'Failed to get title');
+
+                        yield {
+                            title,
+                            href: url,
+                            html: '',
+                            text: '',
+                            screenshot,
+                            pageshot,
+                            error: 'Screenshot only'
+                        } as PageSnapshot;
+                    } catch (err: any) {
+                        this.logger.warn(`Page ${sn}: Failed to take screenshot`, { err: marshalErrorLike(err) });
+                    }
+                }
+
+            } catch (error: any) {
+                this.logger.error(`Page ${sn}: Error during scraping`, { error: marshalErrorLike(error) });
+                yield {
+                    title: 'Error: Scraping failed',
+                    href: url,
+                    html: '',
+                    text: error.message || 'Unknown error',
+                    screenshot,
+                    pageshot,
+                    error: error.message || 'Unknown error'
+                } as PageSnapshot;
             } finally {
-                if (typeof waitForPromise !== 'undefined' && typeof gotoPromise !== 'undefined') {
-                    Promise.allSettled([gotoPromise, waitForPromise]).finally(() => {
-                        page.off('snapshot', hdl);
-                        this.ditchPage(page);
-                    });
-                } else if (typeof gotoPromise !== 'undefined') {
-                    gotoPromise.finally(() => {
-                        page.off('snapshot', hdl);
-                        this.ditchPage(page);
-                    });
-                } else {
-                    page.off('snapshot', hdl);
-                    this.ditchPage(page);
-                }
-                nextSnapshotDeferred.resolve();
+                this.snapshotHandlers.delete(page);
+                // Clean up event listeners
+                // page.removeAllListeners('abuse');
             }
+
         } catch (error: any) {
-            this.logger.error(`Unhandled error in scrap method:`, error);
+            this.logger.error(`Failed to get page for scraping ${url}:`, { error: marshalErrorLike(error) });
             yield {
-                title: 'Error: Unhandled exception',
+                title: 'Error: Failed to get page',
                 href: url,
                 html: '',
-                text: `An unexpected error occurred: ${error.message}`,
-                error: 'Unhandled exception'
+                text: error.message || 'Failed to get page',
+                screenshot,
+                pageshot,
+                error: error.message || 'Failed to get page'
             } as PageSnapshot;
+        } finally {
+            // Always release the page back to the pool
+            if (page) {
+                this.releasePage(page);
+            }
         }
     }
 
@@ -801,7 +1098,7 @@ document.addEventListener('load', handlePageLoad);
             return null;
         }
 
-        await page.goto(googleArchiveUrl, { waitUntil: ['load', 'domcontentloaded', 'networkidle0'], timeout: 15_000 }).catch((err) => {
+        await page.goto(googleArchiveUrl, { waitUntil: ['load', 'domcontentloaded', 'networkidle0'], timeout: 15_000 }).catch((err: any) => {
             this.logger.warn(`Page salvation did not fully succeed.`, { err: marshalErrorLike(err) });
         });
 
@@ -812,7 +1109,7 @@ document.addEventListener('load', handlePageLoad);
 
     async snapshotChildFrames(page: Page): Promise<PageSnapshot[]> {
         const childFrames = page.mainFrame().childFrames();
-        const r = await Promise.all(childFrames.map(async (x) => {
+        const r = await Promise.all(childFrames.map(async (x: any) => {
             const thisUrl = x.url();
             if (!thisUrl || thisUrl === 'about:blank') {
                 return undefined;
@@ -829,7 +1126,6 @@ document.addEventListener('load', handlePageLoad);
 
         return r.filter(Boolean);
     }
-
 }
 
 const puppeteerControl = container.resolve(PuppeteerControl);

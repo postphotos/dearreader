@@ -37,7 +37,7 @@ export class JSDomControl extends AsyncService {
         }
         const t0 = Date.now();
         const jsdom = new JSDOM(snapshot.html, { url: snapshot.href, virtualConsole });
-        const allNodes: Node[] = [];
+        const allNodes: Element[] = [];
         jsdom.window.document.querySelectorAll('svg').forEach((x) => x.innerHTML = '');
         if (options?.withIframe) {
             jsdom.window.document.querySelectorAll('iframe[src],frame[src]').forEach((x) => {
@@ -79,16 +79,16 @@ export class JSDomControl extends AsyncService {
                 }
             });
         } else {
-            allNodes.push(jsdom.window.document);
+            allNodes.push(jsdom.window.document.documentElement);
         }
 
         if (!allNodes.length) {
             return snapshot;
         }
         const textChunks: string[] = [];
-        let rootDoc;
-        if (allNodes.length === 1 && allNodes[0].nodeName === '#document') {
-            rootDoc = allNodes[0] as any;
+        let rootDoc: Document;
+        if (allNodes.length === 1 && allNodes[0].nodeName === 'HTML') {
+            rootDoc = allNodes[0].ownerDocument!;
             if (rootDoc.body.textContent) {
                 textChunks.push(rootDoc.body.textContent);
             }
@@ -103,7 +103,7 @@ export class JSDomControl extends AsyncService {
             }
         }
 
-        let parsed;
+        let parsed: any;
         try {
             parsed = new Readability(rootDoc.cloneNode(true) as any).parse();
         } catch (err: any) {
