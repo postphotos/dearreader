@@ -67,6 +67,21 @@ class ReaderAPI:
         response.raise_for_status()
         return response.text
 
+    def get_queue_status(self) -> Dict[str, Any]:
+        """Get current queue status"""
+        response = requests.get(f"{self.base_url}/queue")
+        response.raise_for_status()
+        return response.json()
+
+    def check_queue_ui(self) -> bool:
+        """Check if queue UI is accessible"""
+        try:
+            response = requests.get(f"{self.base_url}/queue-ui")
+            response.raise_for_status()
+            return True
+        except:
+            return False
+
 
 def print_separator(title: str):
     """Print a nice separator for demo sections"""
@@ -261,6 +276,28 @@ def test_basic_api(reader: ReaderAPI):
     except Exception as e:
         print(f"❌ Favicon test error: {e}")
 
+    print("Testing queue API endpoint...")
+    try:
+        queue_data = reader.get_queue_status()
+        if "status" in queue_data and "max_concurrent" in queue_data:
+            print("✅ Queue API working correctly")
+            print(f"   Status: {queue_data.get('status')}")
+            print(f"   Max Concurrent: {queue_data.get('max_concurrent')}")
+            print(f"   Active Requests: {queue_data.get('active_requests', 0)}")
+        else:
+            print(f"⚠️ Queue API returned unexpected data: {queue_data}")
+    except Exception as e:
+        print(f"❌ Queue API test error: {e}")
+
+    print("Testing queue UI endpoint...")
+    try:
+        if reader.check_queue_ui():
+            print("✅ Queue UI accessible")
+        else:
+            print("❌ Queue UI not accessible")
+    except Exception as e:
+        print(f"❌ Queue UI test error: {e}")
+
 
 def main():
     """Main demo function"""
@@ -342,6 +379,12 @@ def main():
     print("   ✅ Markdown content extraction")
     print("   ✅ Error handling for various scenarios")
     print("   ✅ Reading-focused content parsing")
+    print("   ✅ Queue API endpoint (/queue)")
+    print("   ✅ Queue monitoring UI (/queue-ui)")
+    print("\n🔗 Additional endpoints to explore:")
+    print(f"   📊 Queue Status: {reader.base_url}/queue")
+    print(f"   📈 Queue Monitor: {reader.base_url}/queue-ui")
+    print(f"   🏠 Main Index: {reader.base_url}/")
 
 
 if __name__ == "__main__":

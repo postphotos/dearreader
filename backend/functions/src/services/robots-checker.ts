@@ -1,232 +1,61 @@
-import { singleton } from 'tsyringe';
-import { Logger } from '../shared/index.js';
+import axios from 'axios';
 
-export interface RobotsRule {
-    userAgent: string;
-    disallowed: string[];
-    allowed: string[];
-    crawlDelay?: number;
-    sitemaps: string[];
+export interface RobotsCheckerResult {
+    allowed: boolean;
+    reason?: string;
 }
 
-@singleton()
 export class RobotsChecker {
-    private robotsCache = new Map<string, { rules: RobotsRule[], expiry: number }>();
-    private readonly cacheTimeout = 24 * 60 * 60 * 1000; // 24 hours
-    private logger: Logger;
+    private robotsTxtCache: Map<string, string> = new Map();
 
-    constructor() {
-        console.log('RobotsChecker initialized');
-        this.logger = new Logger();
-    }
-
-    async isAllowed(url: URL, userAgent: string = 'DearReader-Bot'): Promise<boolean> {
+    async checkAccess(url: string, userAgent: string = '*', path: string = '/'): Promise<RobotsCheckerResult> {
         try {
-            const origin = `${url.protocol}//${url.host}`;
-            const robotsUrl = `${origin}/robots.txt`;
+            const baseUrl = new URL(url).origin;
+            const robotsUrl = `${baseUrl}/robots.txt`;
 
-            // Get robots.txt rules
-            const rules = await this.getRobotsRules(robotsUrl);
-
-            // Check if the path is allowed
-            return this.checkPathAllowed(url.pathname, userAgent, rules);
-        } catch (error) {
-            this.logger.warn('Error checking robots.txt, allowing by default:', error);
-            // If we can't check robots.txt, allow by default (be conservative)
-            return true;
-        }
-    }
-
-    private async getRobotsRules(robotsUrl: string): Promise<RobotsRule[]> {
-        const cacheKey = robotsUrl;
-        const cached = this.robotsCache.get(cacheKey);
-
-        if (cached && Date.now() < cached.expiry) {
-            return cached.rules;
-        }
-
-        try {
-            console.log('Fetching robots.txt from:', robotsUrl);
-            const response = await fetch(robotsUrl, {
-                method: 'GET',
-                headers: {
-                    'User-Agent': 'DearReader-Bot/1.0',
-                },
-                signal: AbortSignal.timeout(5000), // 5 second timeout
-            });
-
-            if (!response.ok) {
-                console.log('robots.txt not found or error, allowing all');
-                return [];
+            let robotsTxt = this.robotsTxtCache.get(robotsUrl);
+            if (!robotsTxt) {
+                const response = await axios.get(robotsUrl);
+                robotsTxt = response.data;
+                this.robotsTxtCache.set(robotsUrl, c);
             }
 
-            const robotsText = await response.text();
-            const rules = this.parseRobotsTxt(robotsText);
+            const rules = this.parseRobotsTxt(robotsTxt);
+            const applicableRules = rules[userAgent] || rules['*'] || [];
 
-            // Cache the results
-            this.robotsCache.set(cacheKey, {
-                rules,
-                expiry: Date.now() + this.cacheTimeout
-            });
+            for (const rule of applicableRules) {
+                if (rule.path === path || path.startsWith(rule.path)) {
+                    return { allowed: rule.allow };
+                }
+            }
 
-            return rules;
+            return { allowed: true }; // Default allow if no matching rule
         } catch (error) {
-            console.log('Error fetching robots.txt, allowing by default:', error);
-            return [];
+            return { allowed: false, reason: 'Failed to fetch or parse robots.txt' };
         }
     }
 
-    private parseRobotsTxt(robotsText: string): RobotsRule[] {
-        const lines = robotsText.split('\n').map(line => line.trim());
-        const rules: RobotsRule[] = [];
-        let currentRule: Partial<RobotsRule> | null = null;
+    private parseRobotsTxt(robotsTxt: string): Record<string, { path: string; allow: boolean }[]> {
+        const rules: Record<string, { path: string; allow: boolean }[]> = {};
+        let currentUserAgent = '';
 
+        const lines = robotsTxt.split('\n');
         for (const line of lines) {
-            if (!line || line.startsWith('#')) {
-                continue; // Skip empty lines and comments
+            const trimmed = line.trim();
+            if (trimmed.startsWith('User-agent:')) {
+                currentUserAgent = trimmed.split(':')[1].trim();
+                rules[currentUserAgent] = rules[currentUserAgent] || [];
+            } else if (trimmed.startsWith('Disallow:') || trimmed.startsWith('Allow:')) {
+                if (currentUserAgent) {
+                    const parts = trimmed.split(':');
+                    const directive = parts[0].trim();
+                    const path = parts[1].trim();
+                    const allow = directive === 'Allow';
+                    rules[currentUserAgent].push({ path, allow });
+                }
             }
-
-            const [directive, ...valueParts] = line.split(':');
-            const value = valueParts.join(':').trim();
-
-            if (!directive || !value) {
-                continue;
-            }
-
-            const dir = directive.toLowerCase();
-
-            switch (dir) {
-                case 'user-agent':
-                    // Start a new rule
-                    if (currentRule) {
-                        rules.push(this.completeRule(currentRule));
-                    }
-                    currentRule = {
-                        userAgent: value.toLowerCase(),
-                        disallowed: [],
-                        allowed: [],
-                        sitemaps: []
-                    };
-                    break;
-
-                case 'disallow':
-                    if (currentRule) {
-                        currentRule.disallowed = currentRule.disallowed || [];
-                        if (value) {
-                            currentRule.disallowed.push(value);
-                        }
-                    }
-                    break;
-
-                case 'allow':
-                    if (currentRule) {
-                        currentRule.allowed = currentRule.allowed || [];
-                        if (value) {
-                            currentRule.allowed.push(value);
-                        }
-                    }
-                    break;
-
-                case 'crawl-delay':
-                    if (currentRule) {
-                        const delay = parseInt(value, 10);
-                        if (!isNaN(delay)) {
-                            currentRule.crawlDelay = delay;
-                        }
-                    }
-                    break;
-
-                case 'sitemap':
-                    if (currentRule) {
-                        currentRule.sitemaps = currentRule.sitemaps || [];
-                        currentRule.sitemaps.push(value);
-                    }
-                    break;
-            }
-        }
-
-        // Add the last rule
-        if (currentRule) {
-            rules.push(this.completeRule(currentRule));
         }
 
         return rules;
-    }
-
-    private completeRule(rule: Partial<RobotsRule>): RobotsRule {
-        return {
-            userAgent: rule.userAgent || '*',
-            disallowed: rule.disallowed || [],
-            allowed: rule.allowed || [],
-            crawlDelay: rule.crawlDelay,
-            sitemaps: rule.sitemaps || []
-        };
-    }
-
-    private checkPathAllowed(path: string, userAgent: string, rules: RobotsRule[]): boolean {
-        // Find applicable rules for this user agent
-        const applicableRules = rules.filter(rule =>
-            rule.userAgent === '*' ||
-            rule.userAgent === userAgent.toLowerCase() ||
-            userAgent.toLowerCase().includes(rule.userAgent)
-        );
-
-        if (applicableRules.length === 0) {
-            return true; // No rules = allowed
-        }
-
-        // Check each applicable rule
-        for (const rule of applicableRules) {
-            // Check allow rules first (they take precedence)
-            for (const allowPattern of rule.allowed) {
-                if (this.pathMatches(path, allowPattern)) {
-                    return true;
-                }
-            }
-
-            // Check disallow rules
-            for (const disallowPattern of rule.disallowed) {
-                if (this.pathMatches(path, disallowPattern)) {
-                    return false;
-                }
-            }
-        }
-
-        return true; // Default to allowed if no specific rule matches
-    }
-
-    private pathMatches(path: string, pattern: string): boolean {
-        if (pattern === '') {
-            return false; // Empty pattern doesn't match anything
-        }
-
-        if (pattern === '/') {
-            return true; // Root pattern matches everything
-        }
-
-        // Simple pattern matching - exact prefix match
-        // In a full implementation, you might want to support wildcards
-        return path.startsWith(pattern);
-    }
-
-    async getCrawlDelay(url: URL, userAgent: string = 'DearReader-Bot'): Promise<number | undefined> {
-        try {
-            const rules = await this.getRobotsRules(`${url.protocol}//${url.host}/robots.txt`);
-            const applicableRules = rules.filter(rule =>
-                rule.userAgent === '*' ||
-                rule.userAgent === userAgent.toLowerCase()
-            );
-
-            // Return the first crawl delay found
-            for (const rule of applicableRules) {
-                if (rule.crawlDelay !== undefined) {
-                    return rule.crawlDelay;
-                }
-            }
-
-            return undefined;
-        } catch (error) {
-            return undefined;
-        }
     }
 }

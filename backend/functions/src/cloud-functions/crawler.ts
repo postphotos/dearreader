@@ -11,8 +11,9 @@ import { PageSnapshot, PuppeteerControl, ScrappingOptions } from '../services/pu
 import { Request, Response } from 'express';
 // import { AltTextService } from '../services/alt-text';
 import TurndownService from 'turndown';
-// @ts-ignore - No type definitions available for turndown-plugin-gfm
-import * as turndownPluginGfm from 'turndown-plugin-gfm';
+// No type definitions available for turndown-plugin-gfm — require it at runtime and treat as any
+// @ts-ignore
+const turndownPluginGfm: any = require('turndown-plugin-gfm');
 // import { Crawled } from '../db/crawled';
 import { cleanAttribute } from '../utils/misc.js';
 import { randomUUID } from 'crypto';
@@ -21,7 +22,7 @@ import * as yaml from 'js-yaml';
 
 import { CrawlerOptions } from '../dto/scrapping-options.js';
 // import { PDFExtractor } from '../services/pdf-extract.js';
-import { PDFExtractor } from '../services/pdf-extract.js';
+import PDFExtractor from '../services/pdf-extract.js';
 import { RobotsChecker } from '../services/robots-checker.js';
 import { DomainBlockade } from '../db/domain-blockade.js';
 import { JSDomControl } from '../services/jsdom.js';
@@ -87,8 +88,7 @@ export interface FormattedPage {
 @singleton()
 export class CrawlerHost extends RPCHost {
     private static md5Hasher = new HashManager('md5', 'hex');
-    logger = new Logger();
-
+    logger = new Logger('CrawlerHost');
     turnDownPlugins = [turndownPluginGfm.tables];
 
     cacheRetentionMs = 1000 * 3600 * 24 * 7;
@@ -222,6 +222,47 @@ export class CrawlerHost extends RPCHost {
         this.config.domain = this.config.domain || { allow_all_tlds: false };
         this.config.storage = this.config.storage || { local_directory: "./storage", max_file_age_days: 7 };
         this.config.development = this.config.development || { debug: false, cors_enabled: true };
+
+        // New configuration defaults
+        this.config.performance = this.config.performance || {
+            max_concurrent_pages: 10,
+            page_idle_timeout: 60000,
+            health_check_interval: 30000,
+            request_timeout: 10000,
+            max_requests_per_page: 1000,
+            max_rps: 60,
+            max_domains_per_page: 200
+        };
+
+        this.config.queue = this.config.queue || {
+            max_concurrent: 3,
+            max_retries: 3,
+            retry_delay: 5000,
+            job_timeout: 60000
+        };
+
+        this.config.browser = this.config.browser || {
+            viewport_width: 1024,
+            viewport_height: 1024,
+            stealth_mode: true,
+            navigation_timeout: 30000,
+            wait_for_network_idle: true
+        };
+
+        this.config.cache = this.config.cache || {
+            robots_cache_timeout: 86400000,
+            enable_response_cache: false,
+            cache_size_limit: 1000
+        };
+
+        this.config.content = this.config.content || {
+            enable_readability: true,
+            remove_selectors: "",
+            target_selectors: "",
+            extract_images: true,
+            extract_links: true,
+            max_content_length: 1000000
+        };
     }
 
     override async init() {
@@ -342,6 +383,10 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
 - **HTML**: Cleaned HTML content
 - **Text**: Plain text extraction
 - **Screenshot/Pageshot**: URL to saved image
+
+## 📊 Queue Monitoring
+- [Queue API: ${baseUrl}/queue](${baseUrl}/queue) - JSON queue statistics
+- [Queue Monitor: ${baseUrl}/queue-ui](${baseUrl}/queue-ui) - Real-time queue dashboard
 
 ---
 📁 Source Code: [GitHub Repository](https://github.com/postphotos/reader)`;
@@ -853,11 +898,12 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                     }
                 }
             };
+
             return sendResponse(res, jsonResponse, { contentType: 'application/json' });
         }
 
-        // Ensure the formatted object is properly converted to string
-        let responseText;
+        // Fallback to plain/text representation
+        let responseText: string;
         if (formatted && typeof formatted.toString === 'function') {
             responseText = formatted.toString();
         } else {

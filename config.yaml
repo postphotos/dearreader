@@ -42,3 +42,69 @@ development:
   debug: false
   # Enable CORS for development
   cors_enabled: true
+
+# Performance settings
+performance:
+  # Maximum concurrent pages in browser
+  max_concurrent_pages: 10
+  # Page idle timeout in milliseconds
+  page_idle_timeout: 60000
+  # Health check interval in milliseconds
+  health_check_interval: 30000
+  # Request timeout for external resources (ms)
+  request_timeout: 10000
+  # Maximum requests per page
+  max_requests_per_page: 1000
+  # Maximum requests per second
+  max_rps: 60
+  # Maximum unique domains per page
+  max_domains_per_page: 200
+
+# Queue settings
+queue:
+  # Maximum concurrent jobs
+  max_concurrent: 3
+  # Maximum retry attempts
+  max_retries: 3
+  # Delay between retries in milliseconds
+  retry_delay: 5000
+  # Job timeout in milliseconds
+  job_timeout: 60000
+  # Maximum connections (same as max_concurrent)
+  max_connections: 3
+
+# Browser/Puppeteer settings
+browser:
+  # Viewport dimensions
+  viewport_width: 1024
+  viewport_height: 1024
+  # Enable stealth mode
+  stealth_mode: true
+  # Browser timeout for navigation
+  navigation_timeout: 30000
+  # Wait for network idle
+  wait_for_network_idle: true
+
+# Cache settings
+cache:
+  # Robots.txt cache timeout in milliseconds
+  robots_cache_timeout: 86400000  # 24 hours
+  # Enable response caching
+  enable_response_cache: false
+  # Cache size limit (number of entries)
+  cache_size_limit: 1000
+
+# Content processing settings
+content:
+  # Enable readability parsing
+  enable_readability: true
+  # Remove CSS selectors (comma-separated)
+  remove_selectors: ""
+  # Target specific selectors
+  target_selectors: ""
+  # Extract images
+  extract_images: true
+  # Extract links
+  extract_links: true
+  # Maximum content length
+  max_content_length: 1000000  # 1MB

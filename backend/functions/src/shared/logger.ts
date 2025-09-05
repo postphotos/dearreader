@@ -2,11 +2,7 @@ import { injectable } from 'tsyringe';
 
 @injectable()
 export class Logger {
-    private name: string = 'DearReader';
-
-    constructor() {
-        // Constructor with no parameters for DI
-    }
+    constructor(private name: string) {}
 
     info(message: string, ...args: any[]) {
         console.log(`[${this.name}] INFO:`, message, ...args);
@@ -21,8 +17,6 @@ export class Logger {
     }
 
     child(options: { service: string }) {
-        const childLogger = new Logger();
-        childLogger.name = `${this.name}:${options.service}`;
-        return childLogger;
+        return new Logger(`${this.name}:${options.service}`);
     }
 }

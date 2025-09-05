@@ -1,15 +1,13 @@
 # tasks.py
 # This file sets the invoke command
 
-from invoke.tasks import task
-from invoke.context import Context
-from invoke import exceptions
+from contextvars import Context
 import shutil
-import os
+from invoke import tasks, context, exceptions
 
 # --- Configuration ---
-DOCKER_IMAGE_NAME = "reader"
-DOCKER_CONTAINER_NAME = "reader-instance"
+DOCKER_IMAGE_NAME = "my-app"
+DOCKER_CONTAINER_NAME = "my-app-instance"
 VENV_NAME = ".venv"
 
 # --- Helper Functions for Colored Output ---
@@ -27,8 +25,7 @@ def print_error(message):
 
 
 @task
-@task
-def check_deps(c: Context):
+def check_deps(c: context):
     """Check if required command-line tools are installed."""
     print_info("Checking for required dependencies...")
     deps = ["npm", "docker", "uv", "pyright"]
@@ -36,6 +33,7 @@ def check_deps(c: Context):
     for dep in deps:
         if not shutil.which(dep):
             missing.append(dep)
+
     if missing:
         print_error(f"The following required tools are not installed or not in your PATH: {', '.join(missing)}")
         exit(1)
@@ -48,10 +46,7 @@ def clean(c: Context):
     print_info("--- Running cleanup ---")
     # Use warn=True so it doesn't fail if the container doesn't exist
     result = c.run(f"docker ps -a -q -f name={DOCKER_CONTAINER_NAME}", hide=True, warn=True)
-    if result and result.stdout:
-        container_id = result.stdout.strip()
-    else:
-        container_id = None
+    container_id = result.stdout.strip()
 
     if container_id:
         print_info(f"Stopping container {DOCKER_CONTAINER_NAME} ({container_id[:12]})")
@@ -77,17 +72,17 @@ def docker_build(c: Context):
     c.run(f"docker build -t {DOCKER_IMAGE_NAME} .", pty=True)
     print_success("Docker image built successfully.")
 
-@task(pre=[docker_build])
-@task(pre=[docker_build])
+@tasks(pre=[docker_build])
 def docker_run(c: Context):
     """Run the Docker container in detached mode."""
     print_info(f"--- Step 3: Running Docker container '{DOCKER_CONTAINER_NAME}' ---")
     # First, ensure no container with the same name exists
     clean(c)
-    c.run("docker run -d --name {} -p 3000:3000 -v ./storage:/app/local-storage {}".format(DOCKER_CONTAINER_NAME, DOCKER_IMAGE_NAME), pty=True)
+    c.run(f"docker run -d --name {DOCKER_CONTAINER_NAME} {DOCKER_IMAGE_NAME}", pty=True)
     print_info("Waiting 5 seconds for container to initialize...")
     c.run("sleep 5")
     print_success(f"Container '{DOCKER_CONTAINER_NAME}' is running.")
+
 @task
 def pyright(c: Context):
     """Run Pyright for static type checking."""
@@ -99,7 +94,7 @@ def pyright(c: Context):
 def python_run(c: Context):
     """Set up Python environment and run the demo script."""
     print_info("--- Step 5: Running Python application ---")
-    if not os.path.exists(VENV_NAME):
+    if not shutil.os.path.exists(VENV_NAME):
         c.run(f"uv venv {VENV_NAME}", pty=True)
 
     print_info("Installing Python dependencies with uv...")

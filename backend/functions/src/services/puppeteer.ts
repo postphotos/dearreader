@@ -239,7 +239,7 @@ export class PuppeteerControl extends AsyncService {
 
     _sn = 0;
     browser!: Browser;
-    logger = new Logger(); // Renamed for clarity
+    logger = new Logger('PuppeteerControl'); // Renamed for clarity
 
     private __healthCheckInterval?: NodeJS.Timeout;
 
@@ -278,7 +278,7 @@ export class PuppeteerControl extends AsyncService {
             this.requestQueue.forEach(req => req.reject(new ServiceCrashedError({ message: 'Browser crashed' })));
             this.requestQueue.length = 0;
         });
-
+``
         // Start cleanup interval
         setInterval(() => this.cleanupIdlePages(), 30_000);
     }

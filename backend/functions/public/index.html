@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DearReader API - Local Web Content Extractor</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>DearReader API - Local Web Content Extractor</h1>
+    <p>Convert any URL to LLM-friendly content</p>
+    <section>
+      <h2>📚 Try These Examples</h2>
+      <ul>
+        <li><a href="/https://example.com">Basic: example.com</a></li>
+        <li><a href="/https://news.ycombinator.com">Basic: news.ycombinator.com</a></li>
+        <li><a href="/https://github.com/jina-ai/reader">Basic: github.com/jina-ai/reader</a></li>
+        <li><a href="/queue-ui">Queue Monitor</a></li>
+      </ul>
+    </section>
+    <section>
+      <h2>🔧 Usage</h2>
+      <pre><code>curl -H "Accept: application/json" "/https://example.com"
+curl "/https://example.com"
+curl -H "X-Respond-With: screenshot" "/https://example.com"</code></pre>
+    </section>
+    <section>
+      <h2>🌐 Response Formats</h2>
+      <ul>
+        <li><strong>Default</strong>: Clean markdown content</li>
+        <li><strong>JSON</strong>: Complete metadata with links, images, and content</li>
+        <li><strong>HTML</strong>: Cleaned HTML content</li>
+        <li><strong>Text</strong>: Plain text extraction</li>
+        <li><strong>Screenshot/Pageshot</strong>: URL to saved image</li>
+      </ul>
+    </section>
+    <footer>
+      <p>📁 Source Code: <a href="https://github.com/postphotos/reader">GitHub Repository</a></p>
+    </footer>
+  </div>
+  <script src="/main.js"></script>
+</body>
+</html>

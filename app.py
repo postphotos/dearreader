@@ -5,13 +5,17 @@ This script runs the complete development pipeline: npm install/test, docker bui
 pyright checks, and demo.py execution.
 
 Usage:
-    uv run app.py [--verbose] [--debug]        # Run basic npm/pyright/demo pipeline
+    uv run app.py [--verbose] [--debug]        # Run basic npm/pyright/demo pipeline (same as 'start')
+    uv run app.py start                        # Same as running with no arguments
     uv run app.py all                          # Run full pipeline including docker
     uv run app.py npm                          # Just npm install and test
     uv run app.py docker                       # Just docker build and run
     uv run app.py docker-clear                 # Docker build with cache cleared
     uv run app.py pyright                      # Just pyright check
     uv run app.py demo                         # Just demo.py
+    uv run app.py speedtest                    # Just speedtest.py
+    uv run app.py tests                        # Run ALL tests (npm + TypeScript + pyright + demo + speedtest)
+    uv run app.py stop                         # Stop the Docker container
     uv run app.py --no-cache docker            # Pass --no-cache to disable Docker build cache
 """
 
@@ -360,12 +364,100 @@ def step_demo(verbose: bool = False) -> int:
         return 0
 
 
+def step_stop(verbose: bool = False) -> int:
+        """Stop the Docker container using docker kill $(docker ps | grep "reader-app" | head -c 12)."""
+        print_info("--- Stopping Docker container ---")
+
+        # Use the exact command format requested: docker kill $(docker ps | grep "reader-app" | head -c 12)
+        kill_cmd = 'docker kill $(docker ps | grep "reader-app" | head -c 12)'
+        print_info(f"Running: {kill_cmd}")
+
+        kill_code, kill_out, kill_err = run_cmd(kill_cmd, timeout=10, live=verbose)
+
+        if kill_code == 0:
+                if kill_out.strip():
+                        # If command succeeded and returned output (container ID), it means a container was killed
+                        container_id = kill_out.strip()
+                        print_success(f"CONTAINER STOPPED: {container_id}")
+                        return 0
+                else:
+                        # Command succeeded but no output, likely no container was running
+                        print_info("No reader-app container was running")
+                        return 0
+        else:
+                # If command failed
+                print_info("No reader-app container was running")
+                return 0
+
+
+def step_tests(verbose: bool = False, debug: bool = False) -> int:
+        """Run ALL tests: npm, TypeScript build, pyright, demo, and speedtest."""
+        print_info("--- Running ALL tests ---")
+
+        # Run npm tests
+        print_info("🧪 Running npm tests...")
+        code = step_npm(debug=debug, verbose=verbose)
+        if code != 0:
+                print_error("npm tests failed")
+                return code
+
+        # Build TypeScript to check for compilation errors
+        print_info("🏗️  Building TypeScript...")
+        ts_code, ts_out, ts_err = run_cmd(["npm", "run", "build"], cwd=NPM_DIR, timeout=60, live=verbose)
+        if ts_code != 0:
+                print_error("TypeScript build failed")
+                if ts_out:
+                        print(ts_out)
+                if ts_err:
+                        print(ts_err, file=sys.stderr)
+                return ts_code
+        print_success("TypeScript build successful")
+
+        # Run pyright
+        print_info("🔍 Running pyright checks...")
+        code = step_pyright(verbose=verbose)
+        if code != 0:
+                print_error("pyright checks failed")
+                return code
+
+        # Run demo (requires Docker container to be running)
+        print_info("🔍 Checking if Docker container is running...")
+        check_cmd = f"docker ps --filter name={DOCKER_CONTAINER_NAME} --format '{{{{.ID}}}}'"
+        docker_code, docker_out, docker_err = run_cmd(check_cmd, timeout=5, live=verbose)
+
+        if docker_code != 0 or not docker_out.strip():
+                print_info("Docker container not running, starting it...")
+                code = step_docker(verbose=verbose)
+                if code != 0:
+                        print_error("Failed to start Docker container for tests")
+                        return code
+        else:
+                print_info("Docker container is already running")
+
+        # Run demo
+        print_info("🎭 Running demo tests...")
+        code = step_demo(verbose=verbose)
+        if code != 0:
+                print_error("demo tests failed")
+                return code
+
+        # Run speedtest
+        print_info("🚀 Running speedtest...")
+        code = step_speedtest(verbose=verbose)
+        if code != 0:
+                print_error("speedtest failed")
+                return code
+
+        print_success("✅✅✅ ALL tests passed successfully! ✅✅✅")
+        return 0
+
+
 def main():
         import argparse
 
         parser = argparse.ArgumentParser(description="Unified DearReader test runner and pipeline manager")
-        parser.add_argument("command", nargs="?", default="all", choices=["basic", "all", "npm", "docker", "docker-clear", "pyright", "demo", "speedtest"],
-                                                help="Command to run (default: all)")
+        parser.add_argument("command", nargs="?", default="start", choices=["basic", "start", "all", "npm", "docker", "docker-clear", "pyright", "demo", "speedtest", "tests", "stop"],
+                                                help="Command to run (default: start)")
         parser.add_argument("--verbose", action="store_true", help="Increase output")
         parser.add_argument("--debug", action="store_true", help="Re-run failed npm tests without timeout")
         parser.add_argument("--no-cache", dest="no_cache", action="store_true", help="Disable Docker build cache (pass --no-cache to 'docker build')")
@@ -395,6 +487,10 @@ def main():
                         return step_demo(verbose=args.verbose)
                 elif args.command == "speedtest":
                         return step_speedtest(verbose=args.verbose)
+                elif args.command == "stop":
+                        return step_stop(verbose=args.verbose)
+                elif args.command == "tests":
+                        return step_tests(verbose=args.verbose, debug=args.debug)
                 elif args.command == "all":
                         # Full pipeline
                         print_info("🚀 Starting the full build and test pipeline...")
@@ -424,10 +520,10 @@ def main():
                         print_success("✅✅✅ Pipeline completed successfully! ✅✅✅")
 
                         if container_started:
-                                print_info("Container is running. To stop it later: docker stop reader-instance")
+                                print_info("Container is running. To stop it later: uv run app.py stop")
                                 print_info("🎯 Speedtest confirmed server is working correctly!")
                         return 0
-                else:  # basic
+                elif args.command == "start" or args.command == "basic":  # basic
                         # Just npm, pyright, demo
                         print_info("🚀 Starting basic pipeline (npm + pyright + demo)...")
                         steps = [
