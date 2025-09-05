@@ -16,8 +16,8 @@ export class RobotsChecker {
             let robotsTxt = this.robotsTxtCache.get(robotsUrl);
             if (!robotsTxt) {
                 const response = await axios.get(robotsUrl);
-                robotsTxt = response.data;
-                this.robotsTxtCache.set(robotsUrl, c);
+                robotsTxt = response.data as string;
+                this.robotsTxtCache.set(robotsUrl, robotsTxt);
             }
 
             const rules = this.parseRobotsTxt(robotsTxt);
@@ -57,5 +57,16 @@ export class RobotsChecker {
         }
 
         return rules;
+    }
+
+    async isAllowed(url: string, userAgent: string = '*'): Promise<boolean> {
+        const result = await this.checkAccess(url, userAgent);
+        return result.allowed;
+    }
+
+    async getCrawlDelay(url: string, userAgent: string = '*'): Promise<number> {
+        // For now, return a default delay. In a real implementation,
+        // this would parse the Crawl-delay directive from robots.txt
+        return 1; // 1 second default delay
     }
 }

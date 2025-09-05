@@ -23,6 +23,9 @@ export class QueueManager {
   private completedRequests = 0;
   private failedRequests = 0;
 
+  // Keep track of all tasks for retrieval
+  private allTasks = new Map<string, QueueTask>();
+
   constructor(private logger: Logger) {}
 
   async enqueue(task: Omit<QueueTask, 'id' | 'timestamp' | 'status'>): Promise<string> {
@@ -39,6 +42,7 @@ export class QueueManager {
 
     this.queue.push(queueTask);
     this.totalRequests++;
+    this.allTasks.set(queueTask.id, queueTask);
     this.logger.info(`Task enqueued: ${queueTask.id} for ${queueTask.url}`);
 
     return queueTask.id;
@@ -64,7 +68,7 @@ export class QueueManager {
   }
 
   completeTask(taskId: string, result?: any): void {
-    const task = this.findTask(taskId);
+    const task = this.allTasks.get(taskId);
     if (task) {
       task.status = 'completed';
       task.result = result;
@@ -75,7 +79,7 @@ export class QueueManager {
   }
 
   failTask(taskId: string, error: string): void {
-    const task = this.findTask(taskId);
+    const task = this.allTasks.get(taskId);
     if (task) {
       task.status = 'failed';
       task.error = error;
@@ -86,7 +90,7 @@ export class QueueManager {
   }
 
   getTask(taskId: string): QueueTask | undefined {
-    return this.queue.find(task => task.id === taskId);
+    return this.allTasks.get(taskId);
   }
 
   getStatistics() {

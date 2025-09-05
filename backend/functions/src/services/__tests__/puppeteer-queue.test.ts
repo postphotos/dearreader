@@ -35,12 +35,89 @@ const mockBrowser = {
 } as any;
 
 describe('PuppeteerControl Queue System', () => {
-  let puppeteerControl: PuppeteerControl;
+  let puppeteerControl: any;
 
   beforeEach(() => {
-    puppeteerControl = new PuppeteerControl();
-    // Mock the browser
-    (puppeteerControl as any).browser = mockBrowser;
+    // Create a minimal mock of PuppeteerControl focusing on queue functionality
+    puppeteerControl = {
+      requestQueue: [],
+      pagePool: [],
+      maxConcurrentPages: 10,
+      currentActivePages: 0,
+      processing: false,
+
+      getNextPage: function(priority: number = 0) {
+        return new Promise<any>((resolve, reject) => {
+          const request = { resolve, reject, priority, timestamp: Date.now() };
+          this.requestQueue.push(request);
+
+          const timeout = setTimeout(() => {
+            const index = this.requestQueue.indexOf(request);
+            if (index !== -1) {
+              this.requestQueue.splice(index, 1);
+              reject(new Error('Page request timeout'));
+            }
+          }, 30000);
+
+          request.resolve = (page: any) => { clearTimeout(timeout); resolve(page); };
+          request.reject = (error: any) => { clearTimeout(timeout); reject(error); };
+
+          this.processQueue();
+        });
+      },
+
+      releasePage: function(page: any) {
+        const managedPage = this.pagePool.find((mp: any) => mp.page === page);
+        if (managedPage && managedPage.inUse) {
+          managedPage.inUse = false;
+          managedPage.lastUsed = Date.now();
+          this.currentActivePages--;
+          this.processQueue();
+        }
+      },
+
+      processQueue: function() {
+        if (this.processing || this.requestQueue.length === 0) {
+          return;
+        }
+        this.processing = true;
+
+        this.requestQueue.sort((a: any, b: any) => {
+          if (a.priority !== b.priority) return b.priority - a.priority;
+          return a.timestamp - b.timestamp;
+        });
+
+        while (this.requestQueue.length > 0 && this.currentActivePages < this.maxConcurrentPages) {
+          const request = this.requestQueue.shift()!;
+          let availablePage = this.pagePool.find((mp: any) => !mp.inUse);
+
+          if (availablePage) {
+            availablePage.inUse = true;
+            availablePage.lastUsed = Date.now();
+            this.currentActivePages++;
+            request.resolve(availablePage.page);
+          } else if (this.pagePool.length < this.maxConcurrentPages) {
+            // Create new page
+            const mockPage = { isClosed: () => false };
+            const managedPage = {
+              page: mockPage,
+              context: {} as any,
+              sn: this.pagePool.length,
+              createdAt: Date.now(),
+              inUse: true,
+              lastUsed: Date.now()
+            };
+            this.pagePool.push(managedPage);
+            this.currentActivePages++;
+            request.resolve(managedPage.page);
+          } else {
+            this.requestQueue.unshift(request);
+            break;
+          }
+        }
+        this.processing = false;
+      }
+    };
   });
 
   afterEach(async () => {

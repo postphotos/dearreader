@@ -13,7 +13,7 @@ import { Request, Response } from 'express';
 import TurndownService from 'turndown';
 // No type definitions available for turndown-plugin-gfm — require it at runtime and treat as any
 // @ts-ignore
-const turndownPluginGfm: any = require('turndown-plugin-gfm');
+import * as turndownPluginGfm from 'turndown-plugin-gfm';
 // import { Crawled } from '../db/crawled';
 import { cleanAttribute } from '../utils/misc.js';
 import { randomUUID } from 'crypto';
@@ -1219,14 +1219,13 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             if (respectRobots) {
                 console.log('Checking robots.txt compliance for:', parsedUrl.toString());
                 try {
-                    const isAllowed = await this.robotsChecker.isAllowed(parsedUrl, 'DearReader-Bot');
+                    const isAllowed = await this.robotsChecker.isAllowed(parsedUrl.toString(), 'DearReader-Bot');
                     if (!isAllowed) {
                         console.log('URL blocked by robots.txt:', parsedUrl.toString());
                         return sendResponse(res, 'Access denied by robots.txt', { contentType: 'text/plain', code: 403 });
                     }
-
                     // Check for crawl delay
-                    const crawlDelay = await this.robotsChecker.getCrawlDelay(parsedUrl, 'DearReader-Bot');
+                    const crawlDelay = await this.robotsChecker.getCrawlDelay(parsedUrl.toString(), 'DearReader-Bot');
                     if (crawlDelay && crawlDelay > 0) {
                         console.log(`Applying crawl delay of ${crawlDelay}s for:`, parsedUrl.toString());
                         // In production, you might want to implement a proper rate limiting mechanism
