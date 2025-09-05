@@ -20,7 +20,7 @@ export class DomainBlockade extends FirestoreRecord {
     @Prop()
     triggerUrl?: string;
 
-    @Prop()
+    @Prop({ required: true })
     createdAt!: Date;
 
     @Prop()

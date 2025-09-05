@@ -4,7 +4,7 @@ import { Logger } from '../shared/index.js';
 import { ExtendedSnapshot, PageSnapshot } from './puppeteer.js';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { Readability } from '@mozilla/readability';
-import TurndownService, { Node } from 'turndown';
+import TurndownService from 'turndown';
 
 const virtualConsole = new VirtualConsole();
 virtualConsole.on('error', () => void 0);

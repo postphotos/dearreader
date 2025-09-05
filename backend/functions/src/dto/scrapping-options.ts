@@ -1,5 +1,5 @@
 import { Also, AutoCastable, Prop, AutoCastableMetaClass, Constructor } from 'civkit'; // Adjust the import based on where your decorators are defined
-import type { Request, Response } from 'express';
+import type { Request } from 'express';
 import type { CookieParam } from 'puppeteer';
 import { parseString as parseSetCookieString } from 'set-cookie-parser';
 

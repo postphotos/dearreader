@@ -11,6 +11,7 @@ import { PageSnapshot, PuppeteerControl, ScrappingOptions } from '../services/pu
 import { Request, Response } from 'express';
 // import { AltTextService } from '../services/alt-text';
 import TurndownService from 'turndown';
+// @ts-ignore - No type definitions available for turndown-plugin-gfm
 import * as turndownPluginGfm from 'turndown-plugin-gfm';
 // import { Crawled } from '../db/crawled';
 import { cleanAttribute } from '../utils/misc.js';
@@ -80,17 +81,6 @@ export interface FormattedPage {
 
     toString: () => string;
 }
-
-const indexProto = {
-    toString: function (this: FormattedPage): string {
-        console.log('Converting index to string');
-        return _(this)
-            .toPairs()
-            .map(([k, v]) => k ? `[${_.upperFirst(_.lowerCase(k))}] ${v}` : '')
-            .value()
-            .join('\n') + '\n';
-    }
-};
 @singleton()
 export class CrawlerHost extends RPCHost {
     private static md5Hasher = new HashManager('md5', 'hex');
@@ -574,16 +564,17 @@ export class CrawlerHost extends RPCHost {
                     }
                     suffixMixins.push(imageSummaryChunks.join('\n'));
                 }
+                // Always include the Links/Buttons section
+                const linkSummaryChunks = ['Links/Buttons:'];
                 if (this.links) {
-                    const linkSummaryChunks = ['Links/Buttons:'];
                     for (const [k, v] of Object.entries(this.links)) {
                         linkSummaryChunks.push(`- [${k}](${v})`);
                     }
-                    if (linkSummaryChunks.length === 1) {
-                        linkSummaryChunks.push('This page does not seem to contain any buttons/links.');
-                    }
-                    suffixMixins.push(linkSummaryChunks.join('\n'));
                 }
+                if (linkSummaryChunks.length === 1) {
+                    linkSummaryChunks.push('This page does not seem to contain any buttons/links.');
+                }
+                suffixMixins.push(linkSummaryChunks.join('\n'));
 
                 return `Title: ${this.title}
 
@@ -699,7 +690,15 @@ export class CrawlerHost extends RPCHost {
             return sendResponse(res, jsonResponse, { contentType: 'application/json' });
         }
 
-        return sendResponse(res, `${formatted}`, { contentType: 'text/plain' });
+        // Ensure the formatted object is properly converted to string
+        let responseText;
+        if (formatted && typeof formatted.toString === 'function') {
+            responseText = formatted.toString();
+        } else {
+            responseText = String(formatted);
+        }
+        
+        return sendResponse(res, responseText, { contentType: 'text/plain' });
     }
 
     getUrlDigest(urlToCrawl: URL): string {
@@ -881,7 +880,9 @@ export class CrawlerHost extends RPCHost {
             if (!noSlashURL || noSlashURL === '/') {
                 console.log('Root path requested, returning index');
                 const indexPage = this.getIndex();
-                return this.sendFormattedResponse(res, indexPage, 'markdown');
+                // Direct string response instead of using sendFormattedResponse
+                const indexContent = indexPage.toString();
+                return sendResponse(res, indexContent, { contentType: 'text/plain' });
             }
 
             // Check if the request is for a local screenshot

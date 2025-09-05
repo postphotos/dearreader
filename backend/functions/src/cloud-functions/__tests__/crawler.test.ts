@@ -96,11 +96,16 @@ class MockResponse {
   }
 
   send(data: any) {
-    this._data = data;
+    // For JSON responses, don't call toString
+    if (this._contentType === 'application/json') {
+      this._data = data;
+    } else if (data && typeof data === 'object' && typeof data.toString === 'function') {
+      this._data = data.toString();
+    } else {
+      this._data = data;
+    }
     return this;
-  }
-
-  getStatus() { return this._status; }
+  }  getStatus() { return this._status; }
   getData() { return this._data; }
   getHeaders() { return this._headers; }
   getContentType() { return this._contentType; }
@@ -312,6 +317,9 @@ describe('CrawlerHost Index Page', () => {
     } as any;
 
     const mockRes = new MockResponse();
+
+    // Ensure withLinksSummary is not set
+    mockThreadLocal.set('withLinksSummary', false);
 
     await crawlerHost.crawl(mockReq, mockRes as any);
 

@@ -1,6 +1,5 @@
 import { Also, parseJSONText, Prop } from 'civkit';
 import { FirestoreRecord } from '../shared/lib/firestore.js';
-import _ from 'lodash';
 import type { PageSnapshot } from '../services/puppeteer.js';
 
 @Also({

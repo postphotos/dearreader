@@ -1,6 +1,5 @@
 import { Also, Prop } from 'civkit';
 import { FirestoreRecord } from '../shared/lib/firestore.js';
-import _ from 'lodash';
 
 @Also({
     dictOf: Object

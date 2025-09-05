@@ -56,7 +56,7 @@ export class GeoIPCityResponse extends AutoCastable {
 @singleton()
 export class GeoIPService extends AsyncService {
 
-    logger = new Logger('CHANGE_LOGGER_NAME')
+    logger = new Logger('GeoIPService')
 
     mmdbCity!: Reader<CityResponse>;
 

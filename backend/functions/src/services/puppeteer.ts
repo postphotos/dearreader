@@ -4,6 +4,7 @@ import { container, singleton } from 'tsyringe';
 import { AsyncService, Defer, marshalErrorLike, delay, maxConcurrency } from 'civkit';
 import { Logger } from '../shared/index.js';
 import { createRequire } from 'module';
+import fetch from 'node-fetch';
 
 const require = createRequire(import.meta.url);
 
@@ -25,8 +26,8 @@ export interface CookieParam {
 }
 
 import puppeteerPageProxy from 'puppeteer-extra-plugin-page-proxy';
-import { SecurityCompromiseError, ServiceCrashedError } from '../shared/errors.js';
-import tldExtract from 'tld-extract';
+import { ServiceCrashedError } from '../shared/errors.js';
+import { parse as tldParse } from 'tldts';
 import puppeteerStealth from 'puppeteer-extra-plugin-stealth';
 
 // Queue for managing concurrent requests
@@ -248,7 +249,6 @@ export class PuppeteerControl extends AsyncService {
     private maxConcurrentPages = 10; // Configurable max concurrent pages
     private currentActivePages = 0;
     private processing = false;
-    private readonly PAGE_TIMEOUT = 300 * 1000; // 5 minutes
     private readonly PAGE_IDLE_TIMEOUT = 60 * 1000; // 1 minute for idle pages
 
     __loadedPage: Page[] = [];
@@ -366,8 +366,8 @@ export class PuppeteerControl extends AsyncService {
             }
 
             try {
-                const tldParsed = tldExtract(requestUrl);
-                domainSet.add(tldParsed.domain);
+                const tldParsed = tldParse(requestUrl);
+                if (tldParsed.domain) domainSet.add(tldParsed.domain);
             } catch (error) {
                 this.logger.warn(`Failed to parse TLD for URL: ${requestUrl}. Using fallback method.`);
                 const simpleDomain = this.extractDomain(requestUrl);
@@ -406,11 +406,7 @@ export class PuppeteerControl extends AsyncService {
                 return req.abort('blockedbyclient', 1000);
             }
 
-            const continueArgs = req.continueRequestOverrides
-                ? [req.continueRequestOverrides(), 0] as const
-                : [];
-
-            req.continue(continueArgs[0], continueArgs[1]).catch(() => {/* Ignore errors on continue */});
+            req.continue().catch(() => {/* Ignore errors on continue */});
         });
     }
 
@@ -517,7 +513,7 @@ export class PuppeteerControl extends AsyncService {
         await this.dependencyReady();
 
         if (this.browser) {
-            if (this.browser.isConnected()) {
+            if (this.browser.connected) {
                 await this.browser.close();
             } else {
                 this.browser.process()?.kill('SIGKILL');
@@ -790,7 +786,6 @@ export class PuppeteerControl extends AsyncService {
         const resp = await fetch(googleArchiveUrl, {
             headers: { 'User-Agent': `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)` }
         });
-        resp.body?.cancel().catch(() => void 0);
         if (!resp.ok) {
             this.logger.warn(`No salvation found for url: ${url}`, { status: resp.status });
             return null;
