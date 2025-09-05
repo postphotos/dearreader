@@ -21,11 +21,11 @@ export interface PDFExtractionResult {
 @singleton()
 export class PDFExtractor {
     private config: any = {};
+    protected logger: Logger;
 
-    constructor(
-        protected logger: Logger,
-    ) {
+    constructor() {
         console.log('PDFExtractor constructor called');
+        this.logger = new Logger();
         this.loadConfig();
     }
 

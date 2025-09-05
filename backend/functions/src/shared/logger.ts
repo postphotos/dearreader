@@ -4,10 +4,8 @@ import { injectable } from 'tsyringe';
 export class Logger {
     private name: string = 'DearReader';
 
-    constructor(name?: string) {
-        if (name) {
-            this.name = name;
-        }
+    constructor() {
+        // Constructor with no parameters for DI
     }
 
     info(message: string, ...args: any[]) {

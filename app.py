@@ -307,7 +307,7 @@ def step_pyright(verbose: bool = False) -> int:
 
 def step_speedtest(verbose: bool = False) -> int:
         """Run speed test with demo.csv URLs."""
-        print_info("--- Step: Running DearReader Speed Test ---")
+        print_info("--- Step: 5 Running DearReader Speed Test ---")
 
         if not os.path.exists("speedtest.py"):
                 print_info("speedtest.py not found; skipping")

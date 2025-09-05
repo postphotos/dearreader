@@ -205,7 +205,7 @@ def check_server_status(reader: ReaderAPI) -> bool:
         # Test the root endpoint which returns plain text
         response = requests.get(f"{reader.base_url}/", timeout=10)
 
-        if response.status_code == 200 and "jina.ai" in response.text.lower():
+        if response.status_code == 200 and ("dearreader" in response.text.lower() or "local web content" in response.text.lower()):
             print("✅ Reader server is running!")
             return True
         else:
@@ -234,7 +234,7 @@ def test_basic_api(reader: ReaderAPI):
     print("Testing root endpoint...")
     try:
         response = requests.get(f"{reader.base_url}/", timeout=10)
-        if response.status_code == 200 and "jina.ai" in response.text.lower():
+        if response.status_code == 200 and ("dearreader" in response.text.lower() or "local web content" in response.text.lower()):
             print("✅ Root endpoint working correctly")
         else:
             print(f"⚠️ Root endpoint returned unexpected content: {response.text[:100]}...")

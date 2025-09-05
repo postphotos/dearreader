@@ -13,9 +13,11 @@ export interface RobotsRule {
 export class RobotsChecker {
     private robotsCache = new Map<string, { rules: RobotsRule[], expiry: number }>();
     private readonly cacheTimeout = 24 * 60 * 60 * 1000; // 24 hours
+    private logger: Logger;
 
-    constructor(private logger: Logger) {
+    constructor() {
         console.log('RobotsChecker initialized');
+        this.logger = new Logger();
     }
 
     async isAllowed(url: URL, userAgent: string = 'DearReader-Bot'): Promise<boolean> {

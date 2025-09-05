@@ -12,7 +12,7 @@ virtualConsole.on('error', () => void 0);
 @singleton()
 export class JSDomControl extends AsyncService {
 
-    logger = new Logger("jsdom")
+    logger = new Logger()
 
     constructor(
     ) {
