@@ -1,5 +1,5 @@
-import { Also, Prop, parseJSONText } from 'civkit';
-import { FirestoreRecord } from '../shared/lib/firestore';
+import { Also, parseJSONText, Prop } from 'civkit';
+import { FirestoreRecord } from '../shared/lib/firestore.js';
 import _ from 'lodash';
 
 @Also({

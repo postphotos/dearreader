@@ -1,13 +1,13 @@
 import 'reflect-metadata';
 import { initializeApp } from 'firebase-admin/app';
-import { CrawlerHost } from './cloud-functions/crawler';
+import { CrawlerHost } from './cloud-functions/crawler.js';
 import { runWith, https, HttpsFunction } from 'firebase-functions';
-import { Logger } from './shared/logger';
+import { Logger } from './shared/logger.js';
 import { container } from 'tsyringe';
-import { PuppeteerControl } from './services/puppeteer';
-import { JSDomControl } from './services/jsdom';
-import { FirebaseStorageBucketControl } from './shared';
-import { AsyncContext } from './shared';
+import { PuppeteerControl } from './services/puppeteer.js';
+import { JSDomControl } from './services/jsdom.js';
+import { FirebaseStorageBucketControl } from './shared/index.js';
+import { AsyncContext } from './shared/index.js';
 
 initializeApp();
 

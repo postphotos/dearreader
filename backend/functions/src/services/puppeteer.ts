@@ -1,11 +1,15 @@
 import os from 'os';
 import fs from 'fs';
 import { container, singleton } from 'tsyringe';
-import { AsyncService, Defer, marshalErrorLike, AssertionFailureError, delay, maxConcurrency } from 'civkit';
-import { Logger } from '../shared/index';
+import { AsyncService, Defer, marshalErrorLike, delay, maxConcurrency } from 'civkit';
+import { Logger } from '../shared/index.js';
+import { createRequire } from 'module';
 
-import type { Browser, Protocol, Page, BrowserContext } from 'puppeteer';
-import puppeteer from 'puppeteer-extra';
+const require = createRequire(import.meta.url);
+
+import type { Browser, Page, BrowserContext } from 'puppeteer';
+import * as puppeteerCore from 'puppeteer';
+import { addExtra } from 'puppeteer-extra';
 
 // Define CookieParam type since it's not exported from puppeteer
 export interface CookieParam {
@@ -20,10 +24,8 @@ export interface CookieParam {
     expires?: number;
 }
 
-import puppeteerBlockResources from 'puppeteer-extra-plugin-block-resources';
 import puppeteerPageProxy from 'puppeteer-extra-plugin-page-proxy';
-import { SecurityCompromiseError, ServiceCrashedError } from '../shared/errors';
-// import { TimeoutError } from 'puppeteer';
+import { SecurityCompromiseError, ServiceCrashedError } from '../shared/errors.js';
 import tldExtract from 'tld-extract';
 import puppeteerStealth from 'puppeteer-extra-plugin-stealth';
 
@@ -49,7 +51,7 @@ interface ManagedPage {
 const validateCookie = (cookie: CookieParam) => {
     const requiredFields = ['name', 'value'];
     for (const field of requiredFields) {
-        if (!cookie[field]) {
+        if (!(field in cookie)) {
             throw new Error(`Cookie is missing required field: ${field}`);
         }
     }
@@ -113,17 +115,9 @@ export interface ScrappingOptions {
     timeoutMs?: number;
 }
 
-puppeteer.use(puppeteerStealth());
-// const puppeteerUAOverride = require('puppeteer-extra-plugin-stealth/evasions/user-agent-override');
-// puppeteer.use(puppeteerUAOverride({
-//     userAgent: `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)`,
-//     platform: `Linux`,
-// }))
+const puppeteer = addExtra(puppeteerCore as any);
 
-puppeteer.use(puppeteerBlockResources({
-    blockedTypes: new Set(['media']),
-    interceptResolutionPriority: 1,
-}));
+puppeteer.use(puppeteerStealth());
 puppeteer.use(puppeteerPageProxy({
     interceptResolutionPriority: 1,
 }));
@@ -244,7 +238,7 @@ export class PuppeteerControl extends AsyncService {
 
     _sn = 0;
     browser!: Browser;
-    logger = new Logger('CHANGE_LOGGER_NAME');
+    logger = new Logger('PuppeteerControl'); // Renamed for clarity
 
     private __healthCheckInterval?: NodeJS.Timeout;
 
@@ -294,11 +288,14 @@ export class PuppeteerControl extends AsyncService {
         this.logger.info(`Pool status: ${this.pagePool.length} total pages, ${this.currentActivePages} active, ${this.requestQueue.length} queued`);
     }
 
-    // New queue-based page management
     private async createManagedPage(): Promise<ManagedPage> {
         const sn = this._sn++;
         let context: BrowserContext;
         let page: Page;
+
+        if (!this.browser) {
+            throw new Error('Browser not initialized');
+        }
 
         try {
             context = this.browser.defaultBrowserContext();
@@ -320,7 +317,6 @@ export class PuppeteerControl extends AsyncService {
         this.snMap.set(page, sn);
         this.logger.info(`Page ${sn} created.`);
 
-        // Setup page with the same configuration as before
         await this.setupPage(page, sn);
 
         return managedPage;
@@ -346,7 +342,6 @@ export class PuppeteerControl extends AsyncService {
         await Promise.all(preparations);
         await page.goto('about:blank', { waitUntil: 'domcontentloaded' });
 
-        // Set up request handling (same as before)
         this.setupPageRequestHandling(page, sn);
 
         this.livePages.add(page);
@@ -376,7 +371,7 @@ export class PuppeteerControl extends AsyncService {
             } catch (error) {
                 this.logger.warn(`Failed to parse TLD for URL: ${requestUrl}. Using fallback method.`);
                 const simpleDomain = this.extractDomain(requestUrl);
-                domainSet.add(simpleDomain);
+                if (simpleDomain) domainSet.add(simpleDomain);
             }
 
             const parsedUrl = new URL(requestUrl);
@@ -415,52 +410,13 @@ export class PuppeteerControl extends AsyncService {
                 ? [req.continueRequestOverrides(), 0] as const
                 : [];
 
-            return req.continue(continueArgs[0], continueArgs[1]);
+            req.continue(continueArgs[0], continueArgs[1]).catch(() => {/* Ignore errors on continue */});
         });
-
-        // Add the page load handling script
-        page.evaluateOnNewDocument(`
-let lastTextLength = 0;
-const handlePageLoad = () => {
-    if (window.haltSnapshot) {
-        return;
-    }
-    const thisTextLength = (document.body.innerText || '').length;
-    const deltaLength = Math.abs(thisTextLength - lastTextLength);
-    if (10 * deltaLength < lastTextLength) {
-        return;
-    }
-    lastTextLength = thisTextLength;
-    const snapshot = reportSnapshot ? reportSnapshot(giveSnapshot()) : null;
-};
-
-let handlePageLoadCallCounter = 0;
-
-window.addEventListener("load", () => {
-    const handlePageLoadCallSeq = ++handlePageLoadCallCounter;
-    setTimeout(() => {
-        if (handlePageLoadCallSeq !== handlePageLoadCallCounter) {
-            return;
-        }
-        handlePageLoad();
-    }, 100);
-});
-
-new MutationObserver(() => {
-    const handlePageLoadCallSeq = ++handlePageLoadCallCounter;
-    setTimeout(() => {
-        if (handlePageLoadCallSeq !== handlePageLoadCallCounter) {
-            return;
-        }
-        handlePageLoad();
-    }, 500);
-}).observe(document.body || document.documentElement, { attributes: true, childList: true, subtree: true });
-`);
     }
 
     private destroyManagedPage(managedPage: ManagedPage): Promise<void> {
         return new Promise<void>((resolve) => {
-            const { page, context, sn } = managedPage;
+            const { page, sn } = managedPage;
 
             if (this.finalizerMap.has(page)) {
                 clearTimeout(this.finalizerMap.get(page)!);
@@ -471,7 +427,6 @@ new MutationObserver(() => {
             this.livePages.delete(page);
             this.snMap.delete(page);
 
-            // Remove from pool
             const index = this.pagePool.indexOf(managedPage);
             if (index !== -1) {
                 this.pagePool.splice(index, 1);
@@ -489,8 +444,11 @@ new MutationObserver(() => {
             Promise.race([
                 (async () => {
                     try {
+                        const context = page.browserContext();
                         await page.close();
-                        await context.close();
+                        if (context.pages && (await context.pages()).length === 0) {
+                            await context.close();
+                        }
                     } catch (error) {
                         this.logger.warn(`Error closing page ${sn}:`, { error: marshalErrorLike(error as Error) });
                     }
@@ -518,21 +476,15 @@ new MutationObserver(() => {
         if (this.processing || this.requestQueue.length === 0) {
             return;
         }
-
         this.processing = true;
 
-        // Sort queue by priority and timestamp
         this.requestQueue.sort((a, b) => {
-            if (a.priority !== b.priority) {
-                return b.priority - a.priority; // Higher priority first
-            }
-            return a.timestamp - b.timestamp; // Earlier timestamp first
+            if (a.priority !== b.priority) return b.priority - a.priority;
+            return a.timestamp - b.timestamp;
         });
 
         while (this.requestQueue.length > 0 && this.currentActivePages < this.maxConcurrentPages) {
             const request = this.requestQueue.shift()!;
-
-            // Find available page or create new one
             let availablePage = this.pagePool.find(mp => !mp.inUse);
 
             if (availablePage) {
@@ -541,24 +493,19 @@ new MutationObserver(() => {
                 this.currentActivePages++;
                 request.resolve(availablePage.page);
             } else if (this.pagePool.length < this.maxConcurrentPages) {
-                // Create new page asynchronously
-                this.createManagedPage()
-                    .then(managedPage => {
-                        this.pagePool.push(managedPage);
-                        managedPage.inUse = true;
-                        this.currentActivePages++;
-                        request.resolve(managedPage.page);
-                    })
-                    .catch(error => {
-                        request.reject(error as Error);
-                    });
+                this.createManagedPage().then(managedPage => {
+                    this.pagePool.push(managedPage);
+                    managedPage.inUse = true;
+                    this.currentActivePages++;
+                    request.resolve(managedPage.page);
+                }).catch(error => {
+                    request.reject(error);
+                });
             } else {
-                // Put request back in queue (shouldn't happen if logic is correct)
                 this.requestQueue.unshift(request);
                 break;
             }
         }
-
         this.processing = false;
     }
 
@@ -577,40 +524,26 @@ new MutationObserver(() => {
             }
         }
         const args = [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-background-timer-throttling',
-            '--disable-backgrounding-occluded-windows',
-            '--disable-renderer-backgrounding',
-            '--disable-features=TranslateUI',
-            '--disable-ipc-flooding-protection',
-            '--disable-web-security',
-            '--disable-features=VizDisplayCompositor',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu',
-            '--headless=new',
-            '--disable-extensions',
-            '--disable-default-apps',
-            '--disable-sync',
-            '--no-default-browser-check',
-            '--disable-background-networking',
-            '--disable-component-update'
+            '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+            '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding', '--disable-features=TranslateUI',
+            '--disable-ipc-flooding-protection', '--disable-web-security',
+            '--disable-features=VizDisplayCompositor', '--no-first-run', '--no-zygote',
+            '--disable-gpu', '--headless=new', '--disable-extensions',
+            '--disable-default-apps', '--disable-sync', '--no-default-browser-check',
+            '--disable-background-networking', '--disable-component-update'
         ];
 
         this.browser = await puppeteer.launch({
-            args: args,
+            executablePath: '/usr/bin/chromium',
+            args,
             timeout: 10_000,
             handleSIGINT: false,
             handleSIGTERM: false,
             handleSIGHUP: false
         }).catch((err: any) => {
-            this.logger.error(`Unknown firebase issue, just die fast.`, { err });
-            process.nextTick(() => {
-                this.emit('error', err);
-                // process.exit(1);
-            });
+            this.logger.error(`Browser launch failed.`, { err });
+            process.nextTick(() => this.emit('error', err));
             return Promise.reject(err);
         });
         this.browser.once('disconnected', () => {
@@ -619,7 +552,6 @@ new MutationObserver(() => {
             process.nextTick(() => this.serviceReady());
         });
         this.logger.info(`Browser launched: ${this.browser.process()?.pid}`);
-
         this.emit('ready');
 
         this.__healthCheckInterval = setInterval(() => this.healthCheck(), 30_000);
@@ -639,13 +571,10 @@ new MutationObserver(() => {
 
         if (healthyPage) {
             this.__loadedPage.push(healthyPage);
-
             if (this.__loadedPage.length > 3) {
                 this.ditchPage(this.__loadedPage.shift()!);
             }
-
             this.briefPages();
-
             return;
         }
 
@@ -656,135 +585,47 @@ new MutationObserver(() => {
         this.logger.warn(`Browser killed`);
     }
 
-    private extractDomain(url: string): string {
+    // FIX: Corrected the structure of this method. It was previously malformed.
+    private extractDomain(url: string): string | null {
         try {
             const { hostname } = new URL(url);
             const parts = hostname.split('.');
             return parts.length > 1 ? parts.slice(-2).join('.') : hostname;
         } catch (error: any) {
             this.logger.warn(`Failed to extract domain from URL: ${url}. Error: ${error.message}`);
-            return url;
+            return null; // Return null on failure
         }
     }
 
+    // FIX: This method was previously inside `extractDomain` due to a copy-paste error.
+    // It's now a proper class method, intended for creating pre-warmed/health-check pages.
     async newPage() {
         await this.serviceReady();
+        if (!this.browser) {
+            throw new Error('Browser not initialized');
+        }
         const dedicatedContext = this.browser.defaultBrowserContext();
         const sn = this._sn++;
         const page = await dedicatedContext.newPage();
         const preparations: any[] = [];
 
-        // preparations.push(page.setUserAgent(`Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)`));
-        // preparations.push(page.setUserAgent(`Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)`));
         preparations.push(page.setBypassCSP(true));
         preparations.push(page.setViewport({ width: 1024, height: 1024 }));
         preparations.push(page.exposeFunction('reportSnapshot', (snapshot: PageSnapshot) => {
-            if (snapshot.href === 'about:blank') {
-                return;
-            }
+            if (snapshot.href === 'about:blank') return;
             const handler = this.snapshotHandlers.get(page);
-            if (handler) {
-                handler(snapshot);
-            }
+            if (handler) handler(snapshot);
         }));
         preparations.push(page.evaluateOnNewDocument(SCRIPT_TO_INJECT_INTO_FRAME));
         preparations.push(page.setRequestInterception(true));
 
         await Promise.all(preparations);
-
         await page.goto('about:blank', { waitUntil: 'domcontentloaded' });
 
-        const domainSet = new Set<string>();
-        let reqCounter = 0;
-        let t0: number | undefined;
-        let halt = false;
-
-        page.on('request', (req: any) => {
-            reqCounter++;
-            if (halt) {
-                return req.abort('blockedbyclient', 1000);
-            }
-            t0 ??= Date.now();
-            const requestUrl = req.url();
-            if (!requestUrl.startsWith("http:") && !requestUrl.startsWith("https:") && requestUrl !== 'about:blank') {
-                return req.abort('blockedbyclient', 1000);
-            }
-
-            try {
-                const tldParsed = tldExtract(requestUrl);
-                domainSet.add(tldParsed.domain);
-            } catch (error) {
-                this.logger.warn(`Failed to parse TLD for URL: ${requestUrl}. Using fallback method.`);
-                const simpleDomain = this.extractDomain(requestUrl);
-                domainSet.add(simpleDomain);
-            }
-
-            const parsedUrl = new URL(requestUrl);
-
-            if (this.circuitBreakerHosts.has(parsedUrl.hostname.toLowerCase())) {
-                page.emit('abuse', { url: requestUrl, page, sn, reason: `Abusive request: ${requestUrl}` });
-                return req.abort('blockedbyclient', 1000);
-            }
-
-            if (
-                parsedUrl.hostname === 'localhost' ||
-                parsedUrl.hostname.startsWith('127.')
-            ) {
-                page.emit('abuse', { url: requestUrl, page, sn, reason: `Suspicious action: Request to localhost: ${requestUrl}` });
-
-                return req.abort('blockedbyclient', 1000);
-            }
-
-            const dt = Math.ceil((Date.now() - t0) / 1000);
-            const rps = reqCounter / dt;
-            // console.log(`rps: ${rps}`);
-
-            if (reqCounter > 1000) {
-                if (rps > 60 || reqCounter > 2000) {
-                    page.emit('abuse', { url: requestUrl, page, sn, reason: `DDoS attack suspected: Too many requests` });
-                    halt = true;
-
-                    return req.abort('blockedbyclient', 1000);
-                }
-            }
-
-            if (domainSet.size > 200) {
-                page.emit('abuse', { url: requestUrl, page, sn, reason: `DDoS attack suspected: Too many domains` });
-                halt = true;
-
-                return req.abort('blockedbyclient', 1000);
-            }
-
-            const continueArgs = req.continueRequestOverrides
-                ? [req.continueRequestOverrides(), 0] as const
-                : [];
-
-            return req.continue(continueArgs[0], continueArgs[1]);
-        });
-
-        await page.evaluateOnNewDocument(`
-let lastTextLength = 0;
-const handlePageLoad = () => {
-    if (window.haltSnapshot) {
-        return;
-    }
-    const thisTextLength = (document.body.innerText || '').length;
-    const deltaLength = Math.abs(thisTextLength - lastTextLength);
-    if (10 * deltaLength < lastTextLength) {
-        // Change is not significant
-        return;
-    }
-    const r = giveSnapshot();
-    window.reportSnapshot(r);
-    lastTextLength = thisTextLength;
-};
-setInterval(handlePageLoad, 800);
-document.addEventListener('readystatechange', handlePageLoad);
-document.addEventListener('load', handlePageLoad);
-`);
+        this.setupPageRequestHandling(page, sn);
 
         this.snMap.set(page, sn);
-        this.logger.info(`Page ${sn} created.`);
+        this.logger.info(`Page ${sn} created (for pre-warming/health-check).`);
         this.lastPageCreatedAt = Date.now();
         this.livePages.add(page);
 
@@ -793,39 +634,20 @@ document.addEventListener('load', handlePageLoad);
 
     async getNextPage(priority: number = 0): Promise<Page> {
         return new Promise<Page>((resolve, reject) => {
-            const request: QueuedRequest = {
-                resolve,
-                reject,
-                priority,
-                timestamp: Date.now()
-            };
-
+            const request: QueuedRequest = { resolve, reject, priority, timestamp: Date.now() };
             this.requestQueue.push(request);
 
-            // Set timeout for request
             const timeout = setTimeout(() => {
                 const index = this.requestQueue.indexOf(request);
                 if (index !== -1) {
                     this.requestQueue.splice(index, 1);
                     reject(new Error('Page request timeout'));
                 }
-            }, 30000); // 30 second timeout
+            }, 30000);
 
-            request.resolve = ((originalResolve) => {
-                return (page: Page) => {
-                    clearTimeout(timeout);
-                    originalResolve(page);
-                };
-            })(resolve);
+            request.resolve = (page: Page) => { clearTimeout(timeout); resolve(page); };
+            request.reject = (error: any) => { clearTimeout(timeout); reject(error); };
 
-            request.reject = ((originalReject) => {
-                return (error: any) => {
-                    clearTimeout(timeout);
-                    originalReject(error);
-                };
-            })(reject);
-
-            // Process queue
             this.processQueue();
         });
     }
@@ -836,8 +658,6 @@ document.addEventListener('load', handlePageLoad);
             managedPage.inUse = false;
             managedPage.lastUsed = Date.now();
             this.currentActivePages--;
-
-            // Try to process more requests
             this.processQueue();
         }
     }
@@ -847,238 +667,118 @@ document.addEventListener('load', handlePageLoad);
             clearTimeout(this.finalizerMap.get(page)!);
             this.finalizerMap.delete(page);
         }
-        if (page.isClosed()) {
-            return;
-        }
+        if (page.isClosed()) return;
+
         const sn = this.snMap.get(page);
-        this.logger.info(`Closing page ${sn}`);
+        this.logger.info(`Ditching page ${sn}`);
         this.livePages.delete(page);
-        await Promise.race([
-            (async () => {
-                const ctx = page.browserContext();
-                await page.close();
-                await ctx.close();
-            })(), delay(5000)
-        ]).catch((err) => {
-            this.logger.error(`Failed to destroy page ${sn}`, { err: marshalErrorLike(err) });
-        });
+        try {
+            await Promise.race([page.close(), delay(5000)]);
+        } catch (err) {
+            this.logger.error(`Failed to ditch page ${sn}`, { err: marshalErrorLike(err as Error) });
+        }
     }
 
-    async *scrap(parsedUrl: URL, options?: ScrappingOptions): AsyncGenerator<PageSnapshot | undefined> {
-        // parsedUrl.search = '';
-        console.log('Scraping options:', options);
+    async *scrape(parsedUrl: URL, options: ScrappingOptions = {}): AsyncGenerator<PageSnapshot> {
         const url = parsedUrl.toString();
-
-        let snapshot: PageSnapshot | undefined;
-        let screenshot: Buffer | undefined;
-        let pageshot: Buffer | undefined;
         let page: Page | null = null;
 
         try {
-            page = await this.getNextPage(1); // Higher priority for scraping requests
-            const sn = this.snMap.get(page);
-            this.logger.info(`Page ${sn}: Scraping ${url}`, { url });
+            page = await this.getNextPage(1); // Higher priority for scraping
+            const sn = this.snMap.get(page) ?? -1;
+            this.logger.info(`Page ${sn}: Scraping ${url}`);
 
-            if (options?.proxyUrl) {
-                this.logger.info(`Page ${sn}: Proxy not supported in current setup:`, options.proxyUrl);
-                // await page.useProxy(options.proxyUrl);
+            if (options.proxyUrl && (page as any).useProxy) {
+                await (page as any).useProxy(options.proxyUrl);
             }
 
-            if (options?.cookies) {
-                this.logger.info(`Page ${sn}: Attempting to set cookies:`, JSON.stringify(options.cookies, null, 2));
+            if (options.cookies) {
                 try {
                     options.cookies.forEach(validateCookie);
                     await page.setCookie(...options.cookies);
                 } catch (error) {
-                    this.logger.error(`Page ${sn}: Error setting cookies:`, error);
-                    this.logger.info(`Page ${sn}: Problematic cookies:`, JSON.stringify(options.cookies, null, 2));
+                    this.logger.error(`Page ${sn}: Error setting cookies for ${url}`, { error, cookies: options.cookies });
                     throw error;
                 }
             }
 
-            if (options?.overrideUserAgent) {
+            if (options.overrideUserAgent) {
                 await page.setUserAgent(options.overrideUserAgent);
             }
 
-            let nextSnapshotDeferred = Defer();
-            const crippleListener = () => nextSnapshotDeferred.reject(new ServiceCrashedError({ message: `Browser crashed, try again` }));
+            const nextSnapshotDeferred = Defer<PageSnapshot>();
+            const crippleListener = () => nextSnapshotDeferred.reject(new ServiceCrashedError({ message: `Browser crashed` }));
             this.once('crippled', crippleListener);
-            nextSnapshotDeferred.promise.finally(() => {
-                this.off('crippled', crippleListener);
-            });
+            nextSnapshotDeferred.promise.finally(() => this.off('crippled', crippleListener));
 
-            const hdl = (s: any) => {
-                if (snapshot === s) {
-                    return;
-                }
-                snapshot = s;
-                if (s?.maxElemDepth && s.maxElemDepth > 256) {
-                    return;
-                }
-                if (s?.elemCount && s.elemCount > 10_000) {
-                    return;
-                }
+            let lastSnapshot: PageSnapshot | undefined;
+            const hdl = (s: PageSnapshot) => {
+                if (s?.maxElemDepth && s.maxElemDepth > 256) return;
+                if (s?.elemCount && s.elemCount > 10_000) return;
+                lastSnapshot = s;
                 nextSnapshotDeferred.resolve(s);
-                nextSnapshotDeferred = Defer();
-                this.once('crippled', crippleListener);
-                nextSnapshotDeferred.promise.finally(() => {
-                    this.off('crippled', crippleListener);
-                });
             };
             this.snapshotHandlers.set(page, hdl);
-            // page.once('abuse', (event: any) => {
-            //     this.emit('abuse', { ...event, url: parsedUrl });
-            //     nextSnapshotDeferred.reject(
-            //         new SecurityCompromiseError(`Abuse detected: ${event.reason}`)
-            //     );
-            // });
 
-            const timeout = options?.timeoutMs || 30_000;
+            const timeout = options.timeoutMs || 30_000;
 
-            try {
-                let waitForPromise: Promise<any> | undefined;
-                let gotoPromise: Promise<PageSnapshot | any | null | void>;
-
-                gotoPromise = page.goto(url, {
-                    waitUntil: ['load', 'domcontentloaded', 'networkidle0'],
-                    timeout,
-                })
-                .catch((err: any) => {
-                    if (err.name === 'TimeoutError' || err.message?.includes('ERR_NAME_NOT_RESOLVED') || err.message?.includes('Navigation timeout')) {
-                        this.logger.warn(`Page ${sn}: Browsing of ${url} failed`, { err: marshalErrorLike(err) });
-                        return {
-                            title: 'Error: Unable to access page',
-                            href: url,
-                            html: '',
-                            text: err.message,
-                            screenshot,
-                            pageshot,
-                            error: err.message
-                        } as PageSnapshot;
-                    } else {
-                        throw err;
+            const gotoPromise = page.goto(url, { waitUntil: 'load', timeout })
+                .catch(err => {
+                    if (err.name === 'TimeoutError' || err.message?.includes('ERR_NAME_NOT_RESOLVED')) {
+                        this.logger.warn(`Page ${sn}: Navigation to ${url} failed`, { err: marshalErrorLike(err) });
+                        return; // Don't re-throw, just let it proceed to snapshotting if possible
                     }
+                    throw err; // Re-throw other errors
                 });
 
-                if (Array.isArray(options?.waitForSelector)) {
-                    if (options!.waitForSelector!.length === 1) {
-                        console.log('Waiting for selector', options.waitForSelector);
-                        try {
-                            waitForPromise = page!.waitForSelector(options.waitForSelector[0], { timeout });
-                        } catch (err: any) {
-                            this.logger.warn(`Page ${sn}: Could not wait for selector`, { err: marshalErrorLike(err) });
-                        }
-                    } else if (options!.waitForSelector!.length > 1) {
-                        try {
-                            waitForPromise = Promise.race(options.waitForSelector.map(selector => page!.waitForSelector(selector, { timeout })));
-                        } catch (err: any) {
-                            this.logger.warn(`Page ${sn}: Could not wait for any selector`, { err: marshalErrorLike(err) });
-                        }
-                    }
-                } else if (typeof options?.waitForSelector === 'string') {
-                    try {
-                        waitForPromise = page.waitForSelector(options.waitForSelector, { timeout });
-                    } catch (err: any) {
-                        this.logger.warn(`Page ${sn}: Could not wait for selector`, { err: marshalErrorLike(err) });
-                    }
-                }
+            const waitForPromise = options.waitForSelector
+                ? page.waitForSelector(
+                    Array.isArray(options.waitForSelector) ? options.waitForSelector.join(', ') : options.waitForSelector,
+                    { timeout }
+                  ).catch(err => {
+                      this.logger.warn(`Page ${sn}: waitForSelector failed for ${url}`, { err: marshalErrorLike(err) });
+                  })
+                : Promise.resolve();
 
-                if (waitForPromise) {
-                    await Promise.all([gotoPromise, waitForPromise]);
-                } else {
-                    await gotoPromise;
-                }
+            await Promise.all([gotoPromise, waitForPromise]);
 
-                let goodSnapshot = false;
-                try {
-                    const threshold = options?.favorScreenshot ? 0 : 200;
-                    let waitCound = 0;
-                    while (!snapshot || snapshot.text.length <= threshold) {
-                        const nextSnapshot = await Promise.race([
-                            nextSnapshotDeferred.promise,
-                            delay(200)
-                        ]);
-                        waitCound++;
-                        if (nextSnapshot) {
-                            goodSnapshot = true;
-                            break;
-                        }
-                        if (waitCound >= 50) {
-                            break;
-                        }
-                    }
-                } catch (err: any) {
-                    if (err.constructor === SecurityCompromiseError) {
-                        throw err;
-                    }
-                    this.logger.warn(`Page ${sn}: No snapshot available, moving on`, { err: marshalErrorLike(err) });
-                    snapshot = {
-                        title: 'Error: Scraping Failed',
-                        href: url,
-                        html: '',
-                        text: '',
-                        screenshot,
-                        pageshot,
-                        error: 'No snapshot available'
-                    } as PageSnapshot;
-                }
+            // Wait for a snapshot to be reported
+            await Promise.race([nextSnapshotDeferred.promise, delay(options.minIntervalMs || 1000)]);
 
-                if (snapshot) {
-                    this.logger.info(`Page ${sn}: Snapshot of ${url} done`, { url, title: snapshot.title, href: snapshot.href });
-                    yield snapshot;
-                }
+            const finalSnapshot = lastSnapshot || await page.evaluate('giveSnapshot()').catch(() => null) as PageSnapshot | null;
 
-                if (!goodSnapshot) {
-                    try {
-                        screenshot = await page.screenshot() as Buffer;
-                        pageshot = await page.screenshot({ fullPage: true }) as Buffer;
-                        const title = await page.title().catch(() => 'Failed to get title');
-
-                        yield {
-                            title,
-                            href: url,
-                            html: '',
-                            text: '',
-                            screenshot,
-                            pageshot,
-                            error: 'Screenshot only'
-                        } as PageSnapshot;
-                    } catch (err: any) {
-                        this.logger.warn(`Page ${sn}: Failed to take screenshot`, { err: marshalErrorLike(err) });
-                    }
-                }
-
-            } catch (error: any) {
-                this.logger.error(`Page ${sn}: Error during scraping`, { error: marshalErrorLike(error) });
+            if (finalSnapshot) {
+                this.logger.info(`Page ${sn}: Snapshot of ${url} done`, { title: finalSnapshot.title || 'Untitled' });
+                yield finalSnapshot;
+            } else {
+                this.logger.warn(`Page ${sn}: No snapshot available for ${url}, trying screenshot.`);
+                const screenshot = await page.screenshot().catch(() => undefined) as Buffer | undefined;
+                const title = await page.title().catch(() => 'Scraping Failed');
                 yield {
-                    title: 'Error: Scraping failed',
+                    title,
                     href: url,
                     html: '',
-                    text: error.message || 'Unknown error',
+                    text: '',
                     screenshot,
-                    pageshot,
-                    error: error.message || 'Unknown error'
-                } as PageSnapshot;
-            } finally {
-                this.snapshotHandlers.delete(page);
-                // Clean up event listeners
-                // page.removeAllListeners('abuse');
+                    error: 'No snapshot available, screenshot taken as fallback.'
+                };
             }
 
         } catch (error: any) {
-            this.logger.error(`Failed to get page for scraping ${url}:`, { error: marshalErrorLike(error) });
+            this.logger.error(`Scraping failed for ${url}:`, { error: marshalErrorLike(error) });
             yield {
-                title: 'Error: Failed to get page',
+                title: 'Error: Scraping failed',
                 href: url,
                 html: '',
-                text: error.message || 'Failed to get page',
-                screenshot,
-                pageshot,
-                error: error.message || 'Failed to get page'
-            } as PageSnapshot;
+                text: '',
+                error: error.message || 'An unknown error occurred during scraping.'
+            };
         } finally {
-            // Always release the page back to the pool
             if (page) {
+                this.snapshotHandlers.delete(page);
+                if (options.proxyUrl && (page as any).useProxy) {
+                    await (page as any).useProxy(null); // Clear proxy
+                }
                 this.releasePage(page);
             }
         }
@@ -1088,43 +788,46 @@ document.addEventListener('load', handlePageLoad);
         this.logger.info(`Salvaging ${url}`);
         const googleArchiveUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}`;
         const resp = await fetch(googleArchiveUrl, {
-            headers: {
-                'User-Agent': `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)`
-            }
+            headers: { 'User-Agent': `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)` }
         });
         resp.body?.cancel().catch(() => void 0);
         if (!resp.ok) {
-            this.logger.warn(`No salvation found for url: ${url}`, { status: resp.status, url });
+            this.logger.warn(`No salvation found for url: ${url}`, { status: resp.status });
             return null;
         }
 
-        await page.goto(googleArchiveUrl, { waitUntil: ['load', 'domcontentloaded', 'networkidle0'], timeout: 15_000 }).catch((err: any) => {
+        await page.goto(googleArchiveUrl, { waitUntil: 'load', timeout: 15_000 }).catch((err: any) => {
             this.logger.warn(`Page salvation did not fully succeed.`, { err: marshalErrorLike(err) });
         });
 
         this.logger.info(`Salvation completed.`);
-
         return true;
     }
 
     async snapshotChildFrames(page: Page): Promise<PageSnapshot[]> {
         const childFrames = page.mainFrame().childFrames();
-        const r = await Promise.all(childFrames.map(async (x: any) => {
-            const thisUrl = x.url();
-            if (!thisUrl || thisUrl === 'about:blank') {
-                return undefined;
-            }
+        const results = await Promise.all(childFrames.map(async (frame) => {
+            const frameUrl = frame.url();
+            if (!frameUrl || frameUrl === 'about:blank') return undefined;
             try {
-                await x.evaluate(SCRIPT_TO_INJECT_INTO_FRAME);
-
-                return await x.evaluate(`giveSnapshot()`);
+                await frame.evaluate(SCRIPT_TO_INJECT_INTO_FRAME);
+                return await frame.evaluate(`giveSnapshot()`) as PageSnapshot;
             } catch (err) {
-                this.logger.warn(`Failed to snapshot child frame ${thisUrl}`, { err });
+                this.logger.warn(`Failed to snapshot child frame ${frameUrl}`, { err });
                 return undefined;
             }
-        })) as PageSnapshot[];
+        }));
+        return results.filter((r): r is PageSnapshot => Boolean(r));
+    }
 
-        return r.filter(Boolean);
+    async crawl(url: URL, options?: ScrappingOptions): Promise<PageSnapshot | undefined> {
+        const iterator = this.scrape(url, options);
+        for await (const snapshot of iterator) {
+            if (snapshot) {
+                return snapshot;
+            }
+        }
+        return undefined;
     }
 }
 

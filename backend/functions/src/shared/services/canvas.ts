@@ -1,6 +1,6 @@
 import { AsyncService } from 'civkit';
 import { singleton } from 'tsyringe';
-import { Logger } from '../logger';
+import { Logger } from '../logger.js';
 
 @singleton()
 export class CanvasService extends AsyncService {

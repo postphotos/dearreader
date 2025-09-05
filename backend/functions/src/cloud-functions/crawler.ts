@@ -5,31 +5,38 @@ import {
     AssertionFailureError, Defer,
 } from 'civkit';
 import { singleton } from 'tsyringe';
-import { AsyncContext, FirebaseStorageBucketControl, Logger } from '../shared/index';
+import { AsyncContext, FirebaseStorageBucketControl, Logger } from '../shared/index.js';
 import _ from 'lodash';
-import { PageSnapshot, PuppeteerControl, ScrappingOptions } from '../services/puppeteer';
+import { PageSnapshot, PuppeteerControl, ScrappingOptions } from '../services/puppeteer.js';
 import { Request, Response } from 'express';
 // import { AltTextService } from '../services/alt-text';
 import TurndownService from 'turndown';
+import * as turndownPluginGfm from 'turndown-plugin-gfm';
 // import { Crawled } from '../db/crawled';
-import { cleanAttribute } from '../utils/misc';
+import { cleanAttribute } from '../utils/misc.js';
 import { randomUUID } from 'crypto';
 
 
-import { CrawlerOptions, CrawlerOptionsHeaderOnly } from '../dto/scrapping-options';
-// import { PDFExtractor } from '../services/pdf-extract';
-import { DomainBlockade } from '../db/domain-blockade';
-import { JSDomControl } from '../services/jsdom';
+import { CrawlerOptions } from '../dto/scrapping-options.js';
+// import { PDFExtractor } from '../services/pdf-extract.js';
+import { DomainBlockade } from '../db/domain-blockade.js';
+import { JSDomControl } from '../services/jsdom.js';
 
 import { TransferProtocolMetadata } from 'civkit';
 import * as fs from 'fs';
 import * as path from 'path';
-import { URL } from 'url';
+// import { URL } from 'url'; // Use the global URL instead of Node's URL
 
 console.log('Initializing CrawlerHost');
 
-const md5Hasher = new HashManager('md5', 'hex');
+// (Remove this line entirely)
 
+/**
+ * Sends a response to the client with the specified data and metadata, setting status, headers, and content type as needed.
+ * @param res - Express response object
+ * @param data - Data to send in the response
+ * @param meta - Metadata for response headers, status code, and content type
+ */
 function sendResponse<T>(res: Response, data: T, meta: TransferProtocolMetadata): T {
     if (meta.code) {
         res.status(meta.code);
@@ -84,12 +91,12 @@ const indexProto = {
             .join('\n') + '\n';
     }
 };
-
 @singleton()
 export class CrawlerHost extends RPCHost {
+    private static md5Hasher = new HashManager('md5', 'hex');
     logger = new Logger('Crawler');
 
-    turnDownPlugins = [require('turndown-plugin-gfm').tables];
+    turnDownPlugins = [turndownPluginGfm.tables];
 
     cacheRetentionMs = 1000 * 3600 * 24 * 7;
     cacheValidMs = 1000 * 3600;
@@ -97,7 +104,7 @@ export class CrawlerHost extends RPCHost {
     abuseBlockMs = 1000 * 3600;
 
     constructor(
-        protected puppeteerControl: PuppeteerControl,
+        public puppeteerControl: PuppeteerControl,
         protected jsdomControl: JSDomControl,
         // protected altTextService: AltTextService,
         // protected pdfExtractor: PDFExtractor,
@@ -126,19 +133,33 @@ export class CrawlerHost extends RPCHost {
             }
         });
 
+        // Add crawl method to puppeteerControl if it doesn't already exist
+        if (!puppeteerControl.crawl) {
+            puppeteerControl.crawl = async function(url: URL, options?: ExtraScrappingOptions): Promise<PageSnapshot | undefined> {
+                console.log('PuppeteerControl crawl method called:', { url: url.toString(), options });
+                const iterator = this.scrape(url, options);
+                for await (const snapshot of iterator) {
+                    if (snapshot) {
+                        return snapshot;
+                    }
+                }
+                return undefined;
+            };
+        }
+
         puppeteerControl.on('abuse', async (abuseEvent: { url: URL; reason: string, sn: number; }) => {
             console.log('Abuse event received', abuseEvent);
             this.logger.warn(`Abuse detected on ${abuseEvent.url}, blocking ${abuseEvent.url.hostname}`, { reason: abuseEvent.reason, sn: abuseEvent.sn });
 
-            await DomainBlockade.save(DomainBlockade.from({
-                domain: abuseEvent.url.hostname.toLowerCase(),
-                triggerReason: `${abuseEvent.reason}`,
-                triggerUrl: abuseEvent.url.toString(),
-                createdAt: new Date(),
-                expireAt: new Date(Date.now() + this.abuseBlockMs),
-            })).catch((err) => {
-                console.error('Failed to save domain blockade', err);
-                this.logger.warn(`Failed to save domain blockade for ${abuseEvent.url.hostname}`, { err: marshalErrorLike(err) });
+            const blockade = new DomainBlockade();
+            blockade.domain = abuseEvent.url.hostname.toLowerCase();
+            blockade.triggerReason = `${abuseEvent.reason}`;
+            blockade.triggerUrl = abuseEvent.url.toString();
+            blockade.createdAt = new Date();
+            blockade.expireAt = new Date(Date.now() + this.abuseBlockMs);
+            await blockade.save().catch(() => {
+                console.error('Failed to save domain blockade');
+                this.logger.warn(`Failed to save domain blockade for ${abuseEvent.url.hostname}`);
             });
 
         });
@@ -153,19 +174,28 @@ export class CrawlerHost extends RPCHost {
         console.log('CrawlerHost initialization complete');
     }
 
-    getIndex() {
+    getIndex(): FormattedPage {
         console.log('Getting index');
-        const indexObject: Record<string, string | number | undefined> = Object.create(indexProto);
-
-        Object.assign(indexObject, {
-            usage1: 'https://r.jina.ai/YOUR_URL',
-            usage2: 'https://s.jina.ai/YOUR_SEARCH_QUERY',
-            homepage: 'https://jina.ai/reader',
-            sourceCode: 'https://github.com/jina-ai/reader',
-        });
-
-        console.log('Index object created:', indexObject);
-        return indexObject;
+        const indexData = {
+            title: 'Jina Reader Index',
+            description: 'Welcome to Jina Reader!',
+            url: 'https://jina.ai/reader',
+            content: '',
+            publishedTime: undefined,
+            html: undefined,
+            text: undefined,
+            screenshotUrl: undefined,
+            screenshot: undefined,
+            pageshotUrl: undefined,
+            pageshot: undefined,
+            links: undefined,
+            images: undefined,
+            toString: function () {
+                return `Title: Jina Reader Index\n\nURL Source: ${this.url}\n\nMarkdown Content:\n${this.title}\n\n===============\n\nLinks/Buttons:\n- [Usage1](https://r.jina.ai/YOUR_URL)\n- [Usage2](https://s.jina.ai/YOUR_SEARCH_QUERY)\n- [Homepage](https://jina.ai/reader)\n- [SourceCode](https://github.com/jina-ai/reader)\n- [Example Link 1](https://example.com/link1)\n- [Example Link 2](https://example.com/link2)`;
+            }
+        };
+        console.log('Index object created:', indexData);
+        return indexData;
     }
 
     getTurndown(options?: {
@@ -204,12 +234,12 @@ export class CrawlerHost extends RPCHost {
 
                     if (options.url) {
                         const refUrl = new URL(options.url.toString());
-                        const mappedUrl = new URL(`blob:${refUrl.origin}/${md5Hasher.hash(src)}`);
+                        const mappedUrl = new URL(`blob:${refUrl.origin}/${CrawlerHost.md5Hasher.hash(src)}`);
 
                         return `![${alt}](${mappedUrl})`;
                     }
 
-                    return `![${alt}](blob:${md5Hasher.hash(src)})`;
+                    return `![${alt}](blob:${CrawlerHost.md5Hasher.hash(src)})`;
                 }
             });
         }
@@ -347,6 +377,7 @@ export class CrawlerHost extends RPCHost {
                 }
             } as FormattedPage;
         }
+
         if (mode === 'pageshot') {
             if (snapshot.pageshot && !snapshot.pageshotUrl) {
                 console.log('Saving pageshot');
@@ -365,6 +396,7 @@ export class CrawlerHost extends RPCHost {
                 }
             } as FormattedPage;
         }
+
         if (mode === 'html') {
             console.log('Formatting as HTML');
             return {
@@ -392,24 +424,19 @@ export class CrawlerHost extends RPCHost {
         const imageSummary = {} as { [k: string]: string; };
         const imageIdxTrack = new Map<string, number[]>();
 
-        do {
-            const isPdfMode = snapshot.pdfs && snapshot.pdfs.length > 0;
-            if (isPdfMode) {
-                console.log('PDF mode detected');
-                contentText = snapshot.parsed?.content || snapshot.text;
-                break;
-            }
-
-            if (
-                (snapshot.maxElemDepth && snapshot.maxElemDepth > 256) ||
-                (snapshot.elemCount && snapshot.elemCount > 70_000)
-            ) {
-                console.log('Degrading to text to protect the server');
-                this.logger.warn('Degrading to text to protect the server', { url: snapshot.href });
-                contentText = snapshot.text;
-                break;
-            }
-
+        // Process content
+        const isPdfMode = snapshot.pdfs && snapshot.pdfs.length > 0;
+        if (isPdfMode) {
+            console.log('PDF mode detected');
+            contentText = snapshot.parsed?.content || snapshot.text;
+        } else if (
+            (snapshot.maxElemDepth && snapshot.maxElemDepth > 256) ||
+            (snapshot.elemCount && snapshot.elemCount > 70_000)
+        ) {
+            console.log('Degrading to text to protect the server');
+            this.logger.warn('Degrading to text to protect the server', { url: snapshot.href });
+            contentText = snapshot.text;
+        } else {
             console.log('Processing HTML content');
             const jsDomElementOfHTML = this.jsdomControl.snippetToElement(snapshot.html, snapshot.href);
             let toBeTurnedToMd = jsDomElementOfHTML;
@@ -476,8 +503,8 @@ export class CrawlerHost extends RPCHost {
 
                         const effectiveAlt = `Image ${imgIdx}: ${mapped || alt}`;
 
-                        if (src.startsWith('data:') && imgDataUrlToObjectUrl) {
-                            const mappedUrl = `blob:${nominalUrl?.origin || ''}/${md5Hasher.hash(src)}`;
+                        if (imgDataUrlToObjectUrl) {
+                            const mappedUrl = `blob:${nominalUrl?.origin || ''}/${CrawlerHost.md5Hasher.hash(src)}`;
                             return `![${effectiveAlt}](${mappedUrl})`;
                         }
 
@@ -517,7 +544,7 @@ export class CrawlerHost extends RPCHost {
             if (!contentText || (contentText.startsWith('<') && contentText.endsWith('>'))) {
                 contentText = snapshot.text;
             }
-        } while (false);
+        }
 
         const cleanText = (contentText || '').trim();
 
@@ -560,11 +587,11 @@ export class CrawlerHost extends RPCHost {
 
                 return `Title: ${this.title}
 
-URL Source: ${this.url}
-${mixins.length ? `\n${mixins.join('\n\n')}\n` : ''}
-Markdown Content:
-${this.content}
-${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
+    URL Source: ${this.url}
+    ${mixins.length ? `\n${mixins.join('\n\n')}\n` : ''}
+    Markdown Content:
+    ${this.content}
+    ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
             }
         };
 
@@ -580,122 +607,36 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
                     .value();
         }
 
-        // Always include links for JSON responses or when explicitly requested
+        // Always include links and images for JSON responses or when explicitly requested
         const acceptHeader = this.threadLocal.get('accept') || '';
         const returnFormat = this.threadLocal.get('x-return-format');
         const wantsJson = acceptHeader.includes('application/json') || returnFormat === 'json' || this.threadLocal.get('withLinksSummary');
 
         if (wantsJson) {
-            formatted.links = _.invert(this.jsdomControl.inferSnapshot(snapshot).links || {});
+            formatted.links = this.jsdomControl.inferSnapshot(snapshot).links || {};
+            // Always include images for JSON responses
+            if (!formatted.images) {
+                formatted.images = _(imageSummary)
+                    .toPairs()
+                    .map(([url, alt], i) => {
+                        return [`Image ${(imageIdxTrack?.get(url) || [i + 1]).join(',')}${alt ? `: ${alt}` : ''}`, url];
+                    })
+                    .fromPairs()
+                    .value();
+            }
         }
 
         return formatted;
     }
 
-    async crawl(req: Request, res: Response) {
-        this.logger.info(`Crawl request received for URL: ${req.url}`);
-        console.log('Crawl method called with request:', req.url);
-        const ctx = { req, res };
-
-        try {
-            const noSlashURL = ctx.req.url.slice(1);
-
-            // Handle favicon.ico request early
-            if (noSlashURL === 'favicon.ico') {
-                console.log('Favicon request detected');
-                return sendResponse(res, 'Favicon not available', { contentType: 'text/plain', code: 404 });
-            }
-
-            const crawlerOptions = req.method === 'POST' ?
-                CrawlerOptions.from(req.body, req) :
-                CrawlerOptions.from(req.query, req);
-            console.log('Crawler options:', crawlerOptions);
-
-            // Store request headers for formatSnapshot to use
-            this.threadLocal.set('accept', req.headers.accept || '');
-            this.threadLocal.set('x-return-format', req.headers['x-return-format'] || '');
-
-            // Check if the request is for a local screenshot
-            if (noSlashURL.startsWith('instant-screenshots/')) {
-                return this.serveScreenshot(noSlashURL, res);
-            }
-
-            const urlToCrawl = noSlashURL;
-            let parsedUrl: URL;
-
-            try {
-                parsedUrl = new URL(urlToCrawl);
-                if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-                    throw new Error('Invalid protocol');
-                }
-                if (!this.isValidTLD(parsedUrl.hostname)) {
-                    throw new Error('Invalid TLD');
-                }
-            } catch (error) {
-                console.log('Invalid URL:', urlToCrawl, error);
-                return sendResponse(res, 'Invalid URL or TLD', { contentType: 'text/plain', code: 400 });
-            }
-
-            this.puppeteerControl.circuitBreakerHosts.add(ctx.req.hostname.toLowerCase());
-            console.log('Added to circuit breaker hosts:', ctx.req.hostname.toLowerCase());
-
-            const crawlOpts = this.configure(crawlerOptions, req, parsedUrl);
-            console.log('Configured crawl options:', crawlOpts);
-
-            let lastScrapped: PageSnapshot | undefined;
-            const scrapIterator = this.scrap(parsedUrl, crawlOpts, crawlerOptions);
-
-            try {
-                for await (const scrapped of scrapIterator) {
-                    lastScrapped = scrapped;
-                    if (crawlerOptions.waitForSelector || ((!scrapped?.parsed?.content || !scrapped.title?.trim()) && !scrapped?.pdfs?.length)) {
-                        continue;
-                    }
-
-                    if (crawlerOptions.timeout === undefined) {
-                        const formatted = await this.formatSnapshot(crawlerOptions.respondWith, scrapped, parsedUrl);
-                        return this.sendFormattedResponse(res, formatted, crawlerOptions.respondWith);
-                    }
-                }
-            } catch (scrapError: any) {
-                console.error('Error during scraping:', scrapError);
-                if (scrapError instanceof AssertionFailureError &&
-                    (scrapError.message.includes('Invalid TLD') || scrapError.message.includes('ERR_NAME_NOT_RESOLVED'))) {
-                    const errorSnapshot: PageSnapshot = {
-                        title: 'Error: Invalid domain or TLD',
-                        href: parsedUrl.toString(),
-                        html: '',
-                        text: `Failed to access the page due to an invalid domain or TLD: ${parsedUrl.toString()}`,
-                        error: 'Invalid domain or TLD'
-                    };
-                    const formatted = await this.formatSnapshot(crawlerOptions.respondWith, errorSnapshot, parsedUrl);
-                    return this.sendFormattedResponse(res, formatted, crawlerOptions.respondWith);
-                }
-                throw scrapError;
-            }
-
-            if (!lastScrapped) {
-                return sendResponse(res, 'No content available', { contentType: 'text/plain', code: 404 });
-            }
-
-            const formatted = await this.formatSnapshot(crawlerOptions.respondWith, lastScrapped, parsedUrl);
-            return this.sendFormattedResponse(res, formatted, crawlerOptions.respondWith);
-
-        } catch (error) {
-            console.error('Error in crawl method:', error);
-            return sendResponse(res, 'Internal server error', { contentType: 'text/plain', code: 500 });
-        }
-    }
-
     private isValidTLD(hostname: string): boolean {
         const parts = hostname.split('.');
-        // Simple check: at least two parts, and the last part (TLD) is at least 2 chars.
-        // This is not foolproof but prevents many common typos and invalid domains.
         return parts.length > 1 && parts[parts.length - 1].length >= 2;
     }
 
     private serveScreenshot(screenshotPath: string, res: Response) {
-        const fullPath = path.join('/app', 'local-storage', screenshotPath);
+        const relativePath = screenshotPath.replace(/^instant-screenshots\//, '');
+        const fullPath = path.join('/app', 'local-storage', 'instant-screenshots', relativePath);
         console.log(`Attempting to serve screenshot from: ${fullPath}`);
         if (fs.existsSync(fullPath)) {
             return res.sendFile(fullPath);
@@ -705,41 +646,48 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
         }
     }
 
-    private sendFormattedResponse(res: Response, formatted: FormattedPage, respondWith: string) {
-        // Check if client wants JSON response
+    private sendFormattedResponse(res: Response, formatted: FormattedPage, respondWith: string, snapshot?: PageSnapshot): any {
         const acceptHeader = this.threadLocal.get('accept') || '';
         const returnFormat = this.threadLocal.get('x-return-format') || '';
         const wantsJson = acceptHeader.includes('application/json') || returnFormat === 'json';
 
         if (respondWith === 'screenshot' && formatted.screenshotUrl) {
-            return sendResponse(res, `${formatted}`, { code: 302, headers: { Location: formatted.screenshotUrl } });
+            return sendResponse(res, '', { code: 302, headers: { Location: formatted.screenshotUrl } });
         }
         if (respondWith === 'pageshot' && formatted.pageshotUrl) {
-            return sendResponse(res, `${formatted}`, { code: 302, headers: { Location: formatted.pageshotUrl } });
+            return sendResponse(res, '', { code: 302, headers: { Location: formatted.pageshotUrl } });
         }
 
         if (wantsJson) {
-            // Return Jina-like JSON format
+            const lang = snapshot?.parsed?.lang || 'en';
+            const description = snapshot?.parsed?.excerpt || formatted.title;
+            const siteName = snapshot?.parsed?.siteName || '';
+            const byline = snapshot?.parsed?.byline || '';
+
             const jsonResponse = {
                 code: 200,
                 status: 20000,
                 data: {
                     title: formatted.title,
-                    description: formatted.title, // Using title as description for now
+                    description: description,
                     url: formatted.url,
                     content: formatted.content,
                     links: formatted.links || {},
+                    images: formatted.images || {},
                     metadata: {
-                        lang: 'en', // Default to English
-                        description: formatted.title,
+                        lang: lang,
+                        description: description,
                         'og:title': formatted.title,
-                        'og:description': formatted.title,
+                        'og:description': description,
                         'og:type': 'website',
                         'og:url': formatted.url,
+                        'og:site_name': siteName,
+                        'article:author': byline,
+                        'article:published_time': formatted.publishedTime || '',
                         viewport: 'width=device-width, initial-scale=1.0'
                     },
                     usage: {
-                        tokens: Math.ceil((formatted.content?.length || 0) / 4) // Rough token estimation
+                        tokens: Math.ceil((formatted.content?.length || 0) / 4)
                     }
                 },
                 meta: {
@@ -754,13 +702,12 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
         return sendResponse(res, `${formatted}`, { contentType: 'text/plain' });
     }
 
-    getUrlDigest(urlToCrawl: URL) {
+    getUrlDigest(urlToCrawl: URL): string {
         const normalizedURL = new URL(urlToCrawl);
         if (!normalizedURL.hash.startsWith('#/')) {
             normalizedURL.hash = '';
         }
-        const normalizedUrl = normalizedURL.toString().toLowerCase();
-        return md5Hasher.hash(normalizedUrl);
+        return CrawlerHost.md5Hasher.hash(normalizedURL.toString());
     }
 
     async *scrap(urlToCrawl: URL, crawlOpts?: ExtraScrappingOptions, crawlerOpts?: CrawlerOptions): AsyncGenerator<PageSnapshot | undefined> {
@@ -779,7 +726,7 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
             return;
         }
 
-        const scrapIterator = this.puppeteerControl.scrap(urlToCrawl, crawlOpts);
+        const scrapIterator = this.puppeteerControl.scrape(urlToCrawl, crawlOpts);
 
         if (crawlOpts?.targetSelector || crawlOpts?.removeSelector || crawlOpts?.withIframe) {
             console.log('Using custom selectors or iframe narrowing');
@@ -794,7 +741,7 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
         }
     }
 
-    async *scrapMany(urls: URL[], options?: ExtraScrappingOptions, crawlerOpts?: CrawlerOptions) {
+    async *scrapMany(urls: URL[], options?: ExtraScrappingOptions, crawlerOpts?: CrawlerOptions): AsyncGenerator<(PageSnapshot | undefined)[]> {
         const iterators = urls.map((url) => this.scrap(url, options, crawlerOpts));
         const results: (PageSnapshot | undefined)[] = Array(iterators.length).fill(undefined);
         let concluded = false;
@@ -855,7 +802,8 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
                 })
             : [];
 
-        console.log('Cookies:', cookies);
+        const cookiesForLog = cookies.map(({ name, url }) => ({ name, url }));
+        console.log('Cookies:', cookiesForLog);
         return {
             proxyUrl: opts.proxyUrl,
             cookies: cookies,
@@ -869,7 +817,7 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
         };
     }
 
-    async simpleCrawl(mode: string, url: URL, opts?: ExtraScrappingOptions) {
+    async simpleCrawl(mode: string, url: URL, opts?: ExtraScrappingOptions): Promise<FormattedPage> {
         const it = this.scrap(url, { ...opts, minIntervalMs: 500 });
 
         let lastSnapshot: PageSnapshot | undefined;
@@ -909,10 +857,111 @@ ${suffixMixins.length ? `\n${suffixMixins.join('\n\n')}\n` : ''}`;
             const filePath = path.join(localDir, fileName);
             console.log(`Writing file to: ${filePath}`);
             await fs.promises.writeFile(filePath, new Uint8Array(content));
-            return filePath;
+            return `/instant-screenshots/${fileName}`;
         } catch (error) {
             console.error(`Error saving file locally: ${error}`);
             throw error;
+        }
+    }
+
+    async crawl(req: Request, res: Response) {
+        this.logger.info(`Crawl request received for URL: ${req.url}`);
+        console.log('Crawl method called with request:', req.url);
+
+        try {
+            const noSlashURL = req.url.slice(1);
+
+            // Handle favicon.ico request early
+            if (noSlashURL === 'favicon.ico') {
+                console.log('Favicon request detected');
+                return sendResponse(res, 'Favicon not available', { contentType: 'text/plain', code: 404 });
+            }
+
+            // Handle root path - return index
+            if (!noSlashURL || noSlashURL === '/') {
+                console.log('Root path requested, returning index');
+                const indexPage = this.getIndex();
+                return this.sendFormattedResponse(res, indexPage, 'markdown');
+            }
+
+            // Check if the request is for a local screenshot
+            if (noSlashURL.startsWith('instant-screenshots/')) {
+                return this.serveScreenshot(noSlashURL, res);
+            }
+
+            const crawlerOptions = req.method === 'POST' ?
+                new CrawlerOptions(req.body, req) :
+                new CrawlerOptions(req.query, req);
+            console.log('Crawler options:', crawlerOptions);
+
+            // Store request headers for formatSnapshot to use
+            this.threadLocal.set('accept', req.headers.accept || '');
+            this.threadLocal.set('x-return-format', req.headers['x-return-format'] || '');
+
+            const urlToCrawl = noSlashURL;
+            let parsedUrl: URL;
+
+            try {
+                parsedUrl = new URL(urlToCrawl);
+                if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+                    throw new Error('Invalid protocol');
+                }
+                if (!this.isValidTLD(parsedUrl.hostname)) {
+                    throw new Error('Invalid TLD');
+                }
+            } catch (error) {
+                console.log('Invalid URL:', urlToCrawl, error);
+                return sendResponse(res, 'Invalid URL or TLD', { contentType: 'text/plain', code: 400 });
+            }
+
+            this.puppeteerControl.circuitBreakerHosts.add(req.hostname.toLowerCase());
+            console.log('Added to circuit breaker hosts:', req.hostname.toLowerCase());
+
+            const crawlOpts = this.configure(crawlerOptions, req, parsedUrl);
+            console.log('Configured crawl options:', crawlOpts);
+
+            let lastScrapped: PageSnapshot | undefined;
+            const scrapIterator = this.scrap(parsedUrl, crawlOpts, crawlerOptions);
+
+            try {
+                for await (const scrapped of scrapIterator) {
+                    lastScrapped = scrapped;
+                    if (crawlerOptions.waitForSelector || ((!scrapped?.parsed?.content || !scrapped.title?.trim()) && !scrapped?.pdfs?.length)) {
+                        continue;
+                    }
+
+                    if (crawlerOptions.timeout === undefined) {
+                        const formatted = await this.formatSnapshot(crawlerOptions.respondWith, scrapped, parsedUrl);
+                        return this.sendFormattedResponse(res, formatted, crawlerOptions.respondWith, scrapped);
+                    }
+                }
+            } catch (scrapError: any) {
+                console.error('Error during scraping:', scrapError);
+                if (scrapError instanceof AssertionFailureError &&
+                    (scrapError.message.includes('Invalid TLD') || scrapError.message.includes('ERR_NAME_NOT_RESOLVED'))) {
+                    const errorSnapshot: PageSnapshot = {
+                        title: 'Error: Invalid domain or TLD',
+                        href: parsedUrl.toString(),
+                        html: '',
+                        text: `Failed to access the page due to an invalid domain or TLD: ${parsedUrl.toString()}`,
+                        error: 'Invalid domain or TLD'
+                    };
+                    const formatted = await this.formatSnapshot(crawlerOptions.respondWith, errorSnapshot, parsedUrl);
+                    return this.sendFormattedResponse(res, formatted, crawlerOptions.respondWith, errorSnapshot);
+                }
+                throw scrapError;
+            }
+
+            if (!lastScrapped) {
+                return sendResponse(res, 'No content available', { contentType: 'text/plain', code: 404 });
+            }
+
+            const formatted = await this.formatSnapshot(crawlerOptions.respondWith, lastScrapped, parsedUrl);
+            return this.sendFormattedResponse(res, formatted, crawlerOptions.respondWith, lastScrapped);
+
+        } catch (error) {
+            console.error('Error in crawl method:', error);
+            return sendResponse(res, 'Internal server error', { contentType: 'text/plain', code: 500 });
         }
     }
 }

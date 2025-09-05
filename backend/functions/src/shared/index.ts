@@ -1,8 +1,8 @@
-import { CloudHTTPv2 } from './decorators';
-import { Ctx } from './types';
-import { Logger } from './logger';
-import { OutputServerEventStream } from './output-stream';
-import { RPCReflect } from './rpc-reflect';
+import { CloudHTTPv2 } from './decorators.js';
+import { Ctx } from './types.js';
+import { Logger } from './logger.js';
+import { OutputServerEventStream } from './output-stream.js';
+import { RPCReflect } from './rpc-reflect.js';
 import { injectable } from 'tsyringe';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -66,7 +66,7 @@ export class FirebaseStorageBucketControl {
 
     async saveFile(filePath: string, content: Buffer, options?: any): Promise<void> {
         const fullPath = path.join(this.localStorageDir, filePath);
-        await fs.promises.writeFile(fullPath, content);
+        await fs.promises.writeFile(fullPath, new Uint8Array(content));
     }
 
     async signDownloadUrl(filePath: string, expirationTime: number): Promise<string> {

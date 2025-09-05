@@ -2,7 +2,7 @@ import { container, singleton } from 'tsyringe';
 import fsp from 'fs/promises';
 import { CityResponse, Reader } from 'maxmind';
 import { AsyncService, AutoCastable, Prop, runOnce } from 'civkit';
-import { Logger } from '../shared/index';
+import { Logger } from '../shared/index.js';
 import path from 'path';
 
 export enum GEOIP_SUPPORTED_LANGUAGES {

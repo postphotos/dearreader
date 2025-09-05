@@ -1,13 +1,18 @@
 import 'reflect-metadata';
 import express from 'express';
 import { container } from 'tsyringe';
-import { CrawlerHost } from './cloud-functions/crawler';
+import { CrawlerHost } from './cloud-functions/crawler.js';
 import path from 'path';
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 const crawlerHost = container.resolve(CrawlerHost);
+
+// Wait for Puppeteer service to initialize
+console.log('Initializing CrawlerHost');
+await crawlerHost.init();
+console.log('CrawlerHost initialized successfully');
 
 app.use(express.json());
 
