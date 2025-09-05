@@ -1,1 +1,33 @@
-requests
+# Python dependencies for the DearReader project
+# Use with: pip install -r requirements.txt or uv pip install -r requirements.txt
+
+# HTTP client for demo.py API testing
+requests>=2.31.0
+
+# Async HTTP client for speedtest.py concurrent testing
+aiohttp>=3.9.0
+
+# Task runner and automation - used by tasks.py (optional legacy file)
+invoke>=2.2.0
+
+# PDF processing library for PDF parsing feature
+PyPDF2>=3.0.0
+
+# Robots.txt parser for compliance checking
+robotsparser>=0.0.12
+
+# Type checking (installed via uv, but listed for completeness)
+# Note: pyright is typically installed via npm/node, but can be installed via uv
+# pyright
+
+# Development dependencies (optional)
+# pytest>=7.0.0  # For future Python testing
+# black>=23.0.0  # Code formatting
+# flake8>=6.0.0  # Linting
+
+# Note: All standard library imports are included with Python:
+# - os, shutil, signal, subprocess, sys, time, argparse
+# - typing, contextvars, json, urllib.parse
+#
+# The main app.py uses only standard library modules for maximum portability.
+# External tools (pyright) are managed via uv for better dependency isolation.

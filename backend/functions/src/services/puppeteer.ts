@@ -239,7 +239,7 @@ export class PuppeteerControl extends AsyncService {
 
     _sn = 0;
     browser!: Browser;
-    logger = new Logger('PuppeteerControl'); // Renamed for clarity
+    logger = new Logger(); // Renamed for clarity
 
     private __healthCheckInterval?: NodeJS.Timeout;
 

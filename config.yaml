@@ -1,0 +1,44 @@
+# DearReader Configuration
+# Place this file in the root directory of your project
+
+# Robots.txt compliance settings
+robots:
+  # Set to false to disable robots.txt compliance checking
+  respect_robots_txt: true
+
+# PDF parsing settings
+pdf:
+  # Enable PDF parsing (experimental feature)
+  enable_parsing: true
+  # Maximum PDF file size to process (in MB)
+  max_file_size_mb: 50
+  # Timeout for PDF processing (in seconds)
+  processing_timeout_seconds: 30
+  # Enable OCR for scanned PDFs (requires additional dependencies)
+  enable_ocr: false
+  # Extract metadata from PDFs
+  extract_metadata: true
+  # Maximum number of pages to process
+  max_pages: 100
+
+# Domain/TLD settings
+domain:
+  # Allow all TLDs (useful for development or local crawling)
+  # Set to true to allow .localhost, .dev, .local, etc.
+  allow_all_tlds: false
+
+# Storage settings
+storage:
+  # Local directory for screenshots and temporary files
+  # This aligns to the Docker volume mount path at /app/local-storage
+  # Default: local_directory: "./storage"
+  local_directory: "./storage"
+  # Maximum age for stored files in days
+  max_file_age_days: 7
+
+# Development settings
+development:
+  # Enable debug logging
+  debug: false
+  # Enable CORS for development
+  cors_enabled: true

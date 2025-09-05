@@ -16,10 +16,13 @@ import * as turndownPluginGfm from 'turndown-plugin-gfm';
 // import { Crawled } from '../db/crawled';
 import { cleanAttribute } from '../utils/misc.js';
 import { randomUUID } from 'crypto';
+import * as yaml from 'js-yaml';
 
 
 import { CrawlerOptions } from '../dto/scrapping-options.js';
 // import { PDFExtractor } from '../services/pdf-extract.js';
+import { PDFExtractor } from '../services/pdf-extract.js';
+import { RobotsChecker } from '../services/robots-checker.js';
 import { DomainBlockade } from '../db/domain-blockade.js';
 import { JSDomControl } from '../services/jsdom.js';
 
@@ -84,7 +87,7 @@ export interface FormattedPage {
 @singleton()
 export class CrawlerHost extends RPCHost {
     private static md5Hasher = new HashManager('md5', 'hex');
-    logger = new Logger('Crawler');
+    logger = new Logger();
 
     turnDownPlugins = [turndownPluginGfm.tables];
 
@@ -93,21 +96,28 @@ export class CrawlerHost extends RPCHost {
     urlValidMs = 1000 * 3600 * 4;
     abuseBlockMs = 1000 * 3600;
 
+    private config: any = {};
+
     constructor(
         public puppeteerControl: PuppeteerControl,
         protected jsdomControl: JSDomControl,
         // protected altTextService: AltTextService,
         // protected pdfExtractor: PDFExtractor,
+        protected pdfExtractor: PDFExtractor,
+        protected robotsChecker: RobotsChecker,
         protected firebaseObjectStorage: FirebaseStorageBucketControl,
         protected threadLocal: AsyncContext,
     ) {
         super(...arguments);
         console.log('CrawlerHost constructor called');
+        this.loadConfig();
         console.log('Initializing CrawlerHost with dependencies:', {
             puppeteerControl: !!puppeteerControl,
             jsdomControl: !!jsdomControl,
             firebaseObjectStorage: !!firebaseObjectStorage,
             threadLocal: !!threadLocal,
+            pdfExtractor: !!pdfExtractor,
+            robotsChecker: !!robotsChecker,
         });
 
         puppeteerControl.on('crawled', async (snapshot: PageSnapshot, options: ScrappingOptions & { url: URL; }) => {
@@ -155,6 +165,65 @@ export class CrawlerHost extends RPCHost {
         });
     }
 
+    private loadConfig() {
+        try {
+            const configPath = path.join(process.cwd(), 'config.yaml');
+            if (fs.existsSync(configPath)) {
+                const configContent = fs.readFileSync(configPath, 'utf8');
+                this.config = yaml.load(configContent) || {};
+                console.log('Loaded configuration from config.yaml:', this.config);
+            } else {
+                console.log('No config.yaml found, using defaults');
+                this.config = {};
+            }
+
+            // Override with environment variables if they exist
+            this.applyEnvironmentOverrides();
+
+        } catch (error) {
+            console.error('Error loading config.yaml:', error);
+            this.config = {};
+            this.applyEnvironmentOverrides();
+        }
+    }
+
+    private applyEnvironmentOverrides() {
+        // Environment variable overrides
+        if (process.env.RESPECT_ROBOTS_TXT) {
+            this.config.robots = this.config.robots || {};
+            this.config.robots.respect_robots_txt = process.env.RESPECT_ROBOTS_TXT === 'true';
+        }
+
+        if (process.env.ENABLE_PDF_PARSING) {
+            this.config.pdf = this.config.pdf || {};
+            this.config.pdf.enable_parsing = process.env.ENABLE_PDF_PARSING === 'true';
+        }
+
+        if (process.env.ALLOW_ALL_TLDS) {
+            this.config.domain = this.config.domain || {};
+            this.config.domain.allow_all_tlds = process.env.ALLOW_ALL_TLDS === 'true';
+        }
+
+        if (process.env.DEBUG_MODE) {
+            this.config.development = this.config.development || {};
+            this.config.development.debug = process.env.DEBUG_MODE === 'true';
+        }
+
+        // Set defaults if not configured
+        this.config.robots = this.config.robots || { respect_robots_txt: true };
+        this.config.pdf = this.config.pdf || {
+            enable_parsing: true,
+            max_file_size_mb: 50,
+            processing_timeout_seconds: 30,
+            enable_ocr: false,
+            extract_metadata: true,
+            max_pages: 100
+        };
+        this.config.domain = this.config.domain || { allow_all_tlds: false };
+        this.config.storage = this.config.storage || { local_directory: "./storage", max_file_age_days: 7 };
+        this.config.development = this.config.development || { debug: false, cors_enabled: true };
+    }
+
     override async init() {
         console.log('Initializing CrawlerHost');
         await this.dependencyReady();
@@ -164,12 +233,55 @@ export class CrawlerHost extends RPCHost {
         console.log('CrawlerHost initialization complete');
     }
 
-    getIndex(): FormattedPage {
+    markdownToHtml(markdown: string): string {
+        // Simple markdown to HTML converter for the index page
+        let html = markdown
+            // Headers
+            .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+            .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+            .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+            .replace(/^#### (.*$)/gim, '<h4>$1</h4>')
+            // Bold
+            .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+            // Italic
+            .replace(/\*(.*)\*/gim, '<em>$1</em>')
+            // Code inline
+            .replace(/`([^`]+)`/gim, '<code>$1</code>')
+            // Links
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2">$1</a>')
+            // Line breaks
+            .replace(/\n\n/gim, '</p><p>')
+            .replace(/\n/gim, '<br>');
+
+        // Handle code blocks
+        html = html.replace(/```bash\n([\s\S]*?)\n```/gim, '<pre><code class="language-bash">$1</code></pre>');
+        html = html.replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>');
+
+        // Wrap in paragraphs
+        html = '<p>' + html + '</p>';
+
+        // Clean up empty paragraphs
+        html = html.replace(/<p><\/p>/gim, '');
+        html = html.replace(/<p><h/gim, '<h');
+        html = html.replace(/<\/h([1-6])><\/p>/gim, '</h$1>');
+        html = html.replace(/<p><pre>/gim, '<pre>');
+        html = html.replace(/<\/pre><\/p>/gim, '</pre>');
+
+        return html;
+    }
+
+    getIndex(req?: Request): FormattedPage {
         console.log('Getting index');
+
+        // Build the base URL from the request
+        const protocol = req?.get('x-forwarded-proto') || req?.protocol || 'http';
+        const host = req?.get('host') || 'localhost:3000';
+        const baseUrl = `${protocol}://${host}`;
+
         const indexData = {
-            title: 'Jina Reader Index',
-            description: 'Welcome to Jina Reader!',
-            url: 'https://jina.ai/reader',
+            title: 'DearReader API - Local Web Content Extractor',
+            description: 'Convert any URL to LLM-friendly content',
+            url: baseUrl,
             content: '',
             publishedTime: undefined,
             html: undefined,
@@ -181,7 +293,58 @@ export class CrawlerHost extends RPCHost {
             links: undefined,
             images: undefined,
             toString: function () {
-                return `Title: Jina Reader Index\n\nURL Source: ${this.url}\n\nMarkdown Content:\n${this.title}\n\n===============\n\nLinks/Buttons:\n- [Usage1](https://r.jina.ai/YOUR_URL)\n- [Usage2](https://s.jina.ai/YOUR_SEARCH_QUERY)\n- [Homepage](https://jina.ai/reader)\n- [SourceCode](https://github.com/jina-ai/reader)\n- [Example Link 1](https://example.com/link1)\n- [Example Link 2](https://example.com/link2)`;
+                return `Title: DearReader API - Local Web Content Extractor
+
+URL Source: ${this.url}
+
+Markdown Content:
+DearReader API - Local Web Content Extractor
+===========================================
+
+Welcome to your local DearReader API! Convert any URL to LLM-friendly content.
+
+## 📚 Try These Examples
+
+### Basic Content Extraction
+- [${baseUrl}/https://example.com](${baseUrl}/https://example.com)
+- [${baseUrl}/https://news.ycombinator.com](${baseUrl}/https://news.ycombinator.com)
+- [${baseUrl}/https://github.com/jina-ai/reader](${baseUrl}/https://github.com/jina-ai/reader)
+
+### With Different Response Formats
+- [JSON Format: ${baseUrl}/https://example.com (Accept: application/json)](${baseUrl}/https://example.com)
+- [Markdown: ${baseUrl}/https://example.com (Accept: text/plain)](${baseUrl}/https://example.com)
+- [HTML: ${baseUrl}/https://example.com (X-Respond-With: html)](${baseUrl}/https://example.com)
+- [Text Only: ${baseUrl}/https://example.com (X-Respond-With: text)](${baseUrl}/https://example.com)
+
+### Screenshots
+- [Screenshot: ${baseUrl}/https://example.com (X-Respond-With: screenshot)](${baseUrl}/https://example.com)
+- [Full Page: ${baseUrl}/https://example.com (X-Respond-With: pageshot)](${baseUrl}/https://example.com)
+
+## 🔧 Usage
+
+Simply append any URL to: \`${baseUrl}/YOUR_URL\`
+
+Examples:
+\`\`\`bash
+# Get JSON response
+curl -H "Accept: application/json" "${baseUrl}/https://example.com"
+
+# Get markdown
+curl "${baseUrl}/https://example.com"
+
+# Get screenshot URL
+curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
+\`\`\`
+
+## 🌐 Response Formats
+- **Default**: Clean markdown content
+- **JSON**: Complete metadata with links, images, and content
+- **HTML**: Cleaned HTML content
+- **Text**: Plain text extraction
+- **Screenshot/Pageshot**: URL to saved image
+
+---
+📁 Source Code: [GitHub Repository](https://github.com/postphotos/reader)`;
             }
         };
         console.log('Index object created:', indexData);
@@ -415,10 +578,13 @@ export class CrawlerHost extends RPCHost {
         const imageIdxTrack = new Map<string, number[]>();
 
         // Process content
-        const isPdfMode = snapshot.pdfs && snapshot.pdfs.length > 0;
+        const isPdfMode = snapshot.pdfs && snapshot.pdfs.length > 0 && this.config.pdf?.enable_parsing;
         if (isPdfMode) {
-            console.log('PDF mode detected');
+            console.log('PDF mode detected and PDF processing is enabled');
             contentText = snapshot.parsed?.content || snapshot.text;
+        } else if (snapshot.pdfs && snapshot.pdfs.length > 0 && !this.config.pdf?.enable_parsing) {
+            console.log('PDF mode detected but PDF processing is disabled in config, skipping PDF content');
+            contentText = snapshot.text;
         } else if (
             (snapshot.maxElemDepth && snapshot.maxElemDepth > 256) ||
             (snapshot.elemCount && snapshot.elemCount > 70_000)
@@ -697,7 +863,7 @@ export class CrawlerHost extends RPCHost {
         } else {
             responseText = String(formatted);
         }
-        
+
         return sendResponse(res, responseText, { contentType: 'text/plain' });
     }
 
@@ -879,10 +1045,94 @@ export class CrawlerHost extends RPCHost {
             // Handle root path - return index
             if (!noSlashURL || noSlashURL === '/') {
                 console.log('Root path requested, returning index');
-                const indexPage = this.getIndex();
-                // Direct string response instead of using sendFormattedResponse
-                const indexContent = indexPage.toString();
-                return sendResponse(res, indexContent, { contentType: 'text/plain' });
+                const indexPage = this.getIndex(req);
+
+                // Convert markdown to HTML and wrap in a proper HTML page
+                const markdownContent = indexPage.toString();
+                const htmlContent = this.markdownToHtml(markdownContent);
+
+                const fullHtmlPage = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${indexPage.title}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+        }
+        pre {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        a {
+            color: #3498db;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        a:hover {
+            color: #2980b9;
+            text-decoration: underline;
+        }
+        .example-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .example-links a {
+            display: block;
+            padding: 12px;
+            background: #ecf0f1;
+            border-radius: 6px;
+            border-left: 4px solid #3498db;
+            transition: all 0.3s ease;
+        }
+        .example-links a:hover {
+            background: #d5dbdb;
+            transform: translateX(5px);
+        }
+        .emoji { font-size: 1.2em; }
+        hr { border: none; border-top: 1px solid #bdc3c7; margin: 30px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        ${htmlContent}
+    </div>
+</body>
+</html>`;
+
+                return sendResponse(res, fullHtmlPage, { contentType: 'text/html' });
             }
 
             // Check if the request is for a local screenshot
@@ -907,12 +1157,39 @@ export class CrawlerHost extends RPCHost {
                 if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
                     throw new Error('Invalid protocol');
                 }
-                if (!this.isValidTLD(parsedUrl.hostname)) {
+
+                // Check TLD validation (can be disabled for development)
+                const allowAllTlds = this.config.domain?.allow_all_tlds || false;
+                if (!allowAllTlds && !this.isValidTLD(parsedUrl.hostname)) {
                     throw new Error('Invalid TLD');
                 }
             } catch (error) {
                 console.log('Invalid URL:', urlToCrawl, error);
                 return sendResponse(res, 'Invalid URL or TLD', { contentType: 'text/plain', code: 400 });
+            }
+
+            // Check robots.txt compliance if enabled
+            const respectRobots = this.config.robots?.respect_robots_txt !== false; // default to true
+            if (respectRobots) {
+                console.log('Checking robots.txt compliance for:', parsedUrl.toString());
+                try {
+                    const isAllowed = await this.robotsChecker.isAllowed(parsedUrl, 'DearReader-Bot');
+                    if (!isAllowed) {
+                        console.log('URL blocked by robots.txt:', parsedUrl.toString());
+                        return sendResponse(res, 'Access denied by robots.txt', { contentType: 'text/plain', code: 403 });
+                    }
+
+                    // Check for crawl delay
+                    const crawlDelay = await this.robotsChecker.getCrawlDelay(parsedUrl, 'DearReader-Bot');
+                    if (crawlDelay && crawlDelay > 0) {
+                        console.log(`Applying crawl delay of ${crawlDelay}s for:`, parsedUrl.toString());
+                        // In production, you might want to implement a proper rate limiting mechanism
+                        // For now, just log it
+                    }
+                } catch (robotsError) {
+                    console.log('Error checking robots.txt, proceeding:', robotsError);
+                    // Continue if robots.txt check fails (be permissive)
+                }
             }
 
             this.puppeteerControl.circuitBreakerHosts.add(req.hostname.toLowerCase());

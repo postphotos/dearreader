@@ -12,11 +12,11 @@ virtualConsole.on('error', () => void 0);
 @singleton()
 export class JSDomControl extends AsyncService {
 
-    logger = new Logger('CHANGE_LOGGER_NAME')
+    logger = new Logger("jsdom")
 
     constructor(
     ) {
-        super(...arguments);
+        super();
     }
 
     override async init() {
