@@ -1,9 +1,11 @@
 # tasks.py
 # This file sets the invoke command
 
-from contextvars import Context
+import os
 import shutil
-from invoke import tasks, context, exceptions
+from invoke import exceptions
+from invoke.context import Context
+from invoke.tasks import task
 
 # --- Configuration ---
 DOCKER_IMAGE_NAME = "my-app"
@@ -25,7 +27,7 @@ def print_error(message):
 
 
 @task
-def check_deps(c: context):
+def check_deps(c: Context):
     """Check if required command-line tools are installed."""
     print_info("Checking for required dependencies...")
     deps = ["npm", "docker", "uv", "pyright"]
@@ -46,7 +48,7 @@ def clean(c: Context):
     print_info("--- Running cleanup ---")
     # Use warn=True so it doesn't fail if the container doesn't exist
     result = c.run(f"docker ps -a -q -f name={DOCKER_CONTAINER_NAME}", hide=True, warn=True)
-    container_id = result.stdout.strip()
+    container_id = result.stdout.strip() if result else ""
 
     if container_id:
         print_info(f"Stopping container {DOCKER_CONTAINER_NAME} ({container_id[:12]})")
@@ -72,7 +74,7 @@ def docker_build(c: Context):
     c.run(f"docker build -t {DOCKER_IMAGE_NAME} .", pty=True)
     print_success("Docker image built successfully.")
 
-@tasks(pre=[docker_build])
+@task(pre=[docker_build])
 def docker_run(c: Context):
     """Run the Docker container in detached mode."""
     print_info(f"--- Step 3: Running Docker container '{DOCKER_CONTAINER_NAME}' ---")
@@ -94,7 +96,7 @@ def pyright(c: Context):
 def python_run(c: Context):
     """Set up Python environment and run the demo script."""
     print_info("--- Step 5: Running Python application ---")
-    if not shutil.os.path.exists(VENV_NAME):
+    if not os.path.exists(VENV_NAME):
         c.run(f"uv venv {VENV_NAME}", pty=True)
 
     print_info("Installing Python dependencies with uv...")

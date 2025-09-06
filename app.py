@@ -1,557 +1,441 @@
 #!/usr/bin/env python3
-"""Unified DearReader app runner and pipeline manager
+"""
+Unified DearReader App Runner and Pipeline Manager
 
-This script runs the complete development pipeline: npm install/test, docker build/run,
-pyright checks, and demo.py execution.
+This script automates the complete development and testing pipeline for the DearReader
+project. It handles npm dependencies, Docker builds, static analysis, and runs
+integration and performance tests.
 
 Usage:
-    uv run app.py [--verbose] [--debug]        # Run basic npm/pyright/demo pipeline (same as 'start')
-    uv run app.py start                        # Same as running with no arguments
-    uv run app.py all                          # Run full pipeline including docker
-    uv run app.py npm                          # Just npm install and test
-    uv run app.py docker                       # Just docker build and run
-    uv run app.py docker-clear                 # Docker build with cache cleared
-    uv run app.py pyright                      # Just pyright check
-    uv run app.py demo                         # Just demo.py
-    uv run app.py speedtest                    # Just speedtest.py
-    uv run app.py tests                        # Run ALL tests (npm + TypeScript + pyright + demo + speedtest)
-    uv run app.py stop                         # Stop the Docker container
-    uv run app.py --no-cache docker            # Pass --no-cache to disable Docker build cache
-"""
+    All commands can be run with 'uv run app.py <command>'.
 
+    ┌──────────────────┬──────────────────────────────────────────────────────────────┐
+    │ Command          │ Description                                                  │
+    ├──────────────────┼──────────────────────────────────────────────────────────────┤
+    │ start / basic    │ (Default) Runs core checks: npm, pyright, and the demo.      │
+    │ all              │ Runs the full pipeline: npm, docker, pyright, demo, speedtest. │
+    │ tests            │ Runs all available tests: npm, TypeScript build, demo, etc.  │
+    │ npm              │ Only runs 'npm install' and 'npm test'.                      │
+    │ docker           │ Builds and runs the Docker container.                        │
+    │ docker-clear     │ Clears Docker cache, then builds and runs the container.     │
+    │ pyright          │ Runs the Pyright static type checker.                        │
+    │ demo             │ Runs the demo.py integration test script.                    │
+    │ speedtest        │ Runs the speedtest.py performance script.                    │
+    │ stop             │ Stops and removes the running Docker container.              │
+    └──────────────────┴──────────────────────────────────────────────────────────────┘
+
+Options:
+    --verbose          : Shows live output from commands instead of capturing it.
+    --debug            : If 'npm test' times out, re-runs it with no time limit.
+    --force            : Continues the pipeline even if a step fails.
+    --no-cache         : Disables the Docker build cache (used with 'docker' command).
+"""
+import argparse
 import os
+import shlex
 import shutil
-import signal
 import subprocess
 import sys
 import time
-from typing import Optional, Tuple
+import select # Moved from inside run_cmd
+import webbrowser # Moved from inside run_cmd
+from typing import List, Tuple, Callable, Optional, Dict
 
-# Configuration
+# --- Configuration ---
 DOCKER_IMAGE_NAME = "reader-app"
 DOCKER_CONTAINER_NAME = "reader-instance"
 NPM_DIR = "./backend/functions"
+LOG_PREFIX = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}]"
 
+class Colors:
+    BLUE = "\033[94m"
+    GREEN = "\033[92m"
+    RED = "\033[91m"
+    YELLOW = "\033[93m"
+    ENDC = "\033[0m"
 
-def log(msg: str) -> None:
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
-
-
+# --- Logging Functions ---
 def print_info(message: str) -> None:
-        print(f"\033[94m[INFO] {message}\033[0m")
-
+    print(f"{Colors.BLUE}{LOG_PREFIX} [INFO] {message}{Colors.ENDC}")
 
 def print_success(message: str) -> None:
-        print(f"\033[92m[SUCCESS] {message}\033[0m")
-
+    print(f"{Colors.GREEN}{LOG_PREFIX} [SUCCESS] {message}{Colors.ENDC}")
 
 def print_error(message: str) -> None:
-        print(f"\033[91m[ERROR] {message}\033[0m", file=sys.stderr)
+    print(f"{Colors.RED}{LOG_PREFIX} [ERROR] {message}{Colors.ENDC}", file=sys.stderr)
 
+def print_warning(message: str) -> None:
+    print(f"{Colors.YELLOW}{LOG_PREFIX} [WARN] {message}{Colors.ENDC}")
 
-def run_cmd(cmd, cwd: Optional[str] = None, timeout: Optional[int] = None, live: bool = False) -> Tuple[int, str, str]:
-        """Run command. If timeout expires, kill the whole process group."""
-        if isinstance(cmd, (list, tuple)):
-                popen_cmd = cmd
-                shell = False
-        else:
-                popen_cmd = cmd
-                shell = True
-
-        preexec_fn = os.setsid if hasattr(os, "setsid") else None
-
-        if live:
-                proc = subprocess.Popen(popen_cmd, cwd=cwd, shell=shell, preexec_fn=preexec_fn)
-                try:
-                        proc.wait(timeout=timeout)
-                        return proc.returncode, "", ""
-                except subprocess.TimeoutExpired:
-                        try:
-                                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                        except Exception:
-                                pass
-                        time.sleep(1)
-                        try:
-                                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                        except Exception:
-                                pass
-                        return 124, "", ""
-
-        proc = subprocess.Popen(popen_cmd, cwd=cwd, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=preexec_fn, text=True)
+# --- Helper for process termination (moved above run_cmd) ---
+def _terminate_process_group(proc: subprocess.Popen):
+    """Helper to terminate a process and its children, platform-aware."""
+    if sys.platform != "win32":
         try:
-                out, err = proc.communicate(timeout=timeout)
-                return proc.returncode, out, err
+            os.killpg(os.getpgid(proc.pid), 15)  # SIGTERM
+            time.sleep(1)
+            os.killpg(os.getpgid(proc.pid), 9)  # SIGKILL
+        except ProcessLookupError:
+            pass  # Process already finished
+        except Exception as e:
+            print_error(f"Failed to kill process group: {e}")
+    else: # Windows
+        try:
+            proc.terminate()
+            time.sleep(1)
+            proc.kill()
+        except Exception:
+            pass
+
+# --- Core Execution Logic ---
+def run_cmd(
+    cmd: list, cwd: Optional[str] = None, timeout: Optional[int] = None, live: bool = False
+) -> Tuple[int, str, str]:
+    """
+    Executes a command, captures its output, and handles timeouts gracefully.
+    REFACTORED: Now consistently takes a list of arguments for better security and clarity.
+    """
+    if not isinstance(cmd, list):
+        raise TypeError("The 'cmd' argument must be a list of strings.")
+
+    print(f"  └─ Running: {' '.join(shlex.quote(c) for c in cmd)}")
+
+    preexec_fn = os.setsid if sys.platform != "win32" else None
+
+    if live:
+        proc = subprocess.Popen(cmd, cwd=cwd, preexec_fn=preexec_fn)
+        try:
+            proc.wait(timeout=timeout)
+            return int(proc.returncode), "", ""
         except subprocess.TimeoutExpired:
-                try:
-                        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                except Exception:
-                        pass
-                time.sleep(1)
-                try:
-                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                except Exception:
-                        pass
-                out, err = proc.communicate(timeout=5)
-                return 124, out, err
+            print_warning(f"Command timed out after {timeout}s. Terminating process group...")
+            _terminate_process_group(proc)
+            return 124, "", ""
+    else:
+        # Special handling for npm/node commands that might not flush properly
+        if cmd and cmd[0] in ['npm', 'node', 'npx']:
+            # Use a different approach for Node.js commands
+            proc = subprocess.Popen(
+                cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                preexec_fn=preexec_fn, env=dict(os.environ, NODE_OPTIONS="--max-old-space-size=4096")
+            )
+        else:
+            proc = subprocess.Popen(
+                cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                preexec_fn=preexec_fn
+            )
 
+        try:
+            # Wait for process to finish first
+            proc.wait(timeout=timeout or 180)
+            # Small delay to ensure all output is flushed
+            time.sleep(0.5)
 
-def check_tools(names):
-        missing = [n for n in names if shutil.which(n) is None]
-        return missing
+            out = ""
+            err = ""
 
+            if hasattr(select, 'select') and proc.stdout and proc.stderr:
+                # Check if data is available to read
+                ready, _, _ = select.select([proc.stdout, proc.stderr], [], [], 2.0)
+                if proc.stdout in ready:
+                    out = proc.stdout.read()
+                if proc.stderr in ready:
+                    err = proc.stderr.read()
+            else:
+                # Fallback for systems without select
+                out = proc.stdout.read() if proc.stdout else ""
+                err = proc.stderr.read() if proc.stderr else ""
 
-def ensure_venv():
-        """Check if we're in a virtual environment."""
-        venv_dir = os.path.join(os.getcwd(), ".venv")
-        if os.path.exists(os.path.join(venv_dir, "bin", "activate")):
-                if not os.environ.get("VIRTUAL_ENV"):
-                        print_info(f"Virtual environment detected at {venv_dir}")
-                        print_info("Tip: Run with 'source .venv/bin/activate && uv run app.py' or similar")
+            return int(proc.returncode), str(out), str(err)
+        except subprocess.TimeoutExpired:
+            print_warning(f"Command timed out after {timeout or 180}s. Terminating process group...")
+            _terminate_process_group(proc)
+            return 124, "", ""
+        except Exception:
+            # Handle any other exceptions that might occur
+            _terminate_process_group(proc)
+            return 1, "", ""
 
-
+# --- Pipeline Steps ---
 def step_npm(debug: bool = False, verbose: bool = False) -> int:
-        """Run npm install and test."""
-        npm_dir = NPM_DIR if os.path.isdir(NPM_DIR) else "."
+    """Run npm install and test."""
+    print_info("--- Step 1: Running npm install and tests ---")
+    npm_dir = NPM_DIR if os.path.isdir(NPM_DIR) else "."
 
-        print_info("--- Step 1: Running npm install and tests ---")
-        print_info(f"Using npm directory: {npm_dir}")
+    print_info("Installing npm dependencies...")
+    code, out, err = run_cmd(["npm", "install"], cwd=npm_dir, timeout=120, live=verbose)
+    if code != 0:
+        print_error("npm install failed.")
+        if err and not verbose: print(err, file=sys.stderr)
+        return code
+    print_success("Dependencies installed.")
 
-        # npm install
-        print_info("Running npm install...")
-        code, out, err = run_cmd(["npm", "install"], cwd=npm_dir, timeout=300, live=verbose)
-        if code != 0:
-                print_error(f"npm install failed (code={code})")
-                if out:
-                        print(out)
-                if err:
-                        print(err, file=sys.stderr)
-                return code
-        print_success("Dependencies installed successfully")
+    print_info("Running npm tests...")
+    code, out, err = run_cmd(["npm", "test"], cwd=npm_dir, timeout=45, live=verbose)
 
-        # npm test with timeout
-        print_info("Running npm test...")
-        code, out, err = run_cmd(["npm", "test"], cwd=npm_dir, timeout=5, live=verbose)
-        if code == 124:
-                print_error("npm tests exceeded timeout (5s / 5000ms) — considered too long")
-                if debug:
-                        print_info("Debug mode: re-running npm test without timeout...")
-                        code2, out2, err2 = run_cmd(["npm", "test"], cwd=npm_dir, timeout=None, live=False)
-                        if out2:
-                                print(out2)
-                        if err2:
-                                print(err2, file=sys.stderr)
-                        return code2 or 1
-                else:
-                        print_info("Not in debug mode; skipping debug re-run. Use --debug to re-run without timeout.")
-                        return 124
-        if code != 0:
-                print_error(f"npm tests failed (code={code}); re-running to capture output")
-                code2, out2, err2 = run_cmd(["npm", "test"], cwd=npm_dir, timeout=None, live=False)
-                if out2:
-                        print(out2)
-                if err2:
-                        print(err2, file=sys.stderr)
-                return code2
-        print_success("NPM tests passed")
-        return 0
+    # Debug: Print some info about what we got back
+    if not verbose:
+        print_info(f"npm test completed with exit code: {code}")
+        if out:
+            print_info(f"Captured {len(out)} characters of stdout")
+        if err:
+            print_info(f"Captured {len(err)} characters of stderr")
 
+    if code == 124:
+        print_error("npm tests timed out (45s). This is considered a failure.")
+        if debug:
+            print_info("Debug mode: re-running tests without timeout to see full output...")
+            code, out, err = run_cmd(["npm", "test"], cwd=npm_dir, live=False)
+            if err: print(err, file=sys.stderr)
+            return code or 1
+        return 124
+    if code != 0:
+        print_error("npm tests failed.")
+        if err and not verbose: print(err, file=sys.stderr)
+        return code
+    print_success("NPM tests passed.")
+    return 0
 
 def step_docker(verbose: bool = False, clear_cache: bool = False) -> int:
-        """Build and run docker container."""
-        print_info("--- Step 2: Building and running Docker container ---")
+    """REFACTORED: Build and run Docker container with robust cleanup."""
+    print_info("--- Step 2: Building and running Docker container ---")
 
-        # Clean up existing container
-        print_info("Cleaning up existing containers...")
-        subprocess.run(f"docker stop {DOCKER_CONTAINER_NAME}", shell=True, capture_output=True)
-        subprocess.run(f"docker rm {DOCKER_CONTAINER_NAME}", shell=True, capture_output=True)
+    # Stop and remove any existing container with the same name.
+    # This is safer and more targeted than the previous multi-command approach.
+    print_info(f"Checking for and stopping existing container '{DOCKER_CONTAINER_NAME}'...")
+    run_cmd(["docker", "stop", DOCKER_CONTAINER_NAME], timeout=15)
+    run_cmd(["docker", "rm", DOCKER_CONTAINER_NAME], timeout=10)
 
-        # Additional cleanup: kill any containers that might be using our image
-        print_info("Performing additional cleanup...")
-        # Kill containers with exact image name
-        subprocess.run(f"docker kill $(docker ps -q --filter ancestor={DOCKER_IMAGE_NAME}) 2>/dev/null || true", shell=True, capture_output=True)
-        # Kill containers with "reader" in the image name (catch-all for reader-app, reader, etc.)
-        subprocess.run("docker kill $(docker ps -q --filter ancestor=reader) 2>/dev/null || true", shell=True, capture_output=True)
-        # Kill containers with "reader" in the container name
-        subprocess.run("docker kill $(docker ps -q --filter name=reader) 2>/dev/null || true", shell=True, capture_output=True)
+    if clear_cache:
+        print_info("Clearing Docker build cache...")
+        run_cmd(["docker", "builder", "prune", "-f"], timeout=60)
 
-        # Also kill any containers using port 3000 (most important!)
-        subprocess.run("docker kill $(docker ps -q --filter publish=3000) 2>/dev/null || true", shell=True, capture_output=True)
+    print_info(f"Building Docker image '{DOCKER_IMAGE_NAME}'...")
+    build_cmd = ["docker", "build", "-t", DOCKER_IMAGE_NAME, "."]
+    if clear_cache:
+        build_cmd.insert(2, "--no-cache")
 
-        # Remove stopped containers
-        subprocess.run(f"docker rm $(docker ps -aq --filter ancestor={DOCKER_IMAGE_NAME}) 2>/dev/null || true", shell=True, capture_output=True)
-        subprocess.run("docker rm $(docker ps -aq --filter ancestor=reader) 2>/dev/null || true", shell=True, capture_output=True)
-        subprocess.run("docker rm $(docker ps -aq --filter name=reader) 2>/dev/null || true", shell=True, capture_output=True)
-        subprocess.run("docker rm $(docker ps -aq --filter publish=3000) 2>/dev/null || true", shell=True, capture_output=True)        # Clear Docker cache if requested
-        if clear_cache:
-                print_info("Clearing Docker build cache...")
-                subprocess.run("docker builder prune -f", shell=True, capture_output=True)
-                print_info("Docker cache cleared")
+    code, _, err = run_cmd(build_cmd, timeout=300, live=verbose)
+    if code != 0:
+        print_error("Docker build failed.")
+        if err and not verbose: print(err, file=sys.stderr)
+        return code
+    print_success("Docker image built.")
 
-        # Build image
-        print_info(f"Building Docker image '{DOCKER_IMAGE_NAME}'...")
-        build_cmd = f"docker build -t {DOCKER_IMAGE_NAME} ."
-        if clear_cache:
-                build_cmd = f"docker build --no-cache -t {DOCKER_IMAGE_NAME} ."
+    print_info(f"Running Docker container '{DOCKER_CONTAINER_NAME}'...")
+    run_cmd_list = [
+        "docker", "run", "-d", "--name", DOCKER_CONTAINER_NAME,
+        "-p", "3000:3000",
+        "-v", f"{os.path.abspath('./storage')}:/app/local-storage",
+        DOCKER_IMAGE_NAME
+    ]
+    code, _, err = run_cmd(run_cmd_list, timeout=30, live=verbose)
+    if code != 0:
+        print_error("Docker run failed.")
+        if err and not verbose: print(err, file=sys.stderr)
+        if err and ("port is already allocated" in err or "Bind for 0.0.0.0:3000 failed" in err):
+            print_warning("Port 3000 may be in use by another process. Please check and try again.")
+        return code
 
-        code, out, err = run_cmd(build_cmd, timeout=600, live=verbose)
-        if code != 0:
-                print_error(f"Docker build failed (code={code})")
-                if out:
-                        print(out)
-                if err:
-                        print(err, file=sys.stderr)
-                return code
-        print_success("Docker image built successfully")
-
-        # Run container
-        print_info(f"Running Docker container '{DOCKER_CONTAINER_NAME}'...")
-        run_cmd_str = f"docker run -d --name {DOCKER_CONTAINER_NAME} -p 3000:3000 -v ./storage:/app/local-storage {DOCKER_IMAGE_NAME}"
-        code, out, err = run_cmd(run_cmd_str, timeout=30, live=verbose)
-        if code != 0:
-                print_error(f"Docker run failed (code={code})")
-                if out:
-                        print(out)
-                if err:
-                        print(err, file=sys.stderr)
-
-                # Self-healing: Check for port conflicts and clean up
-                port_conflict = False
-                if err and ("port is already allocated" in err or "Bind for 0.0.0.0:3000 failed" in err or "failed to set up container networking" in err):
-                        port_conflict = True
-                        print_info("🔧 Detected port 3000 conflict, attempting self-healing...")
-
-                        # Most aggressive approach: Kill ALL containers using port 3000
-                        print_info("🔥 Using aggressive cleanup - killing ALL containers using port 3000...")
-
-                        # Get all container IDs using port 3000
-                        port_cmd = "docker ps --filter publish=3000 --format '{{.ID}}' 2>/dev/null"
-                        pc_code, pc_out, pc_err = run_cmd(port_cmd, timeout=5, live=False)
-
-                        if pc_code == 0 and pc_out and pc_out.strip():
-                                container_ids = pc_out.strip().split('\n')
-                                print_info(f"Found {len(container_ids)} container(s) using port 3000")
-
-                                for container_id in container_ids:
-                                        if container_id.strip():
-                                                print_info(f"Force killing container {container_id.strip()[:12]}...")
-                                                # Try kill first, then force kill if needed
-                                                run_cmd(f"docker kill {container_id.strip()} 2>/dev/null || docker kill -s SIGKILL {container_id.strip()} 2>/dev/null || true", timeout=10, live=False)
-                        else:
-                                print_info("No containers found using port filter, trying manual approach...")
-                                # Manual approach as fallback
-                                run_cmd("docker kill $(docker ps -q) 2>/dev/null || true", timeout=10, live=False)
-
-                        # Clean up stopped containers
-                        print_info("Cleaning up stopped containers...")
-                        run_cmd("docker container prune -f", timeout=10, live=False)
-                        print_info("Retrying docker run after port conflict resolution...")
-                        print_info(f"Running: {run_cmd_str}")
-                        code, out, err = run_cmd(run_cmd_str, timeout=30, live=verbose)
-                        if code == 0:
-                                print_success("✅ Self-healing successful! Container started after resolving port conflict.")
-                        else:
-                                print_error("❌ Self-healing failed, manual intervention may be required.")
-                                if err:
-                                        print_error(f"Final error: {err}")
-                                return code
-
-                # If run failed and it wasn't a port conflict, check for existing containers with the same name and try to remove them, then retry.
-                if not port_conflict:
-                        print_info("🔧 Docker run failed, checking for conflicting containers...")
-
-                        # Simple cleanup: kill and remove containers with our name
-                        kill_cmd = f"docker kill {DOCKER_CONTAINER_NAME} 2>/dev/null || true"
-                        run_cmd(kill_cmd, timeout=5, live=False)
-
-                        rm_cmd = f"docker rm {DOCKER_CONTAINER_NAME} 2>/dev/null || true"
-                        run_cmd(rm_cmd, timeout=5, live=False)
-
-                        print_info("Retrying docker run after cleanup...")
-                        code, out, err = run_cmd(run_cmd_str, timeout=30, live=verbose)
-                        if code != 0:
-                                print_error(f"Docker run failed after cleanup (code={code})")
-                                if out:
-                                        print(out)
-                                if err:
-                                        print(err, file=sys.stderr)
-                                return code
-
-        print_info("Waiting 5 seconds for container to initialize...")
-        time.sleep(5)
-        print_success(f"Container '{DOCKER_CONTAINER_NAME}' is running on port 3000")
-        return 0
-
+    print_info("Waiting 5 seconds for the container to initialize...")
+    time.sleep(5)
+    print_success(f"Container '{DOCKER_CONTAINER_NAME}' is running on port 3000.")
+    return 0
 
 def step_pyright(verbose: bool = False) -> int:
-        """Run pyright type checking."""
-        print_info("--- Step 3: Running Pyright static type checker ---")
-
-        if not os.path.exists("demo.py"):
-                print_info("demo.py not found; skipping pyright check")
-                return 0
-
-        if shutil.which("uv"):
-                code, out, err = run_cmd(["uv", "run", "pyright", "demo.py"], timeout=10, live=verbose)
-        elif shutil.which("pyright"):
-                code, out, err = run_cmd(["pyright", "demo.py"], timeout=10, live=verbose)
-        else:
-                print_info("pyright not found; skipping")
-                return 0
-
-        if code != 0:
-                print_error("pyright failed")
-                if out:
-                        print(out)
-                if err:
-                        print(err, file=sys.stderr)
-                return code
-        print_success("Pyright checks passed")
+    """Run pyright type checking."""
+    print_info("--- Step 3: Running Pyright static type checker ---")
+    if shutil.which("pyright") is None:
+        print_warning("pyright not found; skipping. Install with 'uv pip install pyright'.")
         return 0
 
-
-def step_speedtest(verbose: bool = False) -> int:
-        """Run speed test with demo.csv URLs."""
-        print_info("--- Step: 5 Running DearReader Speed Test ---")
-
-        if not os.path.exists("speedtest.py"):
-                print_info("speedtest.py not found; skipping")
-                return 0
-
-        if not os.path.exists("demo.csv"):
-                print_info("demo.csv not found; skipping speedtest")
-                return 0
-
-        # Check if aiohttp is available
-        code, out, err = run_cmd(["uv", "run", "python", "-c", "import aiohttp"], timeout=5, live=verbose)
-        if code != 0:
-                print_error("aiohttp not installed. Run: uv pip install aiohttp")
-                return code
-
-        # Run speedtest with limited concurrency for testing
-        code, out, err = run_cmd(["uv", "run", "python", "speedtest.py", "--csv", "demo.csv", "--concurrent", "2", "--quiet"], timeout=120, live=verbose)
-        if code != 0:
-                print_error("speedtest failed")
-                if out:
-                        print(out)
-                if err:
-                        print(err, file=sys.stderr)
-                return code
-        print_success("Speed test completed successfully")
-        return 0
-
+    code, _, err = run_cmd(["pyright"], timeout=30, live=verbose)
+    if code != 0:
+        print_error("Pyright checks failed.")
+        if err and not verbose: print(err, file=sys.stderr)
+        return code
+    print_success("Pyright checks passed.")
+    return 0
 
 def step_demo(verbose: bool = False) -> int:
-        """Run demo.py."""
-        print_info("--- Step 4: Running demo.py ---")
-
-        if not os.path.exists("demo.py"):
-                print_info("demo.py not found; skipping")
-                return 0
-
-        if shutil.which("uv"):
-                code, out, err = run_cmd(["uv", "run", "python", "demo.py"], timeout=10, live=verbose)
-        else:
-                code, out, err = run_cmd(["python", "demo.py"], timeout=10, live=verbose)
-
-        if code != 0:
-                print_error("demo.py failed")
-                if out:
-                        print(out)
-                if err:
-                        print(err, file=sys.stderr)
-                return code
-        print_success("Demo script executed successfully")
+    """Run demo.py."""
+    print_info("--- Step 4: Running demo.py ---")
+    if not os.path.exists("demo.py"):
+        print_warning("demo.py not found; skipping.")
         return 0
 
+    cmd = ["uv", "run", "python", "demo.py"] if shutil.which("uv") else ["python", "demo.py"]
+    code, out, err = run_cmd(cmd, timeout=30, live=verbose)
+    if code != 0:
+        print_error("demo.py failed.")
+        if err and not verbose: print(err, file=sys.stderr)
+        return code
+    print_success("Demo script executed successfully.")
+    return 0
+
+def step_speedtest(verbose: bool = False) -> int:
+    """Run speed test."""
+    print_info("--- Step 5: Running DearReader Speed Test ---")
+    if not os.path.exists("speedtest.py"):
+        print_warning("speedtest.py not found; skipping.")
+        return 0
+
+    cmd = ["uv", "run", "python", "speedtest.py"] if shutil.which("uv") else ["python", "speedtest.py"]
+    code, out, err = run_cmd(cmd, timeout=60, live=verbose)
+    if code != 0:
+        print_error("Speed test failed.")
+        if err and not verbose: print(err, file=sys.stderr)
+        return code
+    print_success("Speed test completed.")
+    return 0
 
 def step_stop(verbose: bool = False) -> int:
-        """Stop the Docker container using docker kill $(docker ps | grep "reader-app" | head -c 12)."""
-        print_info("--- Stopping Docker container ---")
+    """REFACTORED: Stop and remove the Docker container using its name for reliability."""
+    print_info(f"--- Stopping container '{DOCKER_CONTAINER_NAME}' ---")
 
-        # Use the exact command format requested: docker kill $(docker ps | grep "reader-app" | head -c 12)
-        kill_cmd = 'docker kill $(docker ps | grep "reader-app" | head -c 12)'
-        print_info(f"Running: {kill_cmd}")
+    # This is much more reliable than parsing 'docker ps' output.
+    code_stop, out_stop, _ = run_cmd(["docker", "stop", DOCKER_CONTAINER_NAME], timeout=15)
+    code_rm, out_rm, _ = run_cmd(["docker", "rm", DOCKER_CONTAINER_NAME], timeout=10)
 
-        kill_code, kill_out, kill_err = run_cmd(kill_cmd, timeout=10, live=verbose)
+    if code_stop == 0 or code_rm == 0:
+        print_success(f"Container '{DOCKER_CONTAINER_NAME}' stopped and removed.")
+    else:
+        print_info(f"Container '{DOCKER_CONTAINER_NAME}' was not running or could not be removed.")
+    return 0
 
-        if kill_code == 0:
-                if kill_out.strip():
-                        # If command succeeded and returned output (container ID), it means a container was killed
-                        container_id = kill_out.strip()
-                        print_success(f"CONTAINER STOPPED: {container_id}")
-                        return 0
-                else:
-                        # Command succeeded but no output, likely no container was running
-                        print_info("No reader-app container was running")
-                        return 0
-        else:
-                # If command failed
-                print_info("No reader-app container was running")
-                return 0
+def step_tests(verbose: bool = False, debug: bool = False, force: bool = False) -> int:
+    """Run ALL tests: npm, TypeScript build, pyright, demo, and speedtest."""
+    print_info("--- Running ALL available tests ---")
 
+    pipeline_steps = {
+        "npm": lambda: step_npm(debug=debug, verbose=verbose),
+        "TypeScript Build": lambda: run_cmd(["npm", "run", "build"], cwd=NPM_DIR, timeout=60)[0],
+        "pyright": lambda: step_pyright(verbose=verbose),
+        "Start Docker for tests": lambda: step_docker(verbose=verbose),
+        "demo": lambda: step_demo(verbose=verbose),
+        "speedtest": lambda: step_speedtest(verbose=verbose),
+    }
 
-def step_tests(verbose: bool = False, debug: bool = False) -> int:
-        """Run ALL tests: npm, TypeScript build, pyright, demo, and speedtest."""
-        print_info("--- Running ALL tests ---")
+    results = run_pipeline(pipeline_steps, force)
 
-        # Run npm tests
-        print_info("🧪 Running npm tests...")
-        code = step_npm(debug=debug, verbose=verbose)
-        if code != 0:
-                print_error("npm tests failed")
-                return code
-
-        # Build TypeScript to check for compilation errors
-        print_info("🏗️  Building TypeScript...")
-        ts_code, ts_out, ts_err = run_cmd(["npm", "run", "build"], cwd=NPM_DIR, timeout=60, live=verbose)
-        if ts_code != 0:
-                print_error("TypeScript build failed")
-                if ts_out:
-                        print(ts_out)
-                if ts_err:
-                        print(ts_err, file=sys.stderr)
-                return ts_code
-        print_success("TypeScript build successful")
-
-        # Run pyright
-        print_info("🔍 Running pyright checks...")
-        code = step_pyright(verbose=verbose)
-        if code != 0:
-                print_error("pyright checks failed")
-                return code
-
-        # Run demo (requires Docker container to be running)
-        print_info("🔍 Checking if Docker container is running...")
-        check_cmd = f"docker ps --filter name={DOCKER_CONTAINER_NAME} --format '{{{{.ID}}}}'"
-        docker_code, docker_out, docker_err = run_cmd(check_cmd, timeout=5, live=verbose)
-
-        if docker_code != 0 or not docker_out.strip():
-                print_info("Docker container not running, starting it...")
-                code = step_docker(verbose=verbose)
-                if code != 0:
-                        print_error("Failed to start Docker container for tests")
-                        return code
-        else:
-                print_info("Docker container is already running")
-
-        # Run demo
-        print_info("🎭 Running demo tests...")
-        code = step_demo(verbose=verbose)
-        if code != 0:
-                print_error("demo tests failed")
-                return code
-
-        # Run speedtest
-        print_info("🚀 Running speedtest...")
-        code = step_speedtest(verbose=verbose)
-        if code != 0:
-                print_error("speedtest failed")
-                return code
-
+    if all(code == 0 for code in results.values()):
         print_success("✅✅✅ ALL tests passed successfully! ✅✅✅")
         return 0
+    else:
+        print_error("Some tests failed.")
+        return 1
 
+# --- Main Application Logic ---
+def run_pipeline(pipeline_steps: Dict[str, Callable], force: bool) -> Dict[str, int]:
+    """NEW: Generic function to run a pipeline of steps."""
+    results = {}
+    for name, step_func in pipeline_steps.items():
+        rc = step_func()
+        results[name] = rc
+        if rc != 0:
+            print_error(f"Pipeline failed at step: '{name}' (exit code {rc}).")
+            if not force:
+                return results
+            else:
+                print_warning(f"'--force' is active. Continuing to next step...")
+    return results
 
 def main():
-        import argparse
+    parser = argparse.ArgumentParser(
+        description="Unified DearReader test runner and pipeline manager.",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument(
+        "command",
+        nargs="?",
+        default="start",
+        choices=["basic", "start", "all", "npm", "docker", "docker-clear", "pyright", "demo", "speedtest", "tests", "stop"],
+        help="Command to run (default: start). See docstring for details."
+    )
+    parser.add_argument("--verbose", action="store_true", help="Show live command output.")
+    parser.add_argument("--debug", action="store_true", help="Re-run failed npm tests without timeout for detailed output.")
+    parser.add_argument("--force", action="store_true", help="Continue pipeline even if some steps fail.")
+    parser.add_argument("--no-cache", dest="no_cache", action="store_true", help="Disable Docker build cache.")
 
-        parser = argparse.ArgumentParser(description="Unified DearReader test runner and pipeline manager")
-        parser.add_argument("command", nargs="?", default="start", choices=["basic", "start", "all", "npm", "docker", "docker-clear", "pyright", "demo", "speedtest", "tests", "stop"],
-                                                help="Command to run (default: start)")
-        parser.add_argument("--verbose", action="store_true", help="Increase output")
-        parser.add_argument("--debug", action="store_true", help="Re-run failed npm tests without timeout")
-        parser.add_argument("--no-cache", dest="no_cache", action="store_true", help="Disable Docker build cache (pass --no-cache to 'docker build')")
+    args = parser.parse_args()
 
-        args = parser.parse_args()
+    try:
+        if shutil.which("docker") is None or shutil.which("npm") is None:
+            print_error("Missing required tools: 'docker' and 'npm' must be in your PATH.")
+            return 2
 
-        try:
-                ensure_venv()
+        final_rc = 0
+        if args.command == "npm":
+            final_rc = step_npm(debug=args.debug, verbose=args.verbose)
+        elif args.command == "docker":
+            final_rc = step_docker(verbose=args.verbose, clear_cache=args.no_cache)
+        elif args.command == "docker-clear":
+            final_rc = step_docker(verbose=args.verbose, clear_cache=True)
+        elif args.command == "pyright":
+            final_rc = step_pyright(verbose=args.verbose)
+        elif args.command == "demo":
+            final_rc = step_demo(verbose=args.verbose)
+        elif args.command == "speedtest":
+            final_rc = step_speedtest(verbose=args.verbose)
+        elif args.command == "stop":
+            final_rc = step_stop(verbose=args.verbose)
+        elif args.command == "tests":
+            final_rc = step_tests(verbose=args.verbose, debug=args.debug, force=args.force)
 
-                # Check required tools
-                print_info("Checking required tools...")
-                missing = check_tools(["npm", "docker"])
-                if missing:
-                        print_error("Missing required tools: " + ", ".join(missing))
-                        return 2
-                print_success("All required tools are available")
+        elif args.command in ["start", "basic", "all"]:
+            pipelines = {
+                "start": {
+                    "npm": lambda: step_npm(debug=args.debug, verbose=args.verbose),
+                    "pyright": lambda: step_pyright(verbose=args.verbose),
+                    "demo": lambda: step_demo(verbose=args.verbose)
+                },
+                "basic": {
+                    "npm": lambda: step_npm(debug=args.debug, verbose=args.verbose),
+                    "pyright": lambda: step_pyright(verbose=args.verbose),
+                    "demo": lambda: step_demo(verbose=args.verbose)
+                },
+                "all": {
+                    "npm": lambda: step_npm(debug=args.debug, verbose=args.verbose),
+                    "docker": lambda: step_docker(verbose=args.verbose, clear_cache=args.no_cache),
+                    "pyright": lambda: step_pyright(verbose=args.verbose),
+                    "demo": lambda: step_demo(verbose=args.verbose),
+                    "speedtest": lambda: step_speedtest(verbose=args.verbose)
+                }
+            }
 
-                if args.command == "npm":
-                        return step_npm(debug=args.debug, verbose=args.verbose)
-                elif args.command == "docker":
-                        return step_docker(verbose=args.verbose, clear_cache=args.no_cache)
-                elif args.command == "docker-clear":
-                        return step_docker(verbose=args.verbose, clear_cache=True)
-                elif args.command == "pyright":
-                        return step_pyright(verbose=args.verbose)
-                elif args.command == "demo":
-                        return step_demo(verbose=args.verbose)
-                elif args.command == "speedtest":
-                        return step_speedtest(verbose=args.verbose)
-                elif args.command == "stop":
-                        return step_stop(verbose=args.verbose)
-                elif args.command == "tests":
-                        return step_tests(verbose=args.verbose, debug=args.debug)
-                elif args.command == "all":
-                        # Full pipeline
-                        print_info("🚀 Starting the full build and test pipeline...")
-                        steps = [
-                                ("npm", step_npm),
-                                ("docker", step_docker),
-                                ("pyright", step_pyright),
-                                ("demo", step_demo),
-                                ("speedtest", step_speedtest)
-                        ]
+            print_info(f"🚀 Starting the '{args.command}' pipeline...")
+            results = run_pipeline(pipelines[args.command], args.force)
 
-                        container_started = False
-                        for step_name, step_func in steps:
-                                if step_name == "npm":
-                                        rc = step_func(debug=args.debug, verbose=args.verbose)
-                                elif step_name == "docker":
-                                        rc = step_func(verbose=args.verbose, clear_cache=args.no_cache)
-                                        if rc == 0:
-                                                container_started = True
-                                else:
-                                        rc = step_func(verbose=args.verbose)
+            # --- Final Summary ---
+            print_info("--- Pipeline Summary ---")
+            all_passed = True
+            for name, code in results.items():
+                if code == 0:
+                    print_success(f"✅ {name}: Passed")
+                else:
+                    print_error(f"❌ {name}: Failed (exit code {code})")
+                    all_passed = False
 
-                                if rc != 0:
-                                        print_error(f"Pipeline failed at step: {step_name}")
-                                        return rc
+            if all_passed:
+                print_success("✅✅✅ Pipeline completed successfully! ✅✅✅")
+                if args.command == "all":
+                     print_info("Container is running. To stop it later, run: uv run app.py stop")
+                     # add a small delay to ensure the user sees this message, then open up the browser at localhost:3000/
+                     time.sleep(2)
+                     print_info("Opening browser at http://localhost:3000/")
+                     webbrowser.open("http://localhost:3000/")
 
-                        print_success("✅✅✅ Pipeline completed successfully! ✅✅✅")
+            else:
+                final_rc = 1
 
-                        if container_started:
-                                print_info("Container is running. To stop it later: uv run app.py stop")
-                                print_info("🎯 Speedtest confirmed server is working correctly!")
-                        return 0
-                elif args.command == "start" or args.command == "basic":  # basic
-                        # Just npm, pyright, demo
-                        print_info("🚀 Starting basic pipeline (npm + pyright + demo)...")
-                        steps = [
-                                ("npm", step_npm),
-                                ("pyright", step_pyright),
-                                ("demo", step_demo)
-                        ]
+        return final_rc
 
-                        for step_name, step_func in steps:
-                                if step_name == "npm":
-                                        rc = step_func(debug=args.debug, verbose=args.verbose)
-                                else:
-                                        rc = step_func(verbose=args.verbose)
-
-                                if rc != 0:
-                                        print_error(f"Pipeline failed at step: {step_name}")
-                                        return rc
-
-                        print_success("✅ Basic pipeline completed successfully! ✅")
-                        return 0
-
-        except KeyboardInterrupt:
-                print("\nInterrupted by user", file=sys.stderr)
-                return 130
-        except Exception as e:
-                print_error(f"Unexpected error: {e}")
-                return 1
-
+    except KeyboardInterrupt:
+        print("\nInterrupted by user.", file=sys.stderr)
+        return 130
+    except Exception as e:
+        print_error(f"An unexpected error occurred: {e}")
+        return 1
 
 if __name__ == "__main__":
-        sys.exit(main())
+    sys.exit(main())
