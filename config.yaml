@@ -1,6 +1,9 @@
 # DearReader Configuration
 # Place this file in the root directory of your project
 
+# Default URL for the application
+url: http://localhost:3000/
+
 # Robots.txt compliance settings
 robots:
   # Set to false to disable robots.txt compliance checking

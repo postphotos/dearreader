@@ -37,15 +37,25 @@ import shutil
 import subprocess
 import sys
 import time
-import select # Moved from inside run_cmd
-import webbrowser # Moved from inside run_cmd
-from typing import List, Tuple, Callable, Optional, Dict
+import select
+import webbrowser
+import yaml # Add yaml import
+from typing import Tuple, Callable, Optional, Dict
 
 # --- Configuration ---
 DOCKER_IMAGE_NAME = "reader-app"
 DOCKER_CONTAINER_NAME = "reader-instance"
 NPM_DIR = "./backend/functions"
 LOG_PREFIX = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}]"
+
+def get_default_url_from_config():
+    """Reads the default URL from config.yaml, with a fallback."""
+    try:
+        with open("config.yaml", "r") as f:
+            config = yaml.safe_load(f)
+            return config.get("url", "http://localhost:3000")
+    except (FileNotFoundError, yaml.YAMLError):
+        return "http://localhost:3000"
 
 class Colors:
     BLUE = "\033[94m"
@@ -84,8 +94,10 @@ def _terminate_process_group(proc: subprocess.Popen):
             proc.terminate()
             time.sleep(1)
             proc.kill()
-        except Exception:
-            pass
+        except ProcessLookupError:
+            pass  # Process already finished
+        except Exception as e:
+            print_error(f"Failed to kill process on Windows: {e}")
 
 # --- Core Execution Logic ---
 def run_cmd(
@@ -265,7 +277,7 @@ def step_demo(verbose: bool = False) -> int:
         return 0
 
     cmd = ["uv", "run", "python", "demo.py"] if shutil.which("uv") else ["python", "demo.py"]
-    code, out, err = run_cmd(cmd, timeout=30, live=verbose)
+    code, _, err = run_cmd(cmd, timeout=30, live=verbose)
     if code != 0:
         print_error("demo.py failed.")
         if err and not verbose: print(err, file=sys.stderr)
@@ -281,21 +293,20 @@ def step_speedtest(verbose: bool = False) -> int:
         return 0
 
     cmd = ["uv", "run", "python", "speedtest.py"] if shutil.which("uv") else ["python", "speedtest.py"]
-    code, out, err = run_cmd(cmd, timeout=60, live=verbose)
+    code, _, err = run_cmd(cmd, timeout=60, live=verbose)
     if code != 0:
         print_error("Speed test failed.")
         if err and not verbose: print(err, file=sys.stderr)
         return code
     print_success("Speed test completed.")
     return 0
-
 def step_stop(verbose: bool = False) -> int:
     """REFACTORED: Stop and remove the Docker container using its name for reliability."""
     print_info(f"--- Stopping container '{DOCKER_CONTAINER_NAME}' ---")
 
     # This is much more reliable than parsing 'docker ps' output.
-    code_stop, out_stop, _ = run_cmd(["docker", "stop", DOCKER_CONTAINER_NAME], timeout=15)
-    code_rm, out_rm, _ = run_cmd(["docker", "rm", DOCKER_CONTAINER_NAME], timeout=10)
+    code_stop, _, _ = run_cmd(["docker", "stop", DOCKER_CONTAINER_NAME], timeout=15, live=verbose)
+    code_rm, _, _ = run_cmd(["docker", "rm", DOCKER_CONTAINER_NAME], timeout=10, live=verbose)
 
     if code_stop == 0 or code_rm == 0:
         print_success(f"Container '{DOCKER_CONTAINER_NAME}' stopped and removed.")
@@ -341,6 +352,9 @@ def run_pipeline(pipeline_steps: Dict[str, Callable], force: bool) -> Dict[str, 
     return results
 
 def main():
+    # Get default URL from config before parsing args
+    default_url = get_default_url_from_config()
+
     parser = argparse.ArgumentParser(
         description="Unified DearReader test runner and pipeline manager.",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -356,6 +370,7 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Re-run failed npm tests without timeout for detailed output.")
     parser.add_argument("--force", action="store_true", help="Continue pipeline even if some steps fail.")
     parser.add_argument("--no-cache", dest="no_cache", action="store_true", help="Disable Docker build cache.")
+    parser.add_argument("--url", default=default_url, help=f"URL to open on success (default: {default_url})")
 
     args = parser.parse_args()
 
@@ -419,12 +434,10 @@ def main():
             if all_passed:
                 print_success("✅✅✅ Pipeline completed successfully! ✅✅✅")
                 if args.command == "all":
-                     print_info("Container is running. To stop it later, run: uv run app.py stop")
-                     # add a small delay to ensure the user sees this message, then open up the browser at localhost:3000/
-                     time.sleep(2)
-                     print_info("Opening browser at http://localhost:3000/")
-                     webbrowser.open("http://localhost:3000/")
-
+                     print_info(f"Container is running. To stop it later, run: uv run app.py stop")
+                     # Open the browser to the configured URL
+                     print_info(f"Opening browser at {args.url}")
+                     webbrowser.open(args.url)
             else:
                 final_rc = 1
 

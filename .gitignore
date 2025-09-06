@@ -2,3 +2,12 @@ node_modules/
 .DS_Store
 /package-lock.json
 .aider*
+backend/functions/node_modules/
+__pycache__/
+*.pyc
+.env
+.vscode/
+.venv/
+.uv/
+.uv.lock
+reader/static/
