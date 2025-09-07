@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+
+echo "🚀 Setting up DearReader Demo Environment"
+echo "======================================"
+
+#!/bin/bash
+set -e
+
+echo "🚀 Setting up DearReader Docker Environment"
+echo "==========================================="
+
+# Check for Docker
+if ! command -v docker &> /dev/null
+then
+    echo "❌ docker could not be found. Please install Docker (https://www.docker.com/get-started)"
+    exit 1
+fi
+
+if ! command -v docker-compose &> /dev/null
+then
+    echo "❌ docker-compose could not be found. Please install Docker Compose"
+    exit 1
+fi
+
+echo "📦 Building Docker images..."
+docker-compose build
+
+echo "✅ Setup complete! You can now:"
+echo "   - Start development: ./dev.sh"
+echo "   - Run tests: ./run.sh js-test"
+echo "   - Start production: ./run.sh prod-up"
+echo "   - Stop all: ./run.sh stop"
+
+# Create necessary directories
+echo "📁 Creating necessary directories..."
+mkdir -p storage
+mkdir -p docker
+mkdir -p logs
+mkdir -p js/functions/node_modules
+
+# Ensure Dockerfile is in docker directory
+if [ -f "Dockerfile" ] && [ ! -f "docker/Dockerfile" ]; then
+  mv Dockerfile docker/
+  echo "📁 Moved Dockerfile to docker/ directory"
+fi
+
+# Create default config if needed
+if [ ! -f "config.yaml" ]; then
+  echo "url: \"http://localhost:3000\"" > config.yaml
+  echo "📁 Created default config.yaml"
+fi
+
+# Install python dependencies using uv
+echo "📥 Creating Python virtual environment..."
+if uv venv --clear; then
+    echo "✅ Virtual environment created successfully."
+else
+    echo "❌ Failed to create virtual environment. Please check your uv installation."
+    exit 1
+fi
+
+# Activate virtual environment (cross-platform)
+echo "🔧 Activating virtual environment..."
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+    if [ -f ".venv/Scripts/activate" ]; then
+        source .venv/Scripts/activate
+        echo "✅ Virtual environment activated (Windows)."
+    else
+        echo "❌ Virtual environment activation script not found at .venv/Scripts/activate"
+        exit 1
+    fi
+else
+    if [ -f ".venv/bin/activate" ]; then
+        source .venv/bin/activate
+        echo "✅ Virtual environment activated (Unix/Linux)."
+    else
+        echo "❌ Virtual environment activation script not found at .venv/bin/activate"
+        exit 1
+    fi
+fi
+
+echo "📥 Installing Python dependencies with uv..."
+if uv pip install -r py/requirements.txt; then
+    echo "✅ Python dependencies installed successfully."
+else
+    echo "❌ Failed to install Python dependencies. Please check your requirements.txt file."
+    exit 1
+fi
+
+# Install node dependencies
+echo "📥 Installing Node.js dependencies..."
+if npm install --prefix js/functions; then
+    echo "✅ Setup complete! You can now run the application using ./run.sh"
+    echo ""
+    echo "For WSL users: If tests fail, run ./install-chromium.sh to install Chromium"
+else
+    echo "❌ Failed to install Node.js dependencies. Please check your npm installation."
+    exit 1
+fi

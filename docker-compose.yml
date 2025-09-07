@@ -1,0 +1,65 @@
+services:
+  # -------------------------------------------
+  # --- DEVELOPMENT PROFILE SERVICES
+  # -------------------------------------------
+  js-functions:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+      target: js-dev
+    container_name: reader-js-functions
+    command: npm run emu:debug --prefix js/functions
+    volumes:
+      - ./js:/app/js
+    ports:
+      - "5001:5001"
+      - "9099:9099"
+      - "8080:8080"
+      - "9229:9229"
+    environment:
+      - NODE_ENV=development
+    profiles: ["dev"]
+
+  python:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+      target: python-dev
+    container_name: reader-python-dev
+    command: python /app/py/app.py serve
+    volumes:
+      - ./py:/app/py
+      - ./config.yaml:/app/config.yaml
+    ports:
+      - "5000:5000"
+    profiles: ["dev"]
+
+  js-test:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+      target: js-dev
+    container_name: reader-js-test-runner
+    command: npm test --prefix js/functions
+    profiles: ["dev"]
+    volumes:
+      - ./js:/app/js
+      - ./logs:/app/logs
+    environment:
+      - NODE_ENV=test
+      - CI=true
+
+  # -------------------------------------------
+  # --- PRODUCTION PROFILE SERVICE
+  # -------------------------------------------
+  server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: reader-server-prod
+    ports:
+      - "80:8080"
+      - "443:5001"
+    environment:
+      - NODE_ENV=production
+    profiles: ["prod"]

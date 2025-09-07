@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+# This Dockerfile is for DEVELOPMENT and TESTING ONLY.
+# It creates images with hot-reloading capabilities.
+
+# ===== Base JS Image =====
+FROM node:20-slim AS js-base
+WORKDIR /app
+# Install Chromium for Puppeteer
+RUN apt-get update && apt-get install -y chromium --no-install-recommends && rm -rf /var/lib/apt/lists/*
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+# --- JS Dependencies Stage ---
+FROM js-base AS js-deps
+WORKDIR /app/functions
+COPY js/functions/package.json js/functions/package-lock.json* ./
+RUN npm install
+
+# --- JS Dev/Test Source Stage ---
+FROM js-deps AS js-dev
+WORKDIR /app
+COPY js/ ./js/
+WORKDIR /app/js/functions
+
+# ===== Base Python Image =====
+FROM python:3.9-slim AS python-base
+WORKDIR /app
+COPY py/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# --- Python Dev Source Stage ---
+FROM python-base AS python-dev
+WORKDIR /app
+COPY py/ ./py/
+ENV PYTHONPATH=/app

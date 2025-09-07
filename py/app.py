@@ -39,13 +39,12 @@ import sys
 import time
 import select
 import webbrowser
-import yaml # Add yaml import
+import yaml as yaml # Add yaml import
 from typing import Tuple, Callable, Optional, Dict
 
 # --- Configuration ---
 DOCKER_IMAGE_NAME = "reader-app"
 DOCKER_CONTAINER_NAME = "reader-instance"
-NPM_DIR = "./backend/functions"
 LOG_PREFIX = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}]"
 
 def get_default_url_from_config():
@@ -172,10 +171,10 @@ def run_cmd(
 def step_npm(debug: bool = False, verbose: bool = False) -> int:
     """Run npm install and test."""
     print_info("--- Step 1: Running npm install and tests ---")
-    npm_dir = NPM_DIR if os.path.isdir(NPM_DIR) else "."
+    npm_dir = "js/functions"
 
     print_info("Installing npm dependencies...")
-    code, out, err = run_cmd(["npm", "install"], cwd=npm_dir, timeout=120, live=verbose)
+    code, out, err = run_cmd(["npm", "install"], cwd=npm_dir, timeout=300, live=verbose)
     if code != 0:
         print_error("npm install failed.")
         if err and not verbose: print(err, file=sys.stderr)
@@ -223,7 +222,7 @@ def step_docker(verbose: bool = False, clear_cache: bool = False) -> int:
         run_cmd(["docker", "builder", "prune", "-f"], timeout=60)
 
     print_info(f"Building Docker image '{DOCKER_IMAGE_NAME}'...")
-    build_cmd = ["docker", "build", "-t", DOCKER_IMAGE_NAME, "."]
+    build_cmd = ["docker", "build", "-t", DOCKER_IMAGE_NAME, "./docker"]
     if clear_cache:
         build_cmd.insert(2, "--no-cache")
 
@@ -235,10 +234,12 @@ def step_docker(verbose: bool = False, clear_cache: bool = False) -> int:
     print_success("Docker image built.")
 
     print_info(f"Running Docker container '{DOCKER_CONTAINER_NAME}'...")
+    # Handle Windows paths for Docker volume mounting
+    storage_path = os.path.abspath('./storage').replace('\\', '/')
     run_cmd_list = [
         "docker", "run", "-d", "--name", DOCKER_CONTAINER_NAME,
         "-p", "3000:3000",
-        "-v", f"{os.path.abspath('./storage')}:/app/local-storage",
+        "-v", f"{storage_path}:/app/local-storage",
         DOCKER_IMAGE_NAME
     ]
     code, _, err = run_cmd(run_cmd_list, timeout=30, live=verbose)
@@ -272,11 +273,11 @@ def step_pyright(verbose: bool = False) -> int:
 def step_demo(verbose: bool = False) -> int:
     """Run demo.py."""
     print_info("--- Step 4: Running demo.py ---")
-    if not os.path.exists("demo.py"):
-        print_warning("demo.py not found; skipping.")
+    if not os.path.exists("py/demo.py"):
+        print_warning("py/demo.py not found; skipping.")
         return 0
 
-    cmd = ["uv", "run", "python", "demo.py"] if shutil.which("uv") else ["python", "demo.py"]
+    cmd = ["python", "py/demo.py"]
     code, _, err = run_cmd(cmd, timeout=30, live=verbose)
     if code != 0:
         print_error("demo.py failed.")
@@ -288,11 +289,11 @@ def step_demo(verbose: bool = False) -> int:
 def step_speedtest(verbose: bool = False) -> int:
     """Run speed test."""
     print_info("--- Step 5: Running DearReader Speed Test ---")
-    if not os.path.exists("speedtest.py"):
-        print_warning("speedtest.py not found; skipping.")
+    if not os.path.exists("py/speedtest.py"):
+        print_warning("py/speedtest.py not found; skipping.")
         return 0
 
-    cmd = ["uv", "run", "python", "speedtest.py"] if shutil.which("uv") else ["python", "speedtest.py"]
+    cmd = ["python", "py/speedtest.py"]
     code, _, err = run_cmd(cmd, timeout=60, live=verbose)
     if code != 0:
         print_error("Speed test failed.")
@@ -320,7 +321,7 @@ def step_tests(verbose: bool = False, debug: bool = False, force: bool = False) 
 
     pipeline_steps = {
         "npm": lambda: step_npm(debug=debug, verbose=verbose),
-        "TypeScript Build": lambda: run_cmd(["npm", "run", "build"], cwd=NPM_DIR, timeout=60)[0],
+        "TypeScript Build": lambda: run_cmd(["npm", "run", "build"], cwd="js/functions", timeout=60)[0],
         "pyright": lambda: step_pyright(verbose=verbose),
         "Start Docker for tests": lambda: step_docker(verbose=verbose),
         "demo": lambda: step_demo(verbose=verbose),
@@ -373,6 +374,10 @@ def main():
     parser.add_argument("--url", default=default_url, help=f"URL to open on success (default: {default_url})")
 
     args = parser.parse_args()
+
+    # Change to the project root directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(os.path.join(script_dir, ".."))
 
     try:
         if shutil.which("docker") is None or shutil.which("npm") is None:

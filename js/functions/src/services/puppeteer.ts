@@ -9,8 +9,21 @@ import fetch from 'node-fetch';
 const require = createRequire(import.meta.url);
 
 import type { Browser, Page, BrowserContext } from 'puppeteer';
-import * as puppeteerCore from 'puppeteer';
-import { addExtra } from 'puppeteer-extra';
+
+// Conditionally import Puppeteer or mock based on environment
+let puppeteerCore: any;
+let addExtra: any;
+
+if (process.env.USE_PUPPETEER_MOCK === 'true') {
+  console.log('🔧 Using Puppeteer mock implementation');
+  const { mockPuppeteer, mockAddExtra } = await import('../../test/mock-puppeteer.js');
+  puppeteerCore = mockPuppeteer;
+  addExtra = mockAddExtra;
+} else {
+  puppeteerCore = await import('puppeteer');
+  const puppeteerExtra = await import('puppeteer-extra');
+  addExtra = puppeteerExtra.addExtra;
+}
 
 // Define CookieParam type since it's not exported from puppeteer
 export interface CookieParam {
@@ -116,7 +129,7 @@ export interface ScrappingOptions {
     timeoutMs?: number;
 }
 
-const puppeteer = addExtra(puppeteerCore as any);
+const puppeteer = addExtra(puppeteerCore);
 
 puppeteer.use(puppeteerStealth());
 puppeteer.use(puppeteerPageProxy({

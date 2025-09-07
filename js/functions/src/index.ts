@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 import { initializeApp } from 'firebase-admin/app';
 import { CrawlerHost } from './cloud-functions/crawler.js';
-import { runWith, https, HttpsFunction } from 'firebase-functions';
+import { onRequest } from 'firebase-functions/v2/https';
+import { setGlobalOptions } from 'firebase-functions/v2';
 import { Logger } from './shared/logger.js';
 import { container } from 'tsyringe';
 import { PuppeteerControl } from './services/puppeteer.js';
@@ -19,15 +20,18 @@ container.registerSingleton(AsyncContext);
 container.registerSingleton(CrawlerHost);
 
 const crawlerHost = container.resolve(CrawlerHost);
-export const crawler = runWith({
-    memory: '4GB',
+export const crawler = onRequest(
+  {
+    memory: '4GiB',
     timeoutSeconds: 540,
-    }).https.onRequest(async (req, res) => {
+  },
+  async (req, res) => {
     await crawlerHost.crawl(req, res);
-});
+  }
+);
 
-export const helloWorld: HttpsFunction = https.onRequest((req, res) => {
-    res.send('Hello World!');
+export const helloWorld = onRequest((req, res) => {
+  res.send('Hello World!');
 });
 
 

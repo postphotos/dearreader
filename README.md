@@ -1,9 +1,33 @@
-# 📚 Reader: Enhanced Local Deployment Edition
+# 📚 Dear Reader: Enhanced Local Deployment Edition
 
 This is a feature-enhanced fork of [Jina AI's Reader](https://github.com/jina-ai/reader) optimized for local deployment and development. This fork uses a Debian-based Docker image (instead of Alpine) for better compatibility with Chromium/Puppeteer dependencies and native libraries, ensuring more reliable web scraping operations.
 
 ## 🎯 What it does
 It converts any URL to an LLM-friendly input with `http://127.0.0.1:3000/https://google.com`. Get improved output for your agent and RAG systems at no cost. This tool helps you prepare web content for Large Language Models, making it easier to process and analyze online information.
+
+## 🏗️ Project Architecture
+
+The project follows a monolith architecture with the following structure:
+
+```
+reader/
+├── docker/               # Docker-related files
+│   └── Dockerfile        # Main Dockerfile for building the service
+├── js/                   # JavaScript source code
+│   ├── functions/        # Core application code
+│   │   ├── src/          # TypeScript source code
+│   │   ├── public/       # Public assets
+│   │   └── package.json  # Node.js dependencies
+├── py/                   # Python utilities and tests
+│   ├── app.py            # Main runner script
+│   ├── demo.py           # Demo script
+│   └── speedtest.py      # Performance testing script
+├── storage/              # Local storage for screenshots (created during setup)
+├── config.yaml           # Application configuration
+├── setup.sh              # Setup script
+├── run.sh                # Application runner script
+└── README.md             # This documentation
+```
 
 ## 🚀 Enhanced Features
 - 🏠 Runs locally using Docker with optimized Debian base image
@@ -19,37 +43,158 @@ It converts any URL to an LLM-friendly input with `http://127.0.0.1:3000/https:/
 ## ⚠️ Limitations
 - 📄 Currently does not support parsing PDFs
 
-This demonstrates that the Reader can run effectively even on minimal hardware resources while maintaining full feature parity with the cloud service.
-## 🐳 Docker Deployment
+## 🛠️ Setup & Installation
 
-### Building the image locally
+### Prerequisites
+
+- Docker
+- Node.js v20.x
+- Python 3.8+
+- npm
+
+### Platform Support
+
+- ✅ **Linux**: Full support with Alpine Linux containers
+- ✅ **macOS**: Full support
+- ✅ **Windows**: Full support via WSL or native Docker
+- ✅ **WSL (Windows Subsystem for Linux)**: Recommended for Windows users
+
+### Initial Setup
+
 1. Clone the repository:
    ```bash
-   git clone https://github.com/intergalacticalvariable/reader.git
-   cd reader
-   ```
-2. Build the Docker image:
-   ```bash
-   docker build -t reader .
-   ```
-3. Run the container:
-   ```bash
-   docker run -p 3000:3000 -v ./storage:/app/local-storage reader-app
+   git clone https://github.com/postphotos/dearreader.git
+   cd dearreader
    ```
 
-## 🧪 Quick Demo
-
-1. Setup Python environment:
+2. Run the setup script to create necessary directories and configuration:
    ```bash
-   uv pip install requests
+   chmod +x setup.sh
+   ./setup.sh
+   ```
+   
+   This will:
+   - Create a `storage` directory for screenshots
+   - Create `docker` directory if not present
+   - Install Python dependencies
+   - Create a default `config.yaml` if needed
+
+### Manual Setup (if not using setup.sh)
+
+1. Create required directories:
+   ```bash
+   mkdir -p storage docker
    ```
 
-2. Run the demo script:
+2. Create default configuration:
    ```bash
-   uv run demo.py
+   echo 'url: "http://localhost:3000"' > config.yaml
    ```
 
-The demo will test Wikipedia pages and demonstrate all API formats (JSON, Markdown, HTML, Text, Screenshots).
+3. Install Python dependencies:
+   ```bash
+   pip install -r py/requirements.txt
+   ```
+
+4. **For WSL/Linux users**: Install Chromium for testing:
+   ```bash
+   chmod +x install-chromium.sh
+   ./install-chromium.sh
+   ```
+
+5. **For Windows users**: Install Chromium for testing:
+   ```cmd
+   install-chromium.bat
+   ```
+
+6. Ensure Docker file is in the correct location:
+   ```bash
+   # If Dockerfile is at root level
+   [ -f "Dockerfile" ] && [ ! -f "docker/Dockerfile" ] && mv Dockerfile docker/
+   ```
+
+## � Updating Dependencies
+
+### Python Dependencies
+
+```bash
+pip install -r py/requirements.txt
+```
+
+### Node.js Dependencies
+
+```bash
+cd js/functions
+npm install
+```
+
+## � Docker Deployment
+
+### Building the Docker Image
+
+```bash
+docker build -t reader-app ./docker
+```
+
+### Running the Container
+
+```bash
+docker run -d --name reader-instance -p 3000:3000 -v $(pwd)/storage:/app/local-storage reader-app
+```
+
+For Windows PowerShell, use:
+```powershell
+docker run -d --name reader-instance -p 3000:3000 -v ${PWD}/storage:/app/local-storage reader-app
+```
+
+For Windows Command Prompt, use:
+```cmd
+docker run -d --name reader-instance -p 3000:3000 -v %cd%/storage:/app/local-storage reader-app
+```
+
+For Windows PowerShell, use:
+```powershell
+docker run -d --name reader-instance -p 3000:3000 -v ${PWD}/storage:/app/local-storage reader-app
+```
+
+### Using the Run Script
+
+For a streamlined process:
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+## 🧪 Testing
+
+### Complete Test Suite
+
+Run all tests in the pipeline:
+```bash
+python py/app.py tests
+```
+
+### Individual Test Components
+
+```bash
+# Run npm tests only
+python py/app.py npm
+
+# Run type checking
+python py/app.py pyright
+
+# Run the demonstration script
+python py/app.py demo
+
+# Run performance tests
+python py/app.py speedtest
+```
+
+### Test Options
+
+- `--verbose`: Show live output from commands
+- `--debug`: Run failed npm tests without timeout for detailed output
+- `--force`: Continue pipeline even if some steps fail
 
 ## 🖥️ Usage & API Specification
 
@@ -245,26 +390,10 @@ NODE_OPTIONS='--loader ts-node/esm' mocha src/**/__tests__/**/*.ts --reporter sp
 NODE_OPTIONS='--loader ts-node/esm' mocha src/cloud-functions/__tests__/crawler.test.ts
 ```
 
-### Project Structure
-
-```
-backend/functions/
-├── src/
-│   ├── cloud-functions/
-│   │   ├── crawler.ts           # Main crawler endpoint
-│   │   └── __tests__/          # Test files
-│   ├── services/               # Service layer
-│   ├── utils/                  # Utility functions
-│   └── index.ts               # Firebase Functions entry
-├── package.json
-├── tsconfig.json
-└── firebase.json
-```
-
 ### Environment Configuration
 
 The development environment supports:
-- **Local Storage**: Screenshots saved to `./local-storage/`
+- **Local Storage**: Screenshots saved to `./storage/` (can be set in `config.yaml`)
 - **Firebase Emulation**: Full Firebase Functions environment
 - **Hot Reload**: Automatic rebuilds on file changes
 - **Debug Mode**: Inspector support for debugging
@@ -290,7 +419,8 @@ The development environment supports:
 ## 🙏 Acknowledgements
 This project is based on the excellent work done by multiple contributors:
 1. The original [Jina AI Reader project](https://github.com/jina-ai/reader), which provided the foundation for this tool.
-2. [Harsh Gupta's adaptation](https://github.com/hargup/reader), which served as the immediate basis for this Docker deployment version.
+2. the [Reader](https://github.com/intergalacticalvariable/reader) fork from IntergalacticalVariable, which served as the immediate basis for this Docker deployment version.
+3. and [Harsh Gupta's original adaptation](https://github.com/hargup/reader) that started this effort.
 
 ## 📜 License
-This project is licensed under Apache-2.0 same as the original Jina AI Reader project.
+This project is licensed under Apache-2.0 same as the original Jina AI Reader project and forks.
