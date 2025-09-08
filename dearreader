@@ -156,9 +156,12 @@ cmd_setup() {
     # Pre-flight checks
     log_subheader "Pre-flight Checks"
 
-    # Check internet connectivity
-    if ! ping -c 1 -W 2 google.com >/dev/null 2>&1; then
+    # Check internet connectivity (cloud-friendly)
+    if ! curl -s --connect-timeout 5 --max-time 10 https://www.google.com >/dev/null 2>&1 && \
+       ! curl -s --connect-timeout 5 --max-time 10 https://www.cloudflare.com >/dev/null 2>&1 && \
+       ! ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
         log_error "No internet connection detected. Please check your network."
+        log_info "Note: Some cloud environments block ICMP ping but allow HTTP"
         exit 1
     fi
     log_success "Internet connection verified"

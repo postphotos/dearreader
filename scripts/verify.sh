@@ -77,11 +77,15 @@ check_tool "git" "Version control" "https://git-scm.com/" || true
 echo ""
 echo "🌐 Network Check:"
 echo -n "Testing internet connectivity... "
-if ping -c 1 -W 2 google.com >/dev/null 2>&1; then
+# Try multiple methods to check connectivity (cloud-friendly)
+if curl -s --connect-timeout 5 --max-time 10 https://www.google.com >/dev/null 2>&1 || \
+   curl -s --connect-timeout 5 --max-time 10 https://www.cloudflare.com >/dev/null 2>&1 || \
+   ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
     echo -e "${GREEN}✅ Connected${NC}"
 else
     echo -e "${RED}❌ No internet${NC}"
     echo "  Please check your network connection"
+    echo "  Note: Some cloud environments block ICMP ping but allow HTTP"
     ((missing_tools++))
 fi
 
