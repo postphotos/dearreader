@@ -5,24 +5,12 @@
     "lint": "eslint --ext .js,.ts .",
     "build": "tsc -p .",
     "build:watch": "tsc --watch",
-    "build:clean": "rm -rf ./build",
-    "test": "tsx mocha --timeout 45000 --slow 10000 --exit --import test/setup.ts src/**/*.test.ts src/**/__tests__/**/*.ts",
-    "test:watch": "tsx mocha --exit --import test/setup.ts --watch src/**/*.test.ts src/**/__tests__/**/*.ts",
+    "build:clean": "rimraf ./build",
+    "test": "node --import tsx ./node_modules/mocha/bin/_mocha --timeout 45000 --import test/setup.ts src/**/*.test.ts src/**/__tests__/**/*.ts",
+    "test:watch": "node --import tsx ./node_modules/mocha/bin/_mocha --watch --timeout 45000 --import test/setup.ts src/**/*.test.ts src/**/__tests__/**/*.ts",
     "test:docker": "docker-compose -f ../../docker-compose.test.yml run --rm js-test",
-    "shell": "npm run build && firebase functions:shell",
-    "emu:stage": "cd .. && tar -czvf firebase-emu-preset.tgz .firebase-emu",
-    "emu:reset": "rm -rf ../.firebase-emu && tar -xzf ../firebase-emu-preset.tgz --directory ../",
-    "emu:start": "firebase emulators:start --import ../.firebase-emu --export-on-exit",
-    "emu:debug": "firebase emulators:start --import ../.firebase-emu --export-on-exit --inspect-functions",
-    "emu:debug2": "firebase emulators:start --import ../.firebase-emu --export-on-exit --inspect-functions",
-    "emu:kill": "killall java",
-    "serve": "npm run build && npm run emu:start",
-    "debug": "npm run build && npm run emu:start -- --inspect-functions",
-    "from-scratch": "npm run build && rm -rf ../.firebase-emu && firebase emulators:start --export-on-exit",
-    "from-preset": "npm run build && npm run emu:reset && npm run emu:start",
-    "start": "npm run shell",
-    "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log",
+    "serve": "npm run build && node build/server.js",
+    "start": "npm run serve",
     "gcp-build": "node node_modules/puppeteer/install.mjs"
   },
   "engines": {
@@ -43,8 +31,6 @@
     "cors": "^2.8.5",
     "dayjs": "^1.11.18",
     "express": "^5.1.0",
-    "firebase-admin": "^13.5.0",
-    "firebase-functions": "^6.4.0",
     "htmlparser2": "^10.0.0",
     "jose": "^6.1.0",
     "jsdom": "^26.1.0",
@@ -65,6 +51,7 @@
     "tiktoken": "^1.0.22",
     "tld-extract": "^2.1.0",
     "tldts": "^7.0.13",
+    "tsyringe": "^4.10.0",
     "turndown": "^7.2.1",
     "turndown-plugin-gfm": "^1.0.2",
     "undici": "^7.15.0"
@@ -74,7 +61,6 @@
     "@types/bcrypt": "^6.0.0",
     "@types/chai": "^5.2.2",
     "@types/cors": "^2.8.19",
-    "@types/generic-pool": "^3.8.3",
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.3.1",
     "@types/set-cookie-parser": "^2.4.10",
@@ -84,7 +70,6 @@
     "eslint": "^9.35.0",
     "eslint-config-google": "^0.14.0",
     "eslint-plugin-import": "^2.32.0",
-    "firebase-functions-test": "^3.4.1",
     "fs": "^0.0.1-security",
     "mocha": "^11.7.2",
     "replicate": "^1.1.0",
@@ -95,5 +80,11 @@
   "private": true,
   "exports": {
     ".": "./build/index.js"
+  },
+  "overrides": {
+    "glob": "^10.4.2",
+    "rimraf": "^5.0.10",
+    "inflight": "npm:lru-cache@^10.4.2",
+    "unicode-9.0.0": "@unicode/unicode-9.0.0@^1.0.0"
   }
 }

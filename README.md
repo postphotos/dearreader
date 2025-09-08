@@ -59,59 +59,52 @@ reader/
 - ✅ **Windows**: Full support via WSL or native Docker
 - ✅ **WSL (Windows Subsystem for Linux)**: Recommended for Windows users
 
-### Initial Setup
+### Enhanced Consolidated Setup
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/postphotos/dearreader.git
-   cd dearreader
+   git clone https://github.com/postphotos/reader.git
+   cd reader
    ```
 
-2. Run the setup script to create necessary directories and configuration:
+2. **One-Command Complete Setup:**
    ```bash
-   chmod +x setup.sh
-   ./setup.sh
+   ./run.sh setup --verbose
    ```
-   
-   This will:
-   - Create a `storage` directory for screenshots
-   - Create `docker` directory if not present
-   - Install Python dependencies
-   - Create a default `config.yaml` if needed
 
-### Manual Setup (if not using setup.sh)
+   **This automatically handles:**
+   - ✅ Docker and Docker Compose validation
+   - ✅ Docker image building
+   - ✅ Directory structure (storage, logs, js/node_modules)
+   - ✅ Python virtual environment with uv
+   - ✅ Node.js dependency installation
+   - ✅ Default configuration creation
+   - ✅ Cross-platform compatibility (Linux/Mac/Windows/WSL)
 
-1. Create required directories:
+3. **Start Development Environment:**
    ```bash
-   mkdir -p storage docker
+   ./run.sh dev
    ```
 
-2. Create default configuration:
-   ```bash
-   echo 'url: "http://localhost:3000"' > config.yaml
-   ```
+4. **Verify Installation:**
+   Open **http://localhost:3000** in your browser to access the web interface.
 
-3. Install Python dependencies:
-   ```bash
-   pip install -r py/requirements.txt
-   ```
+### Manual Steps (Alternative)
+```bash
+# Create directories
+mkdir -p storage logs
 
-4. **For WSL/Linux users**: Install Chromium for testing:
-   ```bash
-   chmod +x install-chromium.sh
-   ./install-chromium.sh
-   ```
+# Python environment setup
+uv venv --clear
+source .venv/bin/activate  # Linux/Mac
+source .venv/Scripts/activate  # Windows
+uv pip install -r py/requirements.txt
 
-5. **For Windows users**: Install Chromium for testing:
-   ```cmd
-   install-chromium.bat
-   ```
+# Node.js dependencies
+npm install --prefix js/
 
-6. Ensure Docker file is in the correct location:
-   ```bash
-   # If Dockerfile is at root level
-   [ -f "Dockerfile" ] && [ ! -f "docker/Dockerfile" ] && mv Dockerfile docker/
-   ```
+# Docker setup (already handled by run.sh setup)
+```
 
 ## � Updating Dependencies
 

@@ -1,8 +1,6 @@
 import 'reflect-metadata';
-import { initializeApp } from 'firebase-admin/app';
+import express from 'express';
 import { CrawlerHost } from './cloud-functions/crawler.js';
-import { onRequest } from 'firebase-functions/v2/https';
-import { setGlobalOptions } from 'firebase-functions/v2';
 import { Logger } from './shared/logger.js';
 import { container } from 'tsyringe';
 import { PuppeteerControl } from './services/puppeteer.js';
@@ -10,7 +8,9 @@ import { JSDomControl } from './services/jsdom.js';
 import { FirebaseStorageBucketControl } from './shared/index.js';
 import { AsyncContext } from './shared/index.js';
 
-initializeApp();
+// Local Express server setup instead of Firebase Functions
+const app = express();
+app.use(express.json());
 
 container.registerSingleton(Logger);
 container.registerSingleton(PuppeteerControl);
@@ -20,19 +20,23 @@ container.registerSingleton(AsyncContext);
 container.registerSingleton(CrawlerHost);
 
 const crawlerHost = container.resolve(CrawlerHost);
-export const crawler = onRequest(
-  {
-    memory: '4GiB',
-    timeoutSeconds: 540,
-  },
-  async (req, res) => {
-    await crawlerHost.crawl(req, res);
-  }
-);
 
-export const helloWorld = onRequest((req, res) => {
-  res.send('Hello World!');
+// API endpoints for local crawler
+app.post('/crawl', async (req: express.Request, res: express.Response) => {
+  try {
+    await crawlerHost.crawl(req, res);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: errorMessage });
+  }
 });
+
+app.get('/', (req, res) => {
+  res.json({ message: 'DearReader Local Crawler Server Running' });
+});
+
+// Export for use in server.js
+export default app;
 
 
 process.on('unhandledRejection', (reason, promise) => {

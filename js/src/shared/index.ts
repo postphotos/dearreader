@@ -1,5 +1,5 @@
 import { CloudHTTPv2 } from './decorators.js';
-import { Ctx } from './types.js';
+import type { Ctx } from './types.js';
 import { Logger } from './logger.js';
 import { OutputServerEventStream } from './output-stream.js';
 import { RPCReflect } from './rpc-reflect.js';

@@ -3,7 +3,6 @@
 echo "🚀 Setting up DearReader Demo Environment"
 echo "======================================"
 
-#!/bin/bash
 set -e
 
 echo "🚀 Setting up DearReader Docker Environment"
@@ -26,9 +25,11 @@ echo "📦 Building Docker images..."
 docker-compose build
 
 echo "✅ Setup complete! You can now:"
-echo "   - Start development: ./dev.sh"
-echo "   - Run tests: ./run.sh js-test"
-echo "   - Start production: ./run.sh prod-up"
+echo "   - Start development: ./run.sh dev"
+echo "   - Run tests: ./run.sh test all"
+echo "   - Run JS tests only: ./run.sh test js"
+echo "   - Run Python tests only: ./run.sh test python"
+echo "   - Start production: ./run.sh run prod"
 echo "   - Stop all: ./run.sh stop"
 
 # Create necessary directories
@@ -36,7 +37,7 @@ echo "📁 Creating necessary directories..."
 mkdir -p storage
 mkdir -p docker
 mkdir -p logs
-mkdir -p js/functions/node_modules
+mkdir -p jsf/node_modules
 
 # Ensure Dockerfile is in docker directory
 if [ -f "Dockerfile" ] && [ ! -f "docker/Dockerfile" ]; then
@@ -89,10 +90,9 @@ fi
 
 # Install node dependencies
 echo "📥 Installing Node.js dependencies..."
-if npm install --prefix js/functions; then
+if npm install --prefix js/; then
     echo "✅ Setup complete! You can now run the application using ./run.sh"
     echo ""
-    echo "For WSL users: If tests fail, run ./install-chromium.sh to install Chromium"
 else
     echo "❌ Failed to install Node.js dependencies. Please check your npm installation."
     exit 1
