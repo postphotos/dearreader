@@ -5,49 +5,941 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DearReader - Web Content Extractor</title>
   <link rel="stylesheet" href="/style.css">
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <style>
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --secondary: #ec4899;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--gray-800);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
     }
 
     .hero {
       text-align: center;
-      padding: 60px 20px;
+      padding: 80px 20px;
       color: white;
       background: rgba(255, 255, 255, 0.1);
-      backdrop-filter: blur(10px);
-      border-radius: 20px;
+      backdrop-filter: blur(20px);
+      border-radius: 24px;
       margin-bottom: 40px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
       animation: fadeInUp 1s ease-out;
     }
 
     .hero h1 {
-      font-size: 3.5rem;
-      margin-bottom: 10px;
-      background: linear-gradient(45deg, #fff, #f0f0f0);
+      font-size: 4rem;
+      font-weight: 800;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #fff 0%, #f0f8ff 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
+      line-height: 1.1;
     }
 
-    .hero p {
-      font-size: 1.3rem;
+    .hero .subtitle {
+      font-size: 1.5rem;
       opacity: 0.9;
-      margin-bottom: 30px;
+      margin-bottom: 24px;
+      font-weight: 400;
+    }
+
+    .hero .formats {
+      font-size: 1.1rem;
+      opacity: 0.8;
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 32px;
+    }
+
+    .format-badge {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      backdrop-filter: blur(10px);
     }
 
     .main-content {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 30px;
+      gap: 40px;
       margin-bottom: 40px;
     }
 
     .card {
       background: rgba(255, 255, 255, 0.95);
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      transition: all 0.3s ease;
+      animation: fadeInUp 0.8s ease-out;
+    }
+
+    .card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 32px 64px rgba(0, 0, 0, 0.15);
+    }
+
+    .card h2 {
+      color: var(--gray-800);
+      margin-bottom: 24px;
+      font-size: 1.8rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .card h2 i {
+      color: var(--primary);
+    }
+
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: var(--gray-700);
+      font-size: 1rem;
+    }
+
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 16px 20px;
+      border: 2px solid var(--gray-200);
+      border-radius: 12px;
+      font-size: 16px;
+      transition: all 0.3s ease;
+      background: white;
+      font-family: inherit;
+    }
+
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+      transform: translateY(-1px);
+    }
+
+    .btn {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: white;
+      border: none;
+      padding: 16px 32px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .result {
+      margin-top: 24px;
+      padding: 24px;
+      background: var(--gray-50);
+      border-radius: 12px;
+      border: 1px solid var(--gray-200);
+      white-space: pre-wrap;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      max-height: 500px;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.5;
+      position: relative;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .result-title {
+      font-weight: 600;
+      color: var(--gray-700);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .copy-btn {
+      background: var(--gray-200);
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--gray-600);
+      transition: all 0.2s ease;
+    }
+
+    .copy-btn:hover {
+      background: var(--gray-300);
+      color: var(--gray-800);
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      color: var(--primary);
+      font-size: 18px;
+      margin-top: 24px;
+      padding: 40px;
+    }
+
+    .loading i {
+      font-size: 2rem;
+      margin-bottom: 16px;
+      animation: spin 1s linear infinite;
+    }
+
+    .error {
+      border-left: 4px solid var(--error);
+      background: #fef2f2;
+      color: #dc2626;
+    }
+
+    .success {
+      border-left: 4px solid var(--success);
+      background: #f0fdf4;
+      color: #16a34a;
+    }
+
+    .status {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 12px 20px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      display: none;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      z-index: 1000;
+    }
+
+    .status.success {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+      border-color: rgba(16, 185, 129, 0.2);
+    }
+
+    .status.error {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--error);
+      border-color: rgba(239, 68, 68, 0.2);
+    }
+
+    .examples {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 24px;
+      padding: 40px;
+      margin-bottom: 40px;
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      animation: fadeInUp 0.6s ease-out;
+    }
+
+    .examples h2 {
+      color: var(--gray-800);
+      margin-bottom: 24px;
+      text-align: center;
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+
+    .example-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .example-item {
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      padding: 20px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 2px solid transparent;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .example-item::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.1), transparent);
+      transition: left 0.5s;
+    }
+
+    .example-item:hover::before {
+      left: 100%;
+    }
+
+    .example-item:hover {
+      background: linear-gradient(135deg, #fff 0%, #f8fafc 100%);
+      border-color: var(--primary);
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+    }
+
+    .example-url {
+      font-weight: 600;
+      color: var(--gray-800);
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+    }
+
+    .example-desc {
+      font-size: 14px;
+      color: var(--gray-600);
+      line-height: 1.4;
+    }
+
+    .api-status {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 16px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .status-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .status-online {
+      color: var(--success);
+    }
+
+    .status-offline {
+      color: var(--error);
+    }
+
+    .status-details {
+      font-size: 14px;
+      color: var(--gray-600);
+      line-height: 1.5;
+    }
+
+    .queue-info {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 16px;
+      font-size: 14px;
+    }
+
+    .queue-item {
+      text-align: center;
+      padding: 12px;
+      background: var(--gray-50);
+      border-radius: 8px;
+    }
+
+    .queue-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--primary);
+      display: block;
+    }
+
+    .queue-label {
+      color: var(--gray-600);
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .links {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--gray-700);
+      text-decoration: none;
+      border-radius: 12px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .link-btn:hover {
+      background: white;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      color: var(--primary);
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 768px) {
+      .hero h1 {
+        font-size: 2.5rem;
+      }
+
+      .main-content {
+        grid-template-columns: 1fr;
+        gap: 24px;
+      }
+
+      .example-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero .formats {
+        flex-direction: column;
+        align-items: center;
+      }
+    }
+  </style>
+</head>
+      width: 100%;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .result {
+      margin-top: 20px;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+      white-space: pre-wrap;
+      font-family: 'Courier New', monospace;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      color: #667eea;
+      font-size: 18px;
+      margin-top: 20px;
+    }
+
+    .error {
+      border-left-color: #dc3545;
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .status {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .examples {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 15px;
+      padding: 30px;
+      margin-bottom: 40px;
+    }
+
+    .examples h3 {
+      color: #333;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .example-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 15px;
+    }
+
+    .example-item {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      border: 2px solid transparent;
+    }
+
+    .example-item:hover {
+      background: #e9ecef;
+      border-color: #667eea;
+    }
+
+    .example-url {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 5px;
+    }
+
+    .example-desc {
+      font-size: 14px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+<body>
+  <div class="container">
+    <div class="hero">
+      <h1><i class="fas fa-magic"></i> DearReader</h1>
+      <p class="subtitle">Transform any URL into clean, LLM-friendly content with real-time processing</p>
+      <div class="formats">
+        <span class="format-badge"><i class="fas fa-code"></i> JSON</span>
+        <span class="format-badge"><i class="fas fa-file-alt"></i> Markdown</span>
+        <span class="format-badge"><i class="fas fa-globe"></i> HTML</span>
+        <span class="format-badge"><i class="fas fa-font"></i> Text</span>
+        <span class="format-badge"><i class="fas fa-camera"></i> Screenshots</span>
+        <span class="format-badge"><i class="fas fa-file-pdf"></i> PDF</span>
+      </div>
+    </div>
+
+    <div class="examples">
+      <h2><i class="fas fa-lightbulb"></i> Try These Examples</h2>
+      <div class="example-grid">
+        <div class="example-item" onclick="loadExample('https://en.wikipedia.org/wiki/Web_scraping')">
+          <div class="example-url"><i class="fas fa-book"></i> Wikipedia Article</div>
+          <div class="example-desc">Technical article about web scraping with comprehensive content</div>
+        </div>
+        <div class="example-item" onclick="loadExample('https://news.ycombinator.com')">
+          <div class="example-url"><i class="fas fa-newspaper"></i> Hacker News</div>
+          <div class="example-desc">Tech news and discussion site with dynamic content</div>
+        </div>
+        <div class="example-item" onclick="loadExample('https://github.com/postphotos/dearreader')">
+          <div class="example-url"><i class="fab fa-github"></i> GitHub README</div>
+          <div class="example-desc">This project's documentation and source code</div>
+        </div>
+        <div class="example-item" onclick="loadExample('https://httpbin.org/html')">
+          <div class="example-url"><i class="fas fa-code"></i> Simple HTML Page</div>
+          <div class="example-desc">Clean HTML test page for basic functionality</div>
+        </div>
+        <div class="example-item" onclick="loadExample('https://arxiv.org/abs/2301.00001')">
+          <div class="example-url"><i class="fas fa-graduation-cap"></i> Research Paper</div>
+          <div class="example-desc">Academic paper with complex formatting and references</div>
+        </div>
+        <div class="example-item" onclick="loadExample('https://www.nytimes.com')">
+          <div class="example-url"><i class="fas fa-building"></i> News Website</div>
+          <div class="example-desc">Major news site with rich media content</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div class="card">
+        <h2><i class="fas fa-rocket"></i> Extract Web Content</h2>
+        <form id="extractForm">
+          <div class="form-group">
+            <label for="url"><i class="fas fa-link"></i> Website URL</label>
+            <input type="url" id="url" placeholder="https://example.com" required>
+          </div>
+
+          <div class="form-group">
+            <label for="format"><i class="fas fa-cogs"></i> Output Format</label>
+            <select id="format">
+              <option value="json">📄 JSON (Full metadata & links)</option>
+              <option value="markdown">📝 Markdown (Clean text)</option>
+              <option value="html">🌐 HTML (Cleaned HTML)</option>
+              <option value="text">📖 Plain Text</option>
+              <option value="screenshot">📸 Screenshot URL</option>
+              <option value="pdf">📕 PDF Content</option>
+            </select>
+          </div>
+
+          <button type="submit" class="btn" id="extractBtn">
+            <i class="fas fa-play"></i>
+            Extract Content
+          </button>
+        </form>
+
+        <div id="loading" class="loading">
+          <i class="fas fa-spinner"></i>
+          <div>Extracting content...</div>
+        </div>
+
+        <div id="result" class="result" style="display: none;">
+          <div class="result-header">
+            <div class="result-title">
+              <i class="fas fa-check-circle"></i>
+              Extraction Result
+            </div>
+            <button class="copy-btn" onclick="copyResult()">
+              <i class="fas fa-copy"></i> Copy
+            </button>
+          </div>
+          <div id="resultContent"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><i class="fas fa-chart-line"></i> API Status</h2>
+
+        <div class="api-status">
+          <div class="status-header" id="apiStatusHeader">
+            <i class="fas fa-circle"></i>
+            Checking API status...
+          </div>
+          <div class="status-details" id="apiStatusDetails"></div>
+        </div>
+
+        <div class="queue-info" id="queueInfo" style="display: none;">
+          <div class="queue-item">
+            <span class="queue-value" id="totalRequests">-</span>
+            <span class="queue-label">Total</span>
+          </div>
+          <div class="queue-item">
+            <span class="queue-value" id="activeRequests">-</span>
+            <span class="queue-label">Active</span>
+          </div>
+          <div class="queue-item">
+            <span class="queue-value" id="pendingRequests">-</span>
+            <span class="queue-label">Pending</span>
+          </div>
+          <div class="queue-item">
+            <span class="queue-value" id="completedRequests">-</span>
+            <span class="queue-label">Completed</span>
+          </div>
+        </div>
+
+        <div class="links">
+          <a href="/queue-ui" class="link-btn">
+            <i class="fas fa-tasks"></i>
+            Queue Monitor
+          </a>
+          <a href="https://github.com/postphotos/dearreader" target="_blank" class="link-btn">
+            <i class="fab fa-github"></i>
+            View Source
+          </a>
+          <a href="/api-docs" class="link-btn">
+            <i class="fas fa-book"></i>
+            API Docs
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="status" class="status"></div>
+
+  <script>
+    // Load example URL
+    function loadExample(url) {
+      document.getElementById('url').value = url;
+      showStatus('Example URL loaded!', 'success');
+    }
+
+    // Copy result to clipboard
+    async function copyResult() {
+      const resultContent = document.getElementById('resultContent');
+      try {
+        await navigator.clipboard.writeText(resultContent.textContent);
+        showStatus('Copied to clipboard!', 'success');
+      } catch (err) {
+        showStatus('Failed to copy', 'error');
+      }
+    }
+
+    // Show status message
+    function showStatus(message, type = 'info') {
+      const status = document.getElementById('status');
+      status.textContent = message;
+      status.className = `status ${type}`;
+      status.style.display = 'block';
+
+      setTimeout(() => {
+        status.style.display = 'none';
+      }, 3000);
+    }
+
+    // Check API status on page load
+    async function checkAPIStatus() {
+      try {
+        const response = await fetch('/queue');
+        const data = await response.json();
+
+        const statusHeader = document.getElementById('apiStatusHeader');
+        const statusDetails = document.getElementById('apiStatusDetails');
+
+        statusHeader.innerHTML = `
+          <i class="fas fa-circle" style="color: #10b981;"></i>
+          <span class="status-online">API Online</span>
+        `;
+
+        statusDetails.innerHTML = `
+          <div><strong>Status:</strong> ${data.status}</div>
+          <div><strong>Uptime:</strong> ${Math.round(data.uptime / 60)} minutes</div>
+          <div><strong>Memory:</strong> ${Math.round(data.memory_usage.heapUsed / 1024 / 1024)} MB</div>
+        `;
+
+        // Show queue info
+        document.getElementById('queueInfo').style.display = 'grid';
+        document.getElementById('totalRequests').textContent = data.total_requests;
+        document.getElementById('activeRequests').textContent = data.active_requests;
+        document.getElementById('pendingRequests').textContent = data.pending_requests;
+        document.getElementById('completedRequests').textContent = data.completed_requests;
+
+      } catch (error) {
+        const statusHeader = document.getElementById('apiStatusHeader');
+        const statusDetails = document.getElementById('apiStatusDetails');
+
+        statusHeader.innerHTML = `
+          <i class="fas fa-circle" style="color: #ef4444;"></i>
+          <span class="status-offline">API Offline</span>
+        `;
+
+        statusDetails.innerHTML = `
+          <div>Unable to connect to API server</div>
+          <div style="margin-top: 8px; font-size: 13px; color: #6b7280;">
+            Make sure the server is running on port 3000
+          </div>
+        `;
+
+        document.getElementById('queueInfo').style.display = 'none';
+      }
+    }
+
+    // Handle form submission
+    document.getElementById('extractForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const url = document.getElementById('url').value;
+      const format = document.getElementById('format').value;
+      const extractBtn = document.getElementById('extractBtn');
+
+      if (!url) {
+        showStatus('Please enter a URL', 'error');
+        return;
+      }
+
+      const loading = document.getElementById('loading');
+      const result = document.getElementById('result');
+      const resultContent = document.getElementById('resultContent');
+
+      // Update UI for loading state
+      extractBtn.disabled = true;
+      extractBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Extracting...';
+      loading.style.display = 'block';
+      result.style.display = 'none';
+      result.className = 'result';
+
+      try {
+        let headers = {};
+        let endpoint = `/${encodeURIComponent(url)}`;
+
+        switch (format) {
+          case 'json':
+            headers['Accept'] = 'application/json';
+            break;
+          case 'markdown':
+            headers['Accept'] = 'text/plain';
+            break;
+          case 'html':
+            headers['X-Respond-With'] = 'html';
+            break;
+          case 'text':
+            headers['X-Respond-With'] = 'text';
+            break;
+          case 'screenshot':
+            headers['X-Respond-With'] = 'screenshot';
+            break;
+          case 'pdf':
+            headers['X-Respond-With'] = 'pdf';
+            break;
+        }
+
+        const response = await fetch(endpoint, { headers });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        let content;
+        const contentType = response.headers.get('content-type');
+
+        if (contentType && contentType.includes('application/json')) {
+          const jsonData = await response.json();
+          content = JSON.stringify(jsonData, null, 2);
+          result.classList.add('success');
+        } else if (format === 'screenshot' || format === 'pdf') {
+          // Handle binary content or URLs
+          const textContent = await response.text();
+          if (textContent.startsWith('http')) {
+            content = `Screenshot/PDF URL: ${textContent}
+
+📎 <a href="${textContent}" target="_blank">Open in new tab</a>`;
+          } else {
+            content = textContent;
+          }
+          result.classList.add('success');
+        } else {
+          content = await response.text();
+          result.classList.add('success');
+        }
+
+        resultContent.innerHTML = content;
+        result.style.display = 'block';
+        showStatus('Content extracted successfully!', 'success');
+
+      } catch (error) {
+        resultContent.textContent = `❌ Error: ${error.message}`;
+        result.className = 'result error';
+        result.style.display = 'block';
+        showStatus('Extraction failed', 'error');
+      } finally {
+        loading.style.display = 'none';
+        extractBtn.disabled = false;
+        extractBtn.innerHTML = '<i class="fas fa-play"></i> Extract Content';
+      }
+    });
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+      checkAPIStatus();
+      // Refresh API status every 30 seconds
+      setInterval(checkAPIStatus, 30000);
+    });
+  </script>        let content;
+        const contentType = response.headers.get('content-type');
+
+        if (contentType && contentType.includes('application/json')) {
+          content = JSON.stringify(await response.json(), null, 2);
+        } else {
+          content = await response.text();
+        }
+
+        result.textContent = content;
+        result.style.display = 'block';
+        showStatus('Content extracted successfully!', 'success');
+
+      } catch (error) {
+        result.textContent = `Error: ${error.message}`;
+        result.className = 'result error';
+        result.style.display = 'block';
+        showStatus('Extraction failed', 'error');
+      } finally {
+        loading.style.display = 'none';
+      }
+    });
+
+    // Initialize
+    checkAPIStatus();
+    checkQueueStatus();
+
+    // Refresh queue status every 30 seconds
+    setInterval(checkQueueStatus, 30000);
+  </script>
+</body>
+</html>
       backdrop-filter: blur(10px);
       border-radius: 20px;
       padding: 30px;

@@ -10,6 +10,8 @@ Requirements:
 
 Usage:
     uv run demo.py
+    uv run demo.py --test-all
+    uv run demo.py --url "https://example.com"
 """
 
 import os
@@ -17,6 +19,7 @@ import requests
 import json
 import time
 import sys
+import argparse
 from typing import Dict, Any, Optional
 from urllib.parse import quote
 
@@ -304,91 +307,117 @@ def test_basic_api(reader: ReaderAPI):
 
 
 def main():
-    """Main demo function"""
-    print("🚀 DearReader API Demo Script")
-    print("="*50)
-    print("💡 Setup instructions:")
-    print("   uv pip install requests")
-    print("   docker run -p 3000:3000 -v ./storage:/app/local-storage reader-app")
-    print("="*50)
+    """Main demo function with command line argument support"""
+    parser = argparse.ArgumentParser(
+        description="DearReader API Testing Script",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                           # Run full demo with multiple test URLs
+  %(prog)s --url https://example.com # Test specific URL
+  %(prog)s --test-all               # Run comprehensive tests
+  %(prog)s --format json            # Test only JSON format
+  %(prog)s --server-only            # Test only server connectivity
+        """
+    )
+
+    parser.add_argument('--url', type=str,
+                       help='Test specific URL instead of default test URLs')
+    parser.add_argument('--format', choices=['json', 'markdown', 'html', 'text', 'screenshot'],
+                       help='Test only specific format')
+    parser.add_argument('--test-all', action='store_true',
+                       help='Run comprehensive tests including error handling')
+    parser.add_argument('--server-only', action='store_true',
+                       help='Test only server connectivity and basic endpoints')
+    parser.add_argument('--base-url', type=str,
+                       help='Override default base URL (default: http://127.0.0.1:3000)')
+
+    args = parser.parse_args()
+
+    print("🚀 DearReader API Testing Script")
+    print("="*60)
 
     # Initialize API client
-    reader = ReaderAPI()
+    reader = ReaderAPI(args.base_url)
 
     # Check server status
     if not check_server_status(reader):
+        print("\n❌ Server is not running. Please start it first:")
+        print("   cd js && npm run serve")
+        print("   or")
+        print("   docker run -p 3000:3000 -v ./storage:/app/local-storage reader-app")
         sys.exit(1)
 
-    print("\n🎯 Testing DearReader API functionality...")
-    print("="*50)
+    # Handle different test modes
+    if args.server_only:
+        print("\n🔍 Testing server connectivity only...")
+        test_basic_api(reader)
+        return
 
-    # Test URLs focused on reading and education
-    test_urls = [
-        "https://www.ala.org",  # American Library Association
-        "https://www.readingpartners.org",  # Reading Partners
-        "https://literacy.org",  # ProLiteracy
-        "https://en.wikipedia.org/wiki/Reading"  # Reading on Wikipedia
-    ]
+    if args.url:
+        # Test specific URL
+        test_urls = [args.url]
+        print(f"\n🎯 Testing specific URL: {args.url}")
+    else:
+        # Use default test URLs
+        test_urls = [
+            "https://httpbin.org/html",  # Simple, reliable test page
+            "https://en.wikipedia.org/wiki/Web_scraping"  # Technical content
+        ]
+        print(f"\n🎯 Testing with {len(test_urls)} default URLs")
+
+    print("="*60)
 
     # Test basic endpoints first
-    test_basic_api(reader)
+    if not args.url or args.test_all:
+        test_basic_api(reader)
 
-    print("\n📚 Testing reading-focused websites...")
-    print("="*50)
-
+    # Test specific format or all formats
     for url in test_urls:
         try:
             print(f"\n🔍 Testing: {url}")
+            print("-" * 40)
 
-            # Test JSON response with links and images
-            print("  📊 Testing JSON API...")
-            json_data = reader.get_json(url)
+            if args.format:
+                # Test only specific format
+                if args.format == 'json':
+                    demo_json_api(reader, url)
+                elif args.format == 'markdown':
+                    demo_markdown_api(reader, url)
+                elif args.format == 'screenshot':
+                    demo_screenshot_api(reader, url)
+            else:
+                # Test all formats
+                demo_json_api(reader, url)
+                time.sleep(1)  # Be respectful
 
-            # Verify we got valid JSON response
-            if 'data' in json_data:
-                data = json_data['data']
-                title = data.get('title', 'No title')
-                links = data.get('links', {})
-                images = data.get('images', {})
+                demo_markdown_api(reader, url)
+                time.sleep(1)
 
-                print(f"    ✅ Title: {title}")
-                print(f"    🔗 Links found: {len(links)}")
-                print(f"    🖼️  Images found: {len(images)}")
+                demo_screenshot_api(reader, url)
+                time.sleep(1)
 
-                # Show some sample links
-                if links:
-                    sample_links = list(links.items())[:3]
-                    for link_url, link_text in sample_links:
-                        print(f"      - {link_text[:50]}... -> {link_url[:60]}...")
-
-            # Test markdown response
-            print("  📝 Testing Markdown API...")
-            markdown = reader.get_markdown(url)
-            print(f"    ✅ Markdown length: {len(markdown)} chars")
-
-            # Brief pause between requests to be respectful
-            time.sleep(1)
-
+        except KeyboardInterrupt:
+            print("\n⏹️  Testing interrupted by user")
+            break
         except Exception as e:
-            print(f"    ❌ Error testing {url}: {e}")
+            print(f"❌ Error testing {url}: {e}")
+            if not args.test_all:
+                continue
 
-    print("\n⚠️  Note: Some websites may have rate limiting or blocking")
-    print("   The API handles these cases gracefully with appropriate error responses")
+    # Run additional tests if requested
+    if args.test_all:
+        print("\n🧪 Running additional comprehensive tests...")
+        demo_error_handling(reader)
+        demo_pdf_status(reader)
 
-    print_separator("Demo Complete!")
-    print("🎉 DearReader API functionality confirmed!")
-    print("\n💡 The DearReader API is working for:")
-    print("   ✅ Root endpoint (/)")
-    print("   ✅ JSON responses with links and metadata")
-    print("   ✅ Markdown content extraction")
-    print("   ✅ Error handling for various scenarios")
-    print("   ✅ Reading-focused content parsing")
-    print("   ✅ Queue API endpoint (/queue)")
-    print("   ✅ Queue monitoring UI (/queue-ui)")
-    print("\n🔗 Additional endpoints to explore:")
-    print(f"   📊 Queue Status: {reader.base_url}/queue")
-    print(f"   📈 Queue Monitor: {reader.base_url}/queue-ui")
-    print(f"   🏠 Main Index: {reader.base_url}/")
+    print("\n" + "="*60)
+    print("✅ API Testing Complete!")
+    print("💡 Tips:")
+    print("   • Use --url to test specific websites")
+    print("   • Use --format to test only specific output formats")
+    print("   • Use --server-only for quick connectivity tests")
+    print("   • Use --test-all for comprehensive testing including error cases")
 
 
 if __name__ == "__main__":
