@@ -7,28 +7,43 @@ It converts any URL to an LLM-friendly input with `http://127.0.0.1:3001/https:/
 
 **Single-Purpose Focus**: DearReader is designed specifically for converting individual webpages in a queue - NOT for storing or processing entire websites. For full-site crawling, indexing, or bulk processing, you'll need other specialized tools. No LLM processing happens directly here; this is purely a content extraction and formatting service.
 
+## 🚀 Quick Start
+
+### ⚡ Lightning Fast (Recommended)
+```bash
+./scripts/quickstart.sh
+```
+**That's it!** Automatically sets up everything and starts the development server at http://localhost:3001
+
+### 📋 Manual Setup
+```bash
+# 1. Setup environment
+./dearreader setup
+
+# 2. Start development
+./dearreader dev
+
+# 3. Open browser
+open http://localhost:3001
+```
+
 ## 🏗️ Project Architecture
 
-The project follows a monolith architecture with the following structure:
+The project follows a clean, organized structure:
 
 ```
-reader/
-├── docker/               # Docker-related files
-│   └── Dockerfile        # Main Dockerfile for building the service
-├── js/                   # JavaScript source code
-│   ├── functions/        # Core application code
-│   │   ├── src/          # TypeScript source code
-│   │   ├── public/       # Public assets
-│   │   └── package.json  # Node.js dependencies
-├── py/                   # Python utilities and tests
-│   ├── app.py            # Main runner script
-│   ├── demo.py           # Demo script
-│   └── speedtest.py      # Performance testing script
-├── storage/              # Local storage for screenshots (created during setup)
-├── config.yaml           # Application configuration
-├── setup.sh              # Setup script
-├── run.sh                # Application runner script
-└── README.md             # This documentation
+dearreader/
+├── dearreader          # 🚀 Unified CLI (main entry point)
+├── config.yaml         # ⚙️ Configuration
+├── docker/             # 🐳 Docker setup
+├── docs/               # 📚 Documentation
+├── js/                 # 🟢 Node.js application
+├── py/                 # 🐍 Python utilities
+├── scripts/            # 🛠️ Utility scripts
+│   ├── quickstart.sh   # ⚡ One-click setup
+│   ├── cleanup.sh      # 🧹 Cleanup utility
+│   └── legacy/         # 📜 Old scripts (deprecated)
+└── storage/            # 💾 Local storage
 ```
 
 ## 🚀 Enhanced Features
