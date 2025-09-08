@@ -192,7 +192,7 @@ curl "http://localhost:3001/json/https://example.com/document.pdf"
 
 ### 🛠️ The Workshop: Manual Setup & Development
 
-[*Contributions welcome!*](./docs/CONTRIBUTING.md)
+[*Contributions welcome!*](CONTRIBUTING.md)
 
 > **📝 A Note for Windows Users**
 > We strongly recommend using **WSL2** for the best experience. If running commands from PowerShell or `cmd`, you may need to prefix them with `bash -c "..."` if the scripts fail to execute directly (e.g., `bash -c "./dearreader dev"`).
