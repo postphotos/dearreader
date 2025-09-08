@@ -70,9 +70,9 @@ echo ""
 echo "📋 Optional Tools:"
 echo ""
 
-# Check optional tools
-check_tool "uv" "Fast Python package manager" "https://github.com/astral-sh/uv"
-check_tool "git" "Version control" "https://git-scm.com/"
+# Check optional tools (don't count as missing for setup)
+check_tool "uv" "Fast Python package manager" "https://github.com/astral-sh/uv" || true
+check_tool "git" "Version control" "https://git-scm.com/" || true
 
 echo ""
 echo "🌐 Network Check:"

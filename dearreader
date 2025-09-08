@@ -199,10 +199,15 @@ cmd_setup() {
     if ! command -v uv >/dev/null 2>&1; then
         log_warn "uv not found. Installing uv for faster Python package management..."
         if ! run_cmd "curl -LsSf https://astral.sh/uv/install.sh | sh" "Installing uv"; then
-            log_error "Failed to install uv. Please install it manually: https://github.com/astral-sh/uv"
-            exit 1
+            log_warn "Failed to install uv automatically. Will use pip as fallback."
+            USE_UV=false
+            log_info "USE_UV set to: $USE_UV"
+        else
+            export PATH="$HOME/.cargo/bin:$PATH"
+            USE_UV=true
         fi
-        export PATH="$HOME/.cargo/bin:$PATH"
+    else
+        USE_UV=true
     fi
 
     # Create necessary directories
@@ -231,7 +236,12 @@ EOF
 
     # Setup Python environment
     log_subheader "Setting up Python Environment"
-    run_cmd "uv venv --clear" "Creating Python virtual environment"
+    log_info "USE_UV is: $USE_UV"
+    if [ "$USE_UV" = true ]; then
+        run_cmd "uv venv --clear" "Creating Python virtual environment"
+    else
+        run_cmd "python -m venv .venv" "Creating Python virtual environment (using venv)"
+    fi
 
     # Activate virtual environment (cross-platform)
     if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
@@ -242,7 +252,11 @@ EOF
     log_success "Python virtual environment ready"
 
     # Install Python dependencies
-    run_cmd "uv pip install -r py/requirements.txt" "Installing Python dependencies"
+    if [ "$USE_UV" = true ]; then
+        run_cmd "uv pip install -r py/requirements.txt" "Installing Python dependencies"
+    else
+        run_cmd "pip install -r py/requirements.txt" "Installing Python dependencies (using pip)"
+    fi
 
     # Install Node.js dependencies
     log_subheader "Setting up Node.js Environment"
@@ -290,11 +304,15 @@ cmd_test() {
             run_cmd "docker-compose --profile dev run --rm js-test" "Running JavaScript tests" true
             ;;
         python)
-            if ! command -v uv >/dev/null 2>&1; then
-                log_error "uv not found. Please run setup first"
+            if ! command -v uv >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; then
+                log_error "Neither uv nor python found. Please run setup first"
                 exit 1
             fi
-            run_cmd "uv run py/app.py tests --verbose" "Running Python tests" true
+            if command -v uv >/dev/null 2>&1; then
+                run_cmd "uv run py/app.py tests --verbose" "Running Python tests" true
+            else
+                run_cmd "python py/app.py tests --verbose" "Running Python tests (using python)" true
+            fi
             ;;
         all)
             log_subheader "Running JavaScript Tests"
@@ -313,8 +331,15 @@ cmd_test() {
                     log_error "Python tests failed"
                     [ "$FORCE" != true ] && exit 1
                 fi
+            elif command -v python >/dev/null 2>&1; then
+                if run_cmd "python py/app.py tests --verbose" "Running Python tests (using python)" true; then
+                    log_success "Python tests passed"
+                else
+                    log_error "Python tests failed"
+                    [ "$FORCE" != true ] && exit 1
+                fi
             else
-                log_warn "uv not found, skipping Python tests"
+                log_warn "Neither uv nor python found, skipping Python tests"
             fi
 
             log_success "All tests completed!"

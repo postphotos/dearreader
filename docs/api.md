@@ -6,7 +6,7 @@ DearReader provides a simple HTTP API for extracting web page content and managi
 
 ### Base URL
 ```
-http://localhost:3000
+http://localhost:3001
 ```
 
 ### Endpoint: `/[url]`
@@ -264,7 +264,7 @@ curl "/status"
 ```json
 {
   "status": "healthy",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "uptime": 3600,
   "services": {
     "crawler": "running",

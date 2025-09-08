@@ -20,7 +20,6 @@
     "noImplicitAny": false,
     "noImplicitOverride": true,
     "noEmit": false,
-    "types": ["node"],
         "forceConsistentCasingInFileNames": true
     },
     "compileOnSave": true,    "include": ["src/**/*.ts"],

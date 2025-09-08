@@ -11,7 +11,7 @@ The system is designed for local deployment with Docker containerization and fol
 ### Core Components
 
 #### 1. **Web Server (Express.js)**
-- **Location**: `js/functions/src/server.ts`
+- **Location**: `js/src/server.ts`
 - **Purpose**: Main HTTP server handling API requests
 - **Port**: 3001 (local development)
 - **Endpoints**:
@@ -21,7 +21,7 @@ The system is designed for local deployment with Docker containerization and fol
   - `POST /api/crawl` - Advanced crawling with options
 
 #### 2. **Crawler Engine (Puppeteer)**
-- **Location**: `js/functions/src/services/puppeteer.ts`
+- **Location**: `js/src/services/puppeteer.ts`
 - **Purpose**: Headless browser-based web scraping
 - **Features**:
   - JavaScript rendering support
@@ -30,21 +30,21 @@ The system is designed for local deployment with Docker containerization and fol
   - Robots.txt compliance checking
 
 #### 3. **Queue Management System**
-- **Location**: `js/functions/src/services/queue-manager.ts`
+- **Location**: `js/src/services/queue-manager.ts`
 - **Purpose**: Manages crawling requests and rate limiting
 - **Features**:
   - Request queuing and prioritization
   - Rate limiting per domain
   - Concurrent request management
 
-#### 4. **Database Layer (Firestore/Local)**
-- **Location**: `js/functions/src/shared/lib/firestore.ts`
-- **Purpose**: Data persistence for crawled content
-- **Current State**: Configured for local Firestore emulator
-- **Collections**:
-  - `crawled` - Cached crawled content
-  - `searched` - Search history
-  - `domain-blockade` - Domain blocking rules
+#### 4. **Database Layer (Local Storage)**
+- **Location**: `js/src/shared/lib/storage.ts`
+- **Purpose**: Local data persistence for crawled content
+- **Current State**: Local filesystem-based storage
+- **Features**:
+  - Content caching
+  - Screenshot storage
+  - Metadata persistence
 
 #### 5. **Content Processing Services**
 - **PDF Extraction**: `js/functions/src/services/pdf-extract.ts`
@@ -95,22 +95,26 @@ dearreader/
 ├── docker/                    # Docker configuration
 │   ├── Dockerfile            # Multi-stage build (dev/prod)
 │   └── docker-compose.yml    # Service orchestration
-├── js/functions/             # Main application
+├── js/                       # Main Node.js/TypeScript application
 │   ├── src/
 │   │   ├── server.ts         # Express server
-│   │   ├── services/         # Core services
-│   │   ├── shared/           # Shared utilities
-│   │   ├── db/              # Database models
+│   │   ├── services/         # Core services (Puppeteer, queue, etc.)
+│   │   ├── shared/           # Shared utilities and types
+│   │   ├── db/              # Database/storage models
 │   │   └── utils/           # Helper functions
-│   ├── public/              # Web assets
-│   └── package.json         # Dependencies
+│   ├── public/              # Web assets (HTML, CSS, JS)
+│   ├── build/               # Compiled TypeScript output
+│   └── package.json         # Node.js dependencies
 ├── py/                      # Python utilities
-│   ├── app.py              # Main runner
-│   ├── demo.py             # Demo script
-│   └── speedtest.py        # Performance tests
+│   ├── app.py              # Main runner script
+│   ├── demo.py             # API demo script
+│   ├── speedtest.py        # Performance testing
+│   ├── tests/              # Python test files
+│   ├── requirements.txt    # Python dependencies
+│   └── pyproject.toml      # Python project configuration
 ├── storage/                # Local file storage
 ├── docs/                   # Documentation
-└── config.yaml            # Application config
+└── config.yaml            # Application configuration
 ```
 
 ### API Architecture
@@ -139,17 +143,17 @@ dearreader/
 ### Testing Architecture
 
 #### Unit Tests
-- **Location**: `js/functions/src/**/__tests__/`
+- **Location**: `js/src/**/__tests__/`
 - **Framework**: Mocha + Chai
 - **Coverage**: Core services and utilities
 
 #### Integration Tests
-- **Location**: `js/functions/test/`
+- **Location**: `js/test/`
 - **Purpose**: End-to-end API testing
-- **Environment**: Isolated Docker containers
+- **Environment**: Local Node.js runtime
 
 #### Python Tests
-- **Location**: `py/test_*.py`
+- **Location**: `py/tests/`
 - **Purpose**: Utility function testing
 - **Framework**: pytest
 
@@ -158,22 +162,24 @@ dearreader/
 #### Local Development
 ```bash
 # Start development environment
-./run.sh dev
+cd js && npm run build:watch &
+cd js && npm run serve &
 
 # Run tests
-./run.sh test
+cd js && npm test
+cd py && python demo.py
 
 # Stop all services
-./run.sh stop
+pkill -f "node.*serve"
 ```
 
 #### Production Deployment
 ```bash
-# Build production image
-./run.sh build
+# Build for production
+cd js && npm run build
 
 # Start production server
-./run.sh prod
+cd js && npm run serve
 ```
 
 ### Monitoring & Observability

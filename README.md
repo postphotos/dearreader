@@ -1,248 +1,139 @@
-# 📚 Dear R### ⚡ Lightning Fast (Recommended)
-```bash
-# 1. Verify your system is ready
-./scripts/verify.sh
+# 🚀 DearReader: A New Chapter in Web Content Extraction
 
-# 2. One-click setup and start (works from anywhere!)
+**Parse ANY crawlable URL into clean markdown.**
+
+### Table of Contents
+
+1.  [Architectural Philosophy](#-architectural-philosophy)
+2.  [Why DearReader?](#-why-dearreader)
+3.  [From Prose to Pipelines: Workflow Examples](#-from-prose-to-pipelines-what-you-can-build)
+4.  [🚀 Quick Start: A One-Act Play](#-quick-start-a-one-act-play)
+5.  [📖 The Table of Contents: API Usage](#-the-table-of-contents-api-usage)
+6.  [🛠️ The Workshop: Manual Setup & Development](#-the-workshop-manual-setup--development)
+7.  [✍️ Author's Intent: Architectural Scope](#️-authors-intent-architectural-scope)
+8.  [🙏 Acknowledgments](#-acknowledgments)
+9.  [📜 License](#-license)
+
+***
+
+### 🏛️ Architectural Philosophy
+
+`DearReader` embraces the UNIX philosophy: do one thing and do it exceptionally well. Instead of a single, complex tool, we provide a robust building block for a modern, modular stack.
+
+```
++--------------------------+         +--------------------------+         +--------------------------+
+|      ORCHESTRATOR        |         |      DEARREADER API      |         |     YOUR DESTINATION     |
+| (e.g., N8n, Python script|  ----->  | (Runs Locally via Docker)|  ----->  | (e.g., Vector DB,        |
+|  , Zapier, Message Queue)|         | - Takes a single URL     |         |  PostgreSQL, Filesystem)|
+| - Manages URL queue      |  <HTTP> | - Returns clean JSON     |  <Data> | - Stores structured data |
+| - Handles retry logic    |  <Req.> |   /Markdown/HTML         |         | - Powers your AI agent   |
+| - Calls DearReader API   |         |                          |         |                          |
++--------------------------+         +--------------------------+         +--------------------------+
+```
+
+`DearReader` is intentionally designed to do one thing perfectly: **process a single URL** and do it consistently. You manage the "what" and "when" (the list of URLs, the schedule). `DearReader` perfects the "how" (the extraction).
+
+There is a built-in queue within the API runner, but the overall responsibility of managing URL queues, implementing retry logic, and performing recursive site crawling is delegated to your chosen orchestrator (like a Python script or N8n). This gives you maximum flexibility and power.
+
+### ✨ Why DearReader?
+
+`DearReader` is a powerful, locally-hosted microservice that handles the most difficult part of web data extraction: running a headless browser, parsing messy HTML, and extracting clean, structured content. If you have the compute, you might as well use it! 
+
+By decoupling the **parsing engine** (`DearReader`) from the **orchestration logic** (your script, N8n, etc.), you can build faster, more reliable, and easier-to-maintain data pipelines. You provide a URL, however you get it; It returns LLM-friendly JSON, Markdown, or HTML, including metadata, links, and more.
+
+*   🏠 **Make a private archive for yourself.** Runs 100% locally in Docker. No data ever leaves your infrastructure. No API keys, no rate limits, no third-party dependencies. Your data is your own first edition.
+*   🧐 **Read between the `<div>`s.** `DearReader` uses a battle-tested engine to extract the core story, intelligently ignoring ads, pop-ups, sidebars, and navigational cruft.
+*   ⚡️ **Work lightning fast.** Optimized Debian-based Docker image for high performance and excellent Chromium compatibility. Turn the page on slow, brittle scrapers.
+*   📚 **Multi-Genre Input AND Output.** Parses HTML and PDFs, and get content as you want: clean Markdown, richly structured JSON with metadata, simplified HTML, or plain text.
+*   📸 **Archival Snapshots.** Capture full-page or viewport-sized screenshots of any URL for archival or visual analysis.
+
+[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=flat&logo=docker&logoColor=white)](https://docker.com)
+[![Node.js](https://img.shields.io/badge/node.js-6DA55F?style=flat&logo=node.js&logoColor=white)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=flat&logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![Python](https://img.shields.io/badge/python-3670A0?style=flat&logo=python&logoColor=ffdd54)](https://python.org)
+
+Unlike the previous versions, we selected Alpine linux to reduce OS overhead and greatly tweaked the Puppeteer performance to make a fast, reliable crawl output.
+
+### 📚 Ideas of what to build with DearReader
+
+`DearReader` is a universal translator for the web. Here are a few ideas you might try:
+
+#### 1. For the Digital Humanist & Academic Researcher
+A researcher needs to analyze 500 news articles about a topic (e.g. reviews on the newest season of your favorite binge TV drama). Instead of weeks of manual copy-pasting, a Python script feeds the URLs to `DearReader`. It gets back perfectly structured JSON with clean content for text analysis and all the metadata (`author`, `publication date`) for automatic citation and cataloging.
+
+And now? You can run more experiements, more quickly.
+
+#### 2. For the SEO & Web Migration Specialist
+An agency is migrating a 10,000-page legacy website for a history non-profit organization. The staging site is missing something critical: Perhaps categories or related posts. With an Orchestrator, you can point a script at the old sitemap, and for each URL, `DearReader` returns clean JSON containing the title, description, metadata, and Markdown content. That can be parsed and fed directly into the new CMS's import API, or transformation steps with an LLM can be broguht along the way. 
+
+And now? A multi-month nightmare becomes a single, repeatable script.
+
+#### 3. For the Educator & Teacher
+A teacher wants students to analyze an article about a topic like Book Ban Month, but each live site they visit is a minefield of ads and distracting comments. They gather an assortment of URLS and use A simple internal tool to make structured `GET` requests to the local `DearReader` instance.
+
+And now? They've got clean, ad-free Markdown versions of articles - perfect for classroom use.
+
+#### 4. For the AI Developer Building a RAG System
+A developer is building a "chat with your docs" agent. A generic scraper would pollute the vector database with irrelevant navigation links. Instead, a simple workflow sends each documentation URL to `DearReader`, which returns only the core article content.
+
+And now? A vastly more accurate and efficient RAG system.
+
+### 🚀 Quick Start
+
+Get your instance running in under a minute.
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/your-repo/dearreader.git
+cd dearreader
+
+# 2. Run the one-click setup and start script
 ./scripts/quickstart.sh
 ```
-**That's it!** Automatically sets up everything and starts the development server at http://localhost:3001hanced Local Deployment Edition
 
-This is a feature-enhanced fork of [Jina AI's Reader](https://github.com/jina-ai/reader) optimized for local deployment and development. This fork uses a Debian-based Docker image (instead of Alpine) for better compatibility with Chromium/Puppeteer dependencies and native libraries, ensuring more reliable web scraping operations.
+**That's it.** The API is now live at `http://localhost:3001`.
 
-## 🎯 What it does
-It converts any URL to an LLM-friendly input with `http://127.0.0.1:3001/https://www.ala.org`. Get improved output for your agent and RAG systems at no cost. This tool helps you prepare web content for Large Language Models, making it easier to process and analyze online information.
-
-**Single-Purpose Focus**: DearReader is designed specifically for converting individual webpages in a queue - NOT for storing or processing entire websites. For full-site crawling, indexing, or bulk processing, you'll need other specialized tools. No LLM processing happens directly here; this is purely a content extraction and formatting service.
-
-## 🚀 Quick Start
-
-### ⚡ Lightning Fast (Recommended)
+**Test your new engine:**
 ```bash
-# 1. Verify your system is ready
-./scripts/verify.sh
+# Request a URL and get back structured JSON
+curl -H "Accept: application/json" "http://localhost:3001/https://www.ala.org"
 
-# 2. One-click setup and start
-./scripts/quickstart.sh
+# Test PDF extraction
+curl "http://localhost:3001/json/https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
 ```
-**That's it!** Automatically verifies, sets up everything, and starts the development server at http://localhost:3001
 
-### 📋 Manual Setup
+**Run PDF functionality tests:**
 ```bash
-# 1. Check system requirements
-./scripts/verify.sh
+# Test PDF extraction directly
+cd js && node pdf-demo.js
 
-# 2. Setup environment
-./dearreader setup
-
-# 3. Start development
-./dearreader dev
-
-# 4. Open browser
-open http://localhost:3001
+# Run comprehensive PDF tests
+cd js && node test-pdf-comprehensive.js
 ```
 
-## 🏗️ Project Architecture
+### 📖 The Table of Contents: API Usage
 
-The project follows a clean, organized structure:
+Interact with `DearReader` via simple `GET` requests.
 
-```
-dearreader/
-├── dearreader          # 🚀 Unified CLI (main entry point)
-├── config.yaml         # ⚙️ Configuration
-├── docker/             # 🐳 Docker setup
-├── docs/               # 📚 Documentation
-├── js/                 # 🟢 Node.js application
-├── py/                 # 🐍 Python utilities
-├── scripts/            # 🛠️ Utility scripts
-│   ├── quickstart.sh   # ⚡ One-click setup
-│   ├── cleanup.sh      # 🧹 Cleanup utility
-│   └── legacy/         # 📜 Old scripts (deprecated)
-└── storage/            # 💾 Local storage
-```
+**Base Endpoint:** `http://localhost:3001/{URL_TO_PROCESS}`
 
-## 🚀 Enhanced Features
-- 🏠 Runs locally using Docker with optimized Debian base image
-- 🔑 No API keys required - works out of the box!
-- 🖼️ Saves screenshots locally instead of uploading to Google Cloud Storage
-- 📥 Provides download URLs for saved screenshots
-- 🌐 Converts web content to LLM-friendly formats with improved JSON API
-- 🧪 **NEW**: Comprehensive test suite for reliability and development
-- 🔗 **NEW**: Enhanced link extraction and metadata parsing
-- 📊 **NEW**: Closer API parity with Jina.ai's cloud service for local crawling
-- 🛠️ **NEW**: Complete development environment setup with Firebase Functions
+You can control the response format using HTTP headers or dedicated URL paths.
 
-## ⚠️ Limitations
-- 📄 Currently does not support parsing PDFs
-
-## 🛠️ Setup & Installation
-
-### Prerequisites
-
-- Docker
-- Node.js v20.x
-- Python 3.8+
-- npm
-
-### Platform Support
-
-- ✅ **Linux**: Full support with Alpine Linux containers
-- ✅ **macOS**: Full support
-- ✅ **Windows**: Full support via WSL or native Docker
-- ✅ **WSL (Windows Subsystem for Linux)**: Recommended for Windows users
-
-**🪟 Windows Users:** Use WSL2 for best experience. See [Windows Setup Guide](docs/setup.md#windows-setup).
-
-### Lightning Fast Setup
-
-**1-Click Setup (Recommended):**
+#### 1. Default (Markdown)
+Returns clean, readable Markdown.
 ```bash
-./scripts/quickstart.sh
+curl "http://localhost:3001/https://bookshop.org/"
 ```
-**This automatically:**
-- ✅ Runs complete setup
-- ✅ Starts development environment
-- ✅ Opens browser to http://localhost:3001
 
-### Manual Setup (Alternative)
-
-1. **One-Command Complete Setup:**
-   ```bash
-   ./dearreader setup
-   ```
-
-2. **Start Development Environment:**
-   ```bash
-   ./dearreader dev
-   ```
-
-3. **Verify Installation:**
-   Open **http://localhost:3001** in your browser to access the web interface.
-
-### Manual Steps (Alternative)
+#### 2. JSON (Recommended)
+Returns structured data with metadata, links, and content. The most powerful format.
 ```bash
-# Create directories
-mkdir -p storage logs
+# Use the Accept header
+curl -H "Accept: application/json" "http://localhost:3001/https://www.rif.org/why-reading-matters"
 
-# Python environment setup
-uv venv --clear
-source .venv/bin/activate  # Linux/Mac
-source .venv/Scripts/activate  # Windows
-uv pip install -r py/requirements.txt
-
-# Node.js dependencies
-npm install --prefix js/
-
-# Docker setup (already handled by ./dearreader setup)
+# Or use the dedicated path
+curl "http://localhost:3001/json/https://www.rif.org/why-reading-matters"
 ```
-
-## � Updating Dependencies
-
-### Python Dependencies
-
-```bash
-pip install -r py/requirements.txt
-```
-
-### Node.js Dependencies
-
-```bash
-cd js/functions
-npm install
-```
-
-## � Docker Deployment
-
-### Building the Docker Image
-
-```bash
-docker build -t reader-app ./docker
-```
-
-### Running the Container
-
-```bash
-docker run -d --name reader-instance -p 3001:3000 -v $(pwd)/storage:/app/local-storage reader-app
-```
-
-For Windows PowerShell, use:
-```powershell
-docker run -d --name reader-instance -p 3001:3000 -v ${PWD}/storage:/app/local-storage reader-app
-```
-
-For Windows Command Prompt, use:
-```cmd
-docker run -d --name reader-instance -p 3001:3000 -v %cd%/storage:/app/local-storage reader-app
-```
-
-For Windows PowerShell, use:
-```powershell
-docker run -d --name reader-instance -p 3001:3000 -v ${PWD}/storage:/app/local-storage reader-app
-```
-
-### Using the DearReader CLI
-
-For a streamlined process:
-```bash
-./dearreader run prod
-```
-
-## 🧪 Testing
-
-### Complete Test Suite
-
-Run all tests in the pipeline:
-```bash
-./dearreader test all
-```
-
-### Individual Test Components
-
-```bash
-# Run npm tests only
-./dearreader test js
-
-# Run Python tests only
-./dearreader test python
-```
-
-### Test Options
-
-- `--verbose`: Show live output from commands
-- `--debug`: Run failed npm tests without timeout for detailed output
-- `--force`: Continue pipeline even if some steps fail
-
-## 🖥️ Usage & API Specification
-
-Once the Docker container is running, you can access the Reader API at `http://127.0.0.1:3001`. The API provides full compatibility with Jina.ai's cloud service.
-
-### Base Endpoint
-```
-http://127.0.0.1:3001/{URL}
-```
-
-### Response Formats
-
-#### 1. 📝 JSON Response (Default)
-Returns structured data with content, metadata, and extracted links:
-
-```bash
-**Basic Usage:**
-```bash
-# Markdown content (default)
-curl "/https://www.ala.org"
-
-# JSON response with metadata
-curl -H "Accept: application/json" "/https://worldliteracyfoundation.org"
-
-# Plain text extraction
-curl "/https://en.wikipedia.org/wiki/Reading"
-
-# Screenshot capture (returns image URL to saved screenshot)
-curl -H "X-Respond-With: screenshot" "/https://www.ala.org/advocacy"
-```
-```
-
 **JSON Response Structure:**
 ```json
 {
@@ -250,202 +141,99 @@ curl -H "X-Respond-With: screenshot" "/https://www.ala.org/advocacy"
   "status": 20000,
   "data": {
     "title": "Page Title",
-    "description": "Page description or excerpt",
-    "url": "https://example.com",
-    "content": "Main content in markdown format",
+    "description": "Page description",
+    "url": "https://www.ala.org/page/...",
+    "content": "Main content in clean markdown format...",
+    "links": { "https://.../link1": "Link Text 1", ... },
+    "images": { "https://.../image1.jpg": "Alt text", ... },
     "metadata": {
-      "title": "Page Title",
-      "description": "Meta description",
       "lang": "en",
-      "siteName": "Site Name",
       "og:title": "Open Graph title",
-      "og:description": "Open Graph description",
-      "og:site_name": "Site Name",
-      "article:author": "Author Name",
-      "article:published_time": "2023-01-01"
-    },
-    "links": {
-      "https://example.com/link1": "Link Text 1",
-      "https://example.com/link2": "Link Text 2"
-    },
-    "images": {
-      "https://example.com/image1.jpg": "Alt text for image"
+      "article:author": "Author Name"
     }
   }
 }
 ```
 
-#### 2. 📝 Markdown Response
-Returns clean markdown content:
+#### 3. Other Formats (via `X-Respond-With` Header)
+-   `html`: Returns cleaned, simplified HTML.
+-   `text`: Returns plain text with no formatting.
+-   `screenshot`: Returns a JSON object with the local path to a viewport-sized screenshot.
+-   `pageshot`: Returns a JSON object with the local path to a full-page screenshot.
 
 ```bash
-curl -H "Accept: text/plain" 'http://127.0.0.1:3001/https://www.ala.org'
-# or
-curl -H "X-Respond-With: markdown" 'http://127.0.0.1:3001/https://worldliteracyfoundation.org'
+# Get simplified HTML
+curl -H "X-Respond-With: html" "http://localhost:3001/https://thepalaceproject.org/"
+
+# Get a full-page screenshot
+curl -H "X-Respond-With: pageshot" "http://localhost:3001/https://www.ala.org"
+# Response: {"code":200, "data":"/app/local-storage/screenshots/pageshot_....png"}
+# Note: This is the path *inside the Docker container*. To access it, you must
+# expose the `storage` volume or build a static file server in front of it.
 ```
 
-#### 3. 🌐 HTML Response
-Returns cleaned HTML (documentElement.outerHTML):
+#### PDF Support
+`DearReader` can extract text content from PDF files automatically. Simply provide a PDF URL:
 
 ```bash
-curl -H "X-Respond-With: html" 'http://127.0.0.1:3001/https://en.wikipedia.org/wiki/Reading'
+# Extract text from a PDF
+curl "http://localhost:3001/https://example.com/document.pdf"
+
+# Get PDF content as JSON
+curl "http://localhost:3001/json/https://example.com/document.pdf"
 ```
 
-#### 4. 📄 Text Response
-Returns plain text (document.body.innerText):
+**PDF Features:**
+- ✅ Automatic PDF detection and processing
+- ✅ Text extraction from all pages
+- ✅ Support for various PDF formats
+- ✅ Configurable processing limits (50MB max, 100 pages)
+- ✅ Clean text output without formatting artifacts
 
+### 🛠️ The Workshop: Manual Setup & Development
+
+[*Contributions welcome!*](./docs/CONTRIBUTING.md)
+
+> **📝 A Note for Windows Users**
+> We strongly recommend using **WSL2** for the best experience. If running commands from PowerShell or `cmd`, you may need to prefix them with `bash -c "..."` if the scripts fail to execute directly (e.g., `bash -c "./dearreader dev"`).
+
+#### Manual Setup
 ```bash
-curl -H "X-Respond-With: text" 'http://127.0.0.1:3001/https://www.ala.org'
+# 1. Verify your system meets the requirements
+./scripts/verify.sh
+
+# 2. Setup the environment (install dependencies, etc.)
+./dearreader setup
+
+# 3. Start the development server with hot-reloading
+./dearreader dev
 ```
 
-#### 5. 📸 Screenshot Responses
-Returns URL to locally saved screenshot:
+#### The `dearreader` CLI
+Our unified CLI simplifies development and management.
+-   `./dearreader setup`: Initialize the environment.
+-   `./dearreader dev`: Start the dev server.
+-   `./dearreader run prod`: Run the production container.
+-   `./dearreader test [js|python|all]`: Run tests.
+-   `./dearreader status`: Show container status.
+-   `./dearreader logs`: View service logs.
+-   `./dearreader clean`: Remove containers and stored data.
 
-```bash
-# Screen-size screenshot
-curl -H "X-Respond-With: screenshot" 'http://127.0.0.1:3001/https://worldliteracyfoundation.org'
+#### 🔍 Reading Between the Lines: Troubleshooting
+-   **Permission denied:** Run `sudo chmod +x scripts/*.sh dearreader` to make scripts executable.
+-   **Docker not running:** Ensure Docker Desktop is started or run `sudo systemctl start docker` on Linux.
+-   **Port 3001 in use:** Stop the conflicting service or change the port in `docker-compose.yml`.
+-   **WSL issues:** Make sure Docker Desktop's WSL integration is enabled for your distribution.
 
-# Full-page screenshot
-curl -H "X-Respond-With: pageshot" 'http://127.0.0.1:3001/https://en.wikipedia.org/wiki/Reading'
-```
+### 🙏 Acknowledgments
 
-### Query Parameters
+This project is an evolution of the work of others. 
+1. Our story begins with the original [Jina AI Reader project](https://github.com/jina-ai/reader)
+2. Wnd was adapted by [Harsh Gupta](https://github.com/hargup/reader) into a Docker container, and
+3. A fork by [IntergalacticalVariable](https://github.com/intergalacticalvariable/reader) that gave inspiration to this version.
 
-- `?no-cache=true` - Bypass cache and fetch fresh content
-- `?timeout=30000` - Set request timeout in milliseconds (default: 30000)
+We are deeply grateful for their foundational contributions.
 
-### Error Responses
+### 📜 License
 
-```json
-{
-  "code": 400,
-  "status": 40000,
-  "message": "Invalid URL or TLD"
-}
-```
-
-```json
-{
-  "code": 500,
-  "status": 50000,
-  "message": "Internal server error"
-}
-```
-
-## �️ Development & Testing Setup
-
-This fork includes a comprehensive development environment with Firebase Functions emulation and a complete test suite.
-
-### Prerequisites
-- Node.js 20
-- npm or yarn
-- Firebase CLI (optional, for emulator features)
-
-### Local Development Setup
-
-1. **Clone and Install Dependencies:**
-   ```bash
-   git clone https://github.com/postphotos/dearreader.git
-   cd reader/js
-   npm install
-   ```
-
-2. **Build the TypeScript Code:**
-   ```bash
-   npm run build
-   ```
-
-3. **Run Tests:**
-   ```bash
-   # Run all tests
-   npm test
-   
-   # Run tests in watch mode
-   npm run test:watch
-   ```
-
-4. **Start Development Server (Option 1 - Simple):**
-   ```bash
-   # Build and start the Express server directly
-   npm run build
-   node build/server.js
-   ```
-
-5. **Start Development Server (Option 2 - Firebase Emulator):**
-   ```bash
-   # Start Firebase Functions emulator with hot reload
-   npm run from-scratch
-   
-   # Or start with existing data
-   npm run serve
-   ```
-
-### Development Scripts
-
-- `npm run build` - Compile TypeScript to JavaScript
-- `npm run build:watch` - Watch mode compilation
-- `npm test` - Run test suite
-- `npm run test:watch` - Run tests in watch mode
-- `npm run serve` - Start Firebase emulator with build
-- `npm run debug` - Start with debug inspector
-- `npm run lint` - Run ESLint
-
-### Testing Framework
-
-The project includes comprehensive tests covering:
-- JSON response format validation
-- Link extraction functionality
-- Markdown content processing
-- Error handling scenarios
-- API endpoint compatibility
-
-**Test Structure:**
-```
-src/cloud-functions/__tests__/
-├── crawler.test.ts         # Main API tests
-└── ...                     # Additional test files
-```
-
-**Running Specific Tests:**
-```bash
-# Run with verbose output
-NODE_OPTIONS='--loader ts-node/esm' mocha src/**/__tests__/**/*.ts --reporter spec
-
-# Run specific test file
-NODE_OPTIONS='--loader ts-node/esm' mocha src/cloud-functions/__tests__/crawler.test.ts
-```
-
-### Environment Configuration
-
-The development environment supports:
-- **Local Storage**: Screenshots saved to `./storage/` (can be set in `config.yaml`)
-- **Firebase Emulation**: Full Firebase Functions environment
-- **Hot Reload**: Automatic rebuilds on file changes
-- **Debug Mode**: Inspector support for debugging
-- **Proxy Support**: HTTP/HTTPS proxy configuration
-
-### API Development Tips
-
-1. **Testing JSON Responses:**
-   ```bash
-   curl -H "Accept: application/json" 'http://localhost:3001/https://example.com'
-   ```
-
-2. **Testing Error Handling:**
-   ```bash
-   curl 'http://localhost:3001/invalid-url'
-   ```
-
-3. **Testing Screenshots:**
-   ```bash
-   curl -H "X-Respond-With: screenshot" 'http://localhost:3001/https://example.com'
-   ```
-
-## 🙏 Acknowledgements
-This project is based on the excellent work done by multiple contributors:
-1. The original [Jina AI Reader project](https://github.com/jina-ai/reader), which provided the foundation for this tool.
-2. the [Reader](https://github.com/intergalacticalvariable/reader) fork from IntergalacticalVariable, which served as the immediate basis for this Docker deployment version.
-3. and [Harsh Gupta's original adaptation](https://github.com/hargup/reader) that started this effort.
-
-## 📜 License
-This project is licensed under Apache-2.0 same as the original Jina AI Reader project and forks.
+This project is licensed under **Apache-2.0**, inheriting the license from the original Jina AI Reader project and its forks.

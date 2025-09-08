@@ -73,6 +73,24 @@ let CrawlerOptions = class CrawlerOptions extends AutoCastable {
             if (instance.withIframe) {
                 instance.timeout ??= null;
             }
+            // Viewport options
+            let viewportWidth = parseInt(getHeader('x-viewport-width') || '');
+            if (!isNaN(viewportWidth) && viewportWidth > 0) {
+                instance.viewportWidth = viewportWidth;
+            }
+            let viewportHeight = parseInt(getHeader('x-viewport-height') || '');
+            if (!isNaN(viewportHeight) && viewportHeight > 0) {
+                instance.viewportHeight = viewportHeight;
+            }
+            const fullPage = getHeader('x-full-page');
+            if (fullPage !== undefined) {
+                instance.fullPage = fullPage.toLowerCase() === 'true';
+            }
+            // PDF action
+            const pdfAction = getHeader('x-pdf-action');
+            if (pdfAction) {
+                instance.pdfAction = pdfAction;
+            }
             const cookies = [];
             const setCookieHeaders = getHeader('x-set-cookie')?.split(', ') || instance.setCookies;
             if (Array.isArray(setCookieHeaders)) {
@@ -238,6 +256,30 @@ __decorate([
     }),
     __metadata("design:type", Number)
 ], CrawlerOptions.prototype, "timeout", void 0);
+__decorate([
+    Prop({
+        type: Number,
+        nullable: true,
+    }),
+    __metadata("design:type", Number)
+], CrawlerOptions.prototype, "viewportWidth", void 0);
+__decorate([
+    Prop({
+        type: Number,
+        nullable: true,
+    }),
+    __metadata("design:type", Number)
+], CrawlerOptions.prototype, "viewportHeight", void 0);
+__decorate([
+    Prop({
+        default: false,
+    }),
+    __metadata("design:type", Boolean)
+], CrawlerOptions.prototype, "fullPage", void 0);
+__decorate([
+    Prop(),
+    __metadata("design:type", String)
+], CrawlerOptions.prototype, "pdfAction", void 0);
 CrawlerOptions = __decorate([
     Also({
         openapi: {

@@ -10,9 +10,9 @@ import { FirebaseStorageBucketControl } from './shared/index.js';
 import { AsyncContext } from './shared/index.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import config from './config.js';
-import { concurrencyMiddleware } from './middleware/concurrency.js';
 import fs from 'fs';
+import config from './config.js';
+import { VERSION } from './version.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -35,6 +35,21 @@ const crawlerHost = container.resolve(CrawlerHost);
 console.log('Initializing CrawlerHost');
 await crawlerHost.init();
 console.log('CrawlerHost initialized successfully');
+
+// Define concurrency middleware
+let activeRequests = 0;
+const maxConcurrent = 3; // Adjust as needed
+const concurrencyMiddleware = (req, res, next) => {
+  if (activeRequests >= maxConcurrent) {
+    res.status(429).json({ error: 'Too many requests' });
+    return;
+  }
+  activeRequests++;
+  res.on('finish', () => {
+    activeRequests--;
+  });
+  next();
+};
 
 app.use(express.json());
 
@@ -79,6 +94,34 @@ app.get('/queue', (req, res) => {
     console.error('Error getting queue stats:', error);
     res.status(500).json({ error: 'Failed to get queue statistics' });
   }
+});
+
+// Health/Status endpoint
+app.get('/health', (req, res) => {
+  try {
+    const healthStatus = {
+      status: 'healthy',
+      version: VERSION,
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      services: {
+        crawler: 'running',
+        storage: 'healthy',
+        queue: 'operational'
+      },
+      memory: process.memoryUsage()
+    };
+
+    res.json(healthStatus);
+  } catch (error: any) {
+    console.error('Error getting health status:', error);
+    res.status(500).json({ error: 'Failed to get health status' });
+  }
+});
+
+// Status endpoint (alias for health)
+app.get('/status', (req, res) => {
+  res.redirect('/health');
 });
 
 // Route for the root path to serve index.html

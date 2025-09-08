@@ -22,7 +22,7 @@ import * as turndownPluginGfm from 'turndown-plugin-gfm';
 import { cleanAttribute } from '../utils/misc.js';
 import { randomUUID } from 'crypto';
 import * as yaml from 'js-yaml';
-import { CrawlerOptions } from '../dto/scrapping-options.js';
+import { CrawlerOptions } from '../dto/scraping-options.js';
 // import { PDFExtractor } from '../services/pdf-extract.js';
 import PDFExtractor from '../services/pdf-extract.js';
 import { RobotsChecker } from '../services/robots-checker.js';
@@ -913,6 +913,10 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             overrideUserAgent: opts.userAgent,
             timeoutMs: opts.timeout ? opts.timeout * 1000 : undefined,
             withIframe: opts.withIframe,
+            viewportWidth: opts.viewportWidth || undefined,
+            viewportHeight: opts.viewportHeight || undefined,
+            fullPage: opts.fullPage || false,
+            pdfAction: opts.pdfAction,
         };
     }
     async simpleCrawl(mode, url, opts) {
@@ -963,7 +967,14 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
         this.logger.info(`Crawl request received for URL: ${req.url}`);
         console.log('Crawl method called with request:', req.url);
         try {
-            const noSlashURL = req.url.slice(1);
+            let noSlashURL = req.url.slice(1);
+            // Handle JSON endpoint: /json/https://example.com
+            let forceJsonResponse = false;
+            if (noSlashURL.startsWith('json/')) {
+                forceJsonResponse = true;
+                noSlashURL = noSlashURL.slice(5); // Remove 'json/' prefix
+                console.log('JSON endpoint detected, forcing JSON response for URL:', noSlashURL);
+            }
             // Handle favicon.ico request early
             if (noSlashURL === 'favicon.ico') {
                 console.log('Favicon request detected');
@@ -1069,7 +1080,21 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             // Store request headers for formatSnapshot to use
             this.threadLocal.set('accept', req.headers.accept || '');
             this.threadLocal.set('x-return-format', req.headers['x-return-format'] || '');
-            const urlToCrawl = noSlashURL;
+            // Force JSON response if using /json/ endpoint
+            if (forceJsonResponse) {
+                this.threadLocal.set('accept', 'application/json');
+                this.threadLocal.set('x-return-format', 'json');
+            }
+            // Prefer explicit URL in POST JSON body, then query param, then path
+            let urlToCrawl = noSlashURL;
+            if (req.method === 'POST' && req.body && typeof req.body.url === 'string' && req.body.url.trim()) {
+                urlToCrawl = req.body.url.trim();
+            }
+            else if (req.query && (req.query.url || req.query.u)) {
+                // express query values can be string or string[]
+                const q = (req.query.url || req.query.u);
+                urlToCrawl = Array.isArray(q) ? q[0] : String(q);
+            }
             let parsedUrl;
             try {
                 // Build a base from the incoming request so relative paths like 'queue/stats' can be resolved

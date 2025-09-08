@@ -237,10 +237,15 @@ let PuppeteerControl = class PuppeteerControl extends AsyncService {
         await this.setupPage(page, sn);
         return managedPage;
     }
-    async setupPage(page, sn) {
+    async setupPage(page, sn, options) {
         const preparations = [];
         preparations.push(page.setBypassCSP(true));
-        preparations.push(page.setViewport({ width: 1024, height: 1024 }));
+        // Set viewport based on options or default
+        const viewport = {
+            width: options?.viewportWidth || 1024,
+            height: options?.viewportHeight || 1024
+        };
+        preparations.push(page.setViewport(viewport));
         preparations.push(page.exposeFunction('reportSnapshot', (snapshot) => {
             if (snapshot.href === 'about:blank') {
                 return;
@@ -423,14 +428,17 @@ let PuppeteerControl = class PuppeteerControl extends AsyncService {
             '--disable-default-apps', '--disable-sync', '--no-default-browser-check',
             '--disable-background-networking', '--disable-component-update'
         ];
-        this.browser = await puppeteer.launch({
-            executablePath: '/usr/bin/chromium',
+        const execPath = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROMIUM_EXECUTABLE || undefined;
+        const launchOpts = {
             args,
             timeout: 10_000,
             handleSIGINT: false,
             handleSIGTERM: false,
-            handleSIGHUP: false
-        }).catch((err) => {
+            handleSIGHUP: false,
+        };
+        if (execPath)
+            launchOpts.executablePath = execPath;
+        this.browser = await puppeteer.launch(launchOpts).catch((err) => {
             this.logger.error(`Browser launch failed.`, { err });
             process.nextTick(() => this.emit('error', err));
             return Promise.reject(err);
@@ -560,6 +568,15 @@ let PuppeteerControl = class PuppeteerControl extends AsyncService {
             page = await this.getNextPage(1); // Higher priority for scraping
             const sn = this.snMap.get(page) ?? -1;
             this.logger.info(`Page ${sn}: Scraping ${url}`);
+            // Configure viewport based on options
+            if (options.viewportWidth || options.viewportHeight) {
+                const viewport = {
+                    width: options.viewportWidth || 1024,
+                    height: options.viewportHeight || 1024
+                };
+                await page.setViewport(viewport);
+                this.logger.info(`Page ${sn}: Set viewport to ${viewport.width}x${viewport.height}`);
+            }
             if (options.proxyUrl && page.useProxy) {
                 await page.useProxy(options.proxyUrl);
             }

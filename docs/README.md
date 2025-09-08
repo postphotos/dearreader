@@ -21,34 +21,22 @@ This documentation covers all aspects of DearReader's functionality, setup, and 
 ### Core Documentation
 - **[Setup Guide](./setup.md)** - Complete installation and configuration
 - **[API Reference](./api.md)** - Complete API documentation with examples
-- **[Web Interface](./web-interface.md)** - Guide to web UI at localhost:3001
-- **[Configuration](./configuration.md)** - All configuration options
+- **[Architecture](./architecture.md)** - System design and components
 
 ### Advanced Features
-- **[Queues & Processing](./queues.md)** - How the crawler queue system works
-- **[Screenshots](./screenshots.md)** - Screenshot capture functionality
-- **[Performance](./performance.md)** - Optimization and monitoring
+- **[Docker Setup](./DOCKER_README.md)** - Docker development environment
+- **[Migration Guide](./migration.md)** - Migrating from old scripts
+- **[Development Progress](./CLINE_INPROGRESS.md)** - Current development status
 
 ### Development & Maintenance
-- **[Command Reference](./commands.md)** - All command-line operations
-- **[Migration Guide](./migration.md)** - Migrating from old scripts to unified CLI
-- **[Development Progress](./CLINE_INPROGRESS.md)** - Current development status and roadmap
 - **[Troubleshooting](./troubleshooting.md)** - Common issues and solutions
-- **[Troubleshooting](./troubleshooting.md)** - Common issues and solutions
-- **[Testing](./testing.md)** - Running and writing tests
-- **[Contributing](./contributing.md)** - Development setup and contribution guidelines
-
-### Educational Context
-- **[Literacy Integration](./literacy.md)** - How this tool supports reading literacy
-- **[Book Ban Challenges](./book-bans.md)** - Addressing challenges of book access
-- **[Educational Use Cases](./education.md)** - Classroom and research applications
 
 ---
 
 ## 🚀 Getting Started
 
-1. **Quick Setup**: Run `./run.sh setup --verbose`
-2. **Start Development**: Run `./dev-app` or `./run.sh dev`
+1. **Quick Setup**: Run `./scripts/quickstart.sh`
+2. **Start Development**: Run `cd js && npm run serve`
 3. **Access Web UI**: Open `http://localhost:3001`
 4. **API Testing**: Try `curl 'http://localhost:3001/https://www.ala.org'`
 
@@ -56,8 +44,8 @@ This documentation covers all aspects of DearReader's functionality, setup, and 
 
 ## 📋 Current Status
 
-**Version**: 1.0.0  
-**Last Updated**: 2025-09-07  
+**Version**: 0.0.1  
+**Last Updated**: 2025-09-08
 **Environment**: Local-only, Docker-based, Python/Node.js  
 
 ### ✅ Completed Features
@@ -73,12 +61,13 @@ This documentation covers all aspects of DearReader's functionality, setup, and 
 - Complete documentation suite
 - Performance optimization
 - Advanced queuing features
+- What else should we do? Build it, or tell us! 
 
 ---
 
 ## 🤝 Contributing
 
-This project addresses critical needs in digital literacy and information accessibility. Contributions that enhance crawling capability, improve performance, or expand educational applications are particularly welcome.
+We want to enhance digital literacy and information understanding! This project addresses critical needs in information accessibility. Contributions that enhance crawling capability, improve performance, or expand educational applications are particularly welcome. 
 
 See our [contributing guide](./contributing.md) for detailed information on how to get involved.
 

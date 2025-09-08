@@ -52,31 +52,54 @@ newgrp docker
 
 ### 1. Check System Status
 ```bash
-./dearreader status
+# Check if Docker is running
+docker version
+
+# Check if Node.js is available
+cd js && npm --version
+
+# Check if Python is available
+cd py && python --version
 ```
 
 ### 2. Test API Endpoints
 ```bash
-./dearreader api test
+# Test basic endpoint
+curl "http://localhost:3001/https://www.ala.org"
+
+# Test JSON endpoint
+curl -H "Accept: application/json" "http://localhost:3001/https://www.ala.org"
 ```
 
 ### 3. View Logs
 ```bash
-./dearreader logs -F
+# Check Node.js application logs (if running)
+cd js && npm run serve 2>&1 | tee logs/app.log
+
+# Check Docker logs (if using Docker)
+docker-compose logs -f
 ```
 
 ## Advanced Troubleshooting
 
 ### Reset Everything
 ```bash
-# Stop all services
-./dearreader stop
+# Stop any running processes
+pkill -f "node.*serve" || true
+pkill -f "python.*app.py" || true
 
-# Clean up containers
-./dearreader clean
+# Clean up Docker containers (if any)
+docker-compose down --remove-orphans || true
+docker system prune -f || true
 
-# Remove setup artifacts
-rm -rf .venv js/node_modules storage/* logs/*
+# Clean up Node.js artifacts
+cd js && rm -rf node_modules package-lock.json build/
+
+# Clean up Python artifacts
+cd py && rm -rf .venv __pycache__/
+
+# Clean up storage and logs
+rm -rf storage/* logs/*
 
 # Start fresh
 ./scripts/quickstart.sh
@@ -92,7 +115,7 @@ docker system prune -f
 docker volume prune -f
 ```
 
-### Manual Docker Commands
+### Manual Commands
 ```bash
 # Check Docker version
 docker --version
@@ -100,6 +123,12 @@ docker-compose --version
 
 # Test Docker connectivity
 docker run hello-world
+
+# Check Node.js setup
+cd js && npm install && npm run build
+
+# Check Python setup
+cd py && python -m pip install -r requirements.txt
 ```
 
 ## Getting Help

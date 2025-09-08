@@ -28,7 +28,7 @@ pdf:
 domain:
   # Allow all TLDs (useful for development or local crawling)
   # Set to true to allow .localhost, .dev, .local, etc.
-  allow_all_tlds: false
+  allow_all_tlds: true
 
 # Storage settings
 storage:

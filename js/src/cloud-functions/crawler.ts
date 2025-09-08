@@ -1100,7 +1100,15 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
         console.log('Crawl method called with request:', req.url);
 
         try {
-            const noSlashURL = req.url.slice(1);
+            let noSlashURL = req.url.slice(1);
+
+            // Handle JSON endpoint: /json/https://example.com
+            let forceJsonResponse = false;
+            if (noSlashURL.startsWith('json/')) {
+                forceJsonResponse = true;
+                noSlashURL = noSlashURL.slice(5); // Remove 'json/' prefix
+                console.log('JSON endpoint detected, forcing JSON response for URL:', noSlashURL);
+            }
 
             // Handle favicon.ico request early
             if (noSlashURL === 'favicon.ico') {
@@ -1214,6 +1222,12 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             // Store request headers for formatSnapshot to use
             this.threadLocal.set('accept', req.headers.accept || '');
             this.threadLocal.set('x-return-format', req.headers['x-return-format'] || '');
+
+            // Force JSON response if using /json/ endpoint
+            if (forceJsonResponse) {
+                this.threadLocal.set('accept', 'application/json');
+                this.threadLocal.set('x-return-format', 'json');
+            }
 
             // Prefer explicit URL in POST JSON body, then query param, then path
             let urlToCrawl = noSlashURL;

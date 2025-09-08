@@ -6,22 +6,41 @@
 
 **System Requirements:**
 - Docker Desktop (with WSL2 support on Windows)
-- Node.js 16+ (Linux native)
-- Python 3.11+
+- Node.js 16+ (Lin### Directory Structure
+
+Post-setup directory layout:
+```
+dearreader/
+├── docs/               # Documentation (current)
+├── storage/            # Data persistence
+├── logs/               # Application logs (created on first run)
+├── js/                 # Node.js/TypeScript application
+│   ├── src/            # Source code
+│   ├── public/         # Web assets
+│   ├── build/          # Compiled output
+│   └── package.json    # Dependencies
+├── py/                 # Python utilities
+│   ├── app.py          # Main runner script
+│   ├── demo.py         # Demo script
+│   ├── speedtest.py    # Performance tests
+│   └── requirements.txt # Python dependencies
+├── docker/             # Docker configuration
+└── config.yaml        # Application config
+```Python 3.11+
 - uv package installer
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/postphotos/reader.git
-cd reader
+git clone https://github.com/postphotos/dearreader.git
+cd dearreader
 ```
 
 ### 2. One-Command Setup
 ```bash
-./run.sh setup --verbose
+./scripts/quickstart.sh
 ```
 
-This unified command will:
+This script will:
 - ✅ Check Docker availability
 - ✅ Build Docker images
 - ✅ Create necessary directories
@@ -31,7 +50,14 @@ This unified command will:
 
 ### 3. Start Development Environment
 ```bash
-./run.sh dev
+./scripts/quickstart.sh
+```
+
+Or for manual control:
+```bash
+# Build and start the backend
+cd js && npm run build:watch &
+cd js && npm run serve &
 ```
 
 ### 4. Verify Installation
@@ -164,31 +190,32 @@ reader/
 
 ```bash
 # Test individual components
-./run.sh test js        # JavaScript tests
-./run.sh test python    # Python tests
-./run.sh test all       # All tests
+cd js && npm test
 
-# With verbose output
-./run.sh test all --verbose
+# Test Python components
+cd py && python demo.py
 
-# Continue on failures
-./run.sh test all --verbose --force
+# Test API endpoints manually
+curl "http://localhost:3001/https://www.ala.org"
 ```
 
 ### API Endpoints Test
 
 ```bash
-# Basic content extraction
+# Basic content extraction (Markdown)
 curl "http://localhost:3001/https://www.ala.org"
 
-# JSON response
+# JSON response with metadata
 curl -H "Accept: application/json" "http://localhost:3001/https://worldliteracyfoundation.org"
+
+# Or use the dedicated JSON path
+curl "http://localhost:3001/json/https://worldliteracyfoundation.org"
 
 # Screenshot request
 curl -H "X-Respond-With: screenshot" "http://localhost:3001/https://en.wikipedia.org/wiki/Reading"
 
 # Queue status
-curl "http://localhost:3001/queue/stats"
+curl "http://localhost:3001/queue"
 ```
 
 ### Web Interface Test
