@@ -37,6 +37,52 @@ This unified command will:
 ### 4. Verify Installation
 Open **http://localhost:3001** in your browser to see the dashboard.
 
+## 🪟 Windows Setup
+
+### WSL2 (Recommended)
+
+**1. Install WSL2:**
+```powershell
+# Open PowerShell as Administrator
+wsl --install
+wsl --set-default-version 2
+```
+
+**2. Install Ubuntu (or your preferred distro):**
+```powershell
+wsl --install -d Ubuntu
+```
+
+**3. Set up DearReader in WSL2:**
+```bash
+# In WSL2 terminal
+git clone https://github.com/postphotos/reader.git
+cd reader
+./scripts/quickstart.sh
+```
+
+### Native Windows (Alternative)
+
+**Requirements:**
+- Windows 10/11 Pro or Enterprise
+- Docker Desktop with WSL2 backend
+- Git Bash or Windows Terminal
+
+**Setup Steps:**
+```bash
+# Use Git Bash or Windows Terminal
+git clone https://github.com/postphotos/reader.git
+cd reader
+
+# Manual setup (quickstart.sh doesn't support native Windows)
+./dearreader setup
+./dearreader dev
+```
+
+**Known Limitations:**
+- Some utility scripts may not work in native Windows
+- Use WSL2 for full compatibility
+
 ## 🏗️ Installation Details
 
 ### Docker Configuration

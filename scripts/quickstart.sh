@@ -9,10 +9,25 @@ echo "🚀 DearReader Quick Start"
 echo "========================="
 echo ""
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Change to project root directory
+cd "$PROJECT_ROOT"
+
+echo "📂 Working directory: $(pwd)"
+
 # Check if running on supported OS
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-    echo "❌ Windows detected. Please use WSL or follow manual setup instructions."
-    echo "   See: https://docs.dearreader.dev/setup/windows"
+    echo "❌ Native Windows detected. Please use WSL2 or follow manual setup instructions."
+    echo ""
+    echo "🪟 Windows Setup Options:"
+    echo "   1. WSL2 (Recommended): https://docs.microsoft.com/en-us/windows/wsl/install"
+    echo "   2. Manual setup: ./dearreader setup"
+    echo "   3. Docker Desktop: https://www.docker.com/products/docker-desktop"
+    echo ""
+    echo "📚 After WSL2 setup, run this script from within WSL2."
     exit 1
 fi
 

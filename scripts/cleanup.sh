@@ -11,6 +11,15 @@ echo "============================"
 echo "This script will help you clean up old files after migrating to the unified CLI."
 echo ""
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Change to project root directory
+cd "$PROJECT_ROOT"
+
+echo "📂 Working directory: $(pwd)"
+
 # Check if new CLI exists
 if [ ! -f "./dearreader" ]; then
     echo "❌ Error: ./dearreader not found. Please run setup first."

@@ -5,6 +5,11 @@
 
 set -e
 
+# Get the directory where this script is located and navigate to project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
+cd "$PROJECT_ROOT"
+
 # Color and formatting constants
 RED='\033[0;31m'
 GREEN='\033[0;32m'

@@ -1,4 +1,12 @@
-# 📚 Dear Reader: Enhanced Local Deployment Edition
+# 📚 Dear R### ⚡ Lightning Fast (Recommended)
+```bash
+# 1. Verify your system is ready
+./scripts/verify.sh
+
+# 2. One-click setup and start (works from anywhere!)
+./scripts/quickstart.sh
+```
+**That's it!** Automatically sets up everything and starts the development server at http://localhost:3001hanced Local Deployment Edition
 
 This is a feature-enhanced fork of [Jina AI's Reader](https://github.com/jina-ai/reader) optimized for local deployment and development. This fork uses a Debian-based Docker image (instead of Alpine) for better compatibility with Chromium/Puppeteer dependencies and native libraries, ensuring more reliable web scraping operations.
 
@@ -82,6 +90,8 @@ dearreader/
 - ✅ **macOS**: Full support
 - ✅ **Windows**: Full support via WSL or native Docker
 - ✅ **WSL (Windows Subsystem for Linux)**: Recommended for Windows users
+
+**🪟 Windows Users:** Use WSL2 for best experience. See [Windows Setup Guide](docs/setup.md#windows-setup).
 
 ### Lightning Fast Setup
 
@@ -335,7 +345,7 @@ This fork includes a comprehensive development environment with Firebase Functio
 
 1. **Clone and Install Dependencies:**
    ```bash
-   git clone https://github.com/intergalacticalvariable/reader.git
+   git clone https://github.com/postphotos/dearreader.git
    cd reader/js
    npm install
    ```
