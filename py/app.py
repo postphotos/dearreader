@@ -245,6 +245,11 @@ def step_npm(verbose: bool = False, debug: bool = False) -> int:
     print_info("--- Step 1: Running npm install and tests ---")
     npm_dir = "js"
 
+    # Allow skipping npm step in lightweight dev containers
+    if os.environ.get('DEV_SKIP_NPM') == '1':
+        print_info("DEV_SKIP_NPM=1: skipping npm install and tests inside container")
+        return 0
+
     print_info("Installing npm dependencies...")
     code, out, err = run_cmd(["npm", "install"], cwd=npm_dir, timeout=300, live=verbose)
     if code != 0:
@@ -508,9 +513,13 @@ def main():
     os.chdir(os.path.join(script_dir, ".."))
 
     try:
-        if shutil.which("docker") is None or shutil.which("npm") is None:
-            print_error("Missing required tools: 'docker' and 'npm' must be in your PATH.")
-            return 2
+        # In development containers we may not have docker/npm in PATH; allow skipping the check
+        if os.environ.get('DEV_SKIP_TOOL_CHECK') != '1':
+            if shutil.which("docker") is None or shutil.which("npm") is None:
+                print_error("Missing required tools: 'docker' and 'npm' must be in your PATH.")
+                return 2
+        else:
+            print_info("DEV_SKIP_TOOL_CHECK=1: skipping docker/npm PATH checks")
 
         final_rc = 0
         if args.command == "npm":

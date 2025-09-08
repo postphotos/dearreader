@@ -1,39 +1,4 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-const chai_1 = require("chai");
+import { expect } from 'chai';
 // Mock dependencies
 const mockPuppeteerControl = {
     scrape: async function* (url) {
@@ -225,7 +190,7 @@ class MockResponse {
 describe('CrawlerHost JSON Response Format', () => {
     it('should return JSON response with links and markdown content', async () => {
         // Import here to avoid circular dependencies
-        const { CrawlerHost } = await Promise.resolve().then(() => __importStar(require('../crawler.js')));
+        const { CrawlerHost } = await import('../crawler.js');
         const crawlerHost = new CrawlerHost(mockPuppeteerControl, mockJSDomControl, mockPDFExtractor, mockRobotsChecker, mockFirebaseStorage, mockThreadLocal);
         const mockReq = {
             url: '/https://www.ala.org',
@@ -240,31 +205,31 @@ describe('CrawlerHost JSON Response Format', () => {
         await crawlerHost.crawl(mockReq, mockRes);
         const responseData = mockRes.getData();
         // Verify response structure
-        (0, chai_1.expect)(responseData).to.have.property('code', 200);
-        (0, chai_1.expect)(responseData).to.have.property('status', 20000);
-        (0, chai_1.expect)(responseData).to.have.property('data');
+        expect(responseData).to.have.property('code', 200);
+        expect(responseData).to.have.property('status', 20000);
+        expect(responseData).to.have.property('data');
         const data = responseData.data;
-        (0, chai_1.expect)(data).to.have.property('title', 'American Library Association');
-        (0, chai_1.expect)(data).to.have.property('description').that.is.a('string');
-        (0, chai_1.expect)(data).to.have.property('url').that.includes('https://www.ala.org');
-        (0, chai_1.expect)(data).to.have.property('content').that.is.a('string');
-        (0, chai_1.expect)(data).to.have.property('links').that.is.an('object');
+        expect(data).to.have.property('title', 'American Library Association');
+        expect(data).to.have.property('description').that.is.a('string');
+        expect(data).to.have.property('url').that.includes('https://www.ala.org');
+        expect(data).to.have.property('content').that.is.a('string');
+        expect(data).to.have.property('links').that.is.an('object');
         // Verify links are included
-        (0, chai_1.expect)(data.links).to.have.property('https://www.ala.org/aboutala/', 'About ALA');
-        (0, chai_1.expect)(data.links).to.have.property('https://www.ala.org/advocacy/', 'Advocacy');
+        expect(data.links).to.have.property('https://www.ala.org/aboutala/', 'About ALA');
+        expect(data.links).to.have.property('https://www.ala.org/advocacy/', 'Advocacy');
         // Verify images are included
-        (0, chai_1.expect)(data).to.have.property('images').that.is.an('object');
+        expect(data).to.have.property('images').that.is.an('object');
         // Verify metadata
-        (0, chai_1.expect)(data).to.have.property('metadata').that.is.an('object');
-        (0, chai_1.expect)(data.metadata).to.have.property('lang', 'en');
-        (0, chai_1.expect)(data.metadata).to.have.property('description');
-        (0, chai_1.expect)(data.metadata).to.have.property('og:title', 'American Library Association');
-        (0, chai_1.expect)(data.metadata).to.have.property('og:site_name', 'American Library Association');
-        (0, chai_1.expect)(data.metadata).to.have.property('article:author', 'ALA Staff');
-        (0, chai_1.expect)(data.metadata).to.have.property('article:published_time', '2023-01-01');
+        expect(data).to.have.property('metadata').that.is.an('object');
+        expect(data.metadata).to.have.property('lang', 'en');
+        expect(data.metadata).to.have.property('description');
+        expect(data.metadata).to.have.property('og:title', 'American Library Association');
+        expect(data.metadata).to.have.property('og:site_name', 'American Library Association');
+        expect(data.metadata).to.have.property('article:author', 'ALA Staff');
+        expect(data.metadata).to.have.property('article:published_time', '2023-01-01');
     });
     it('should handle markdown content in JSON response', async () => {
-        const { CrawlerHost } = await Promise.resolve().then(() => __importStar(require('../crawler.js')));
+        const { CrawlerHost } = await import('../crawler.js');
         const crawlerHost = new CrawlerHost(mockPuppeteerControl, mockJSDomControl, mockPDFExtractor, mockRobotsChecker, mockFirebaseStorage, mockThreadLocal);
         const mockReq = {
             url: '/https://worldliteracyfoundation.org',
@@ -279,13 +244,13 @@ describe('CrawlerHost JSON Response Format', () => {
         await crawlerHost.crawl(mockReq, mockRes);
         const responseData = mockRes.getData();
         // Verify that content includes markdown formatting
-        (0, chai_1.expect)(responseData.data.content).to.be.a('string');
-        (0, chai_1.expect)(responseData.data.content.length).to.be.greaterThan(0);
+        expect(responseData.data.content).to.be.a('string');
+        expect(responseData.data.content.length).to.be.greaterThan(0);
     });
 });
 describe('CrawlerHost Markdown Response Format', () => {
     it('should return markdown response with links', async () => {
-        const { CrawlerHost } = await Promise.resolve().then(() => __importStar(require('../crawler.js')));
+        const { CrawlerHost } = await import('../crawler.js');
         const crawlerHost = new CrawlerHost(mockPuppeteerControl, mockJSDomControl, mockPDFExtractor, mockRobotsChecker, mockFirebaseStorage, mockThreadLocal);
         const mockReq = {
             url: '/https://worldliteracyfoundation.org',
@@ -305,15 +270,15 @@ describe('CrawlerHost Markdown Response Format', () => {
         await crawlerHost.crawl(mockReq, mockRes);
         const responseData = mockRes.getData();
         // Verify content includes title and links
-        (0, chai_1.expect)(responseData).to.include('World Literacy Foundation');
-        (0, chai_1.expect)(responseData).to.include('Links/Buttons:');
-        (0, chai_1.expect)(responseData).to.include('[Programs](https://worldliteracyfoundation.org/programs/)');
-        (0, chai_1.expect)(responseData).to.include('[Impact](https://worldliteracyfoundation.org/impact/)');
+        expect(responseData).to.include('World Literacy Foundation');
+        expect(responseData).to.include('Links/Buttons:');
+        expect(responseData).to.include('[Programs](https://worldliteracyfoundation.org/programs/)');
+        expect(responseData).to.include('[Impact](https://worldliteracyfoundation.org/impact/)');
     });
 });
 describe('CrawlerHost Error Handling', () => {
     it('should handle invalid URLs', async () => {
-        const { CrawlerHost } = await Promise.resolve().then(() => __importStar(require('../crawler.js')));
+        const { CrawlerHost } = await import('../crawler.js');
         const crawlerHost = new CrawlerHost(mockPuppeteerControl, mockJSDomControl, mockPDFExtractor, mockRobotsChecker, mockFirebaseStorage, mockThreadLocal);
         const mockReq = {
             url: '/invalid-url',
@@ -326,11 +291,11 @@ describe('CrawlerHost Error Handling', () => {
         };
         const mockRes = new MockResponse();
         await crawlerHost.crawl(mockReq, mockRes);
-        (0, chai_1.expect)(mockRes.getStatus()).to.equal(400);
-        (0, chai_1.expect)(mockRes.getData()).to.equal('Invalid URL or TLD');
+        expect(mockRes.getStatus()).to.equal(400);
+        expect(mockRes.getData()).to.equal('Invalid URL or TLD');
     });
     it('should handle favicon requests', async () => {
-        const { CrawlerHost } = await Promise.resolve().then(() => __importStar(require('../crawler.js')));
+        const { CrawlerHost } = await import('../crawler.js');
         const crawlerHost = new CrawlerHost(mockPuppeteerControl, mockJSDomControl, mockPDFExtractor, mockRobotsChecker, mockFirebaseStorage, mockThreadLocal);
         const mockReq = {
             url: '/favicon.ico',
@@ -341,13 +306,13 @@ describe('CrawlerHost Error Handling', () => {
         };
         const mockRes = new MockResponse();
         await crawlerHost.crawl(mockReq, mockRes);
-        (0, chai_1.expect)(mockRes.getStatus()).to.equal(404);
-        (0, chai_1.expect)(mockRes.getData()).to.equal('Favicon not available');
+        expect(mockRes.getStatus()).to.equal(404);
+        expect(mockRes.getData()).to.equal('Favicon not available');
     });
 });
 describe('CrawlerHost Index Page', () => {
     it('should return index page for root requests', async () => {
-        const { CrawlerHost } = await Promise.resolve().then(() => __importStar(require('../crawler.js')));
+        const { CrawlerHost } = await import('../crawler.js');
         const crawlerHost = new CrawlerHost(mockPuppeteerControl, mockJSDomControl, mockPDFExtractor, mockRobotsChecker, mockFirebaseStorage, mockThreadLocal);
         const mockReq = {
             url: '/',
@@ -373,9 +338,9 @@ describe('CrawlerHost Index Page', () => {
         const responseData = mockRes.getData();
         // Handle both string and object responses
         const responseString = typeof responseData === 'string' ? responseData : responseData?.toString?.() || JSON.stringify(responseData);
-        (0, chai_1.expect)(responseString).to.include('DearReader API - Local Web Content Extractor');
-        (0, chai_1.expect)(responseString).to.include('Convert any URL to LLM-friendly content');
-        (0, chai_1.expect)(responseString).to.include('/https://example.com');
+        expect(responseString).to.include('DearReader API - Local Web Content Extractor');
+        expect(responseString).to.include('Convert any URL to LLM-friendly content');
+        expect(responseString).to.include('/https://example.com');
     });
 });
 //# sourceMappingURL=crawler.test.js.map

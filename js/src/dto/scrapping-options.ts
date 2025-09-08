@@ -273,14 +273,66 @@ export class CrawlerOptions extends AutoCastable implements AutoCastableMetaClas
             const setCookieHeaders = getHeader('x-set-cookie')?.split(', ') || (instance.setCookies as any as string[]);
             if (Array.isArray(setCookieHeaders)) {
                 for (const setCookie of setCookieHeaders) {
-                    cookies.push({
-                        ...parseSetCookieString(setCookie, { decodeValues: false }) as CookieParam,
-                    });
+                    const parsed = parseSetCookieString(setCookie, { decodeValues: false });
+                    if (Array.isArray(parsed)) {
+                        for (const p of parsed) {
+                            cookies.push({
+                                name: p.name,
+                                value: p.value,
+                                url: p.url,
+                                domain: p.domain,
+                                path: p.path,
+                                secure: p.secure,
+                                httpOnly: p.httpOnly,
+                                sameSite: p.sameSite as any,
+                                expires: typeof p.expires === 'number' ? p.expires : (p.expires instanceof Date ? Math.floor(p.expires.getTime() / 1000) : undefined),
+                            });
+                        }
+                    } else if (parsed && typeof parsed === 'object') {
+                        const p = parsed as any;
+                        cookies.push({
+                            name: p.name,
+                            value: p.value,
+                            url: p.url,
+                            domain: p.domain,
+                            path: p.path,
+                            secure: p.secure,
+                            httpOnly: p.httpOnly,
+                            sameSite: p.sameSite as any,
+                            expires: typeof p.expires === 'number' ? p.expires : (p.expires instanceof Date ? Math.floor(p.expires.getTime() / 1000) : undefined),
+                        });
+                    }
                 }
             } else if (setCookieHeaders && typeof setCookieHeaders === 'string') {
-                cookies.push({
-                    ...parseSetCookieString(setCookieHeaders, { decodeValues: false }) as CookieParam,
-                });
+                const parsed = parseSetCookieString(setCookieHeaders, { decodeValues: false });
+                if (Array.isArray(parsed)) {
+                    for (const p of parsed) {
+                        cookies.push({
+                            name: p.name,
+                            value: p.value,
+                            url: p.url,
+                            domain: p.domain,
+                            path: p.path,
+                            secure: p.secure,
+                            httpOnly: p.httpOnly,
+                            sameSite: p.sameSite as any,
+                            expires: typeof p.expires === 'number' ? p.expires : (p.expires instanceof Date ? Math.floor(p.expires.getTime() / 1000) : undefined),
+                        });
+                    }
+                } else if (parsed && typeof parsed === 'object') {
+                    const p = parsed as any;
+                    cookies.push({
+                        name: p.name,
+                        value: p.value,
+                        url: p.url,
+                        domain: p.domain,
+                        path: p.path,
+                        secure: p.secure,
+                        httpOnly: p.httpOnly,
+                        sameSite: p.sameSite as any,
+                        expires: typeof p.expires === 'number' ? p.expires : (p.expires instanceof Date ? Math.floor(p.expires.getTime() / 1000) : undefined),
+                    });
+                }
             }
 
             const proxyUrl = getHeader('x-proxy-url');

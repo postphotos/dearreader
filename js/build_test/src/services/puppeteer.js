@@ -1,77 +1,40 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.PuppeteerControl = void 0;
-const os_1 = __importDefault(require("os"));
-const fs_1 = __importDefault(require("fs"));
-const tsyringe_1 = require("tsyringe");
-const civkit_1 = require("civkit");
-const index_js_1 = require("../shared/index.js");
-const module_1 = require("module");
-const require = (0, module_1.createRequire)(import.meta.url);
+import os from 'os';
+import fs from 'fs';
+import { container, singleton } from 'tsyringe';
+import { AsyncService, Defer, marshalErrorLike, delay, maxConcurrency } from 'civkit';
+import { Logger } from '../shared/index.js';
+import { createRequire } from 'module';
+const nodeRequire = createRequire(import.meta.url);
 // Import fetch conditionally - use native fetch in Node 18+
 const fetch = globalThis.fetch;
 let puppeteerCore;
 let addExtra;
 if (process.env.USE_PUPPETEER_MOCK === 'true') {
     console.log('🔧 Using Puppeteer mock implementation');
-    const { mockPuppeteer, mockAddExtra } = await Promise.resolve().then(() => __importStar(require('../../test/mock-puppeteer.js')));
+    // Dynamic runtime import so TypeScript does not treat test files as part of production build
+    const mockPath = new URL('../../test/mock-puppeteer.js', import.meta.url).href;
+    const { mockPuppeteer, mockAddExtra } = await import(mockPath);
     puppeteerCore = mockPuppeteer;
     addExtra = mockAddExtra;
 }
 else {
-    puppeteerCore = await Promise.resolve().then(() => __importStar(require('puppeteer')));
-    const puppeteerExtra = await Promise.resolve().then(() => __importStar(require('puppeteer-extra')));
+    puppeteerCore = await import('puppeteer');
+    const puppeteerExtra = await import('puppeteer-extra');
     addExtra = puppeteerExtra.addExtra;
 }
-const puppeteer_extra_plugin_page_proxy_1 = __importDefault(require("puppeteer-extra-plugin-page-proxy"));
-const errors_js_1 = require("../shared/errors.js");
-const tldts_1 = require("tldts");
-const puppeteer_extra_plugin_stealth_1 = __importDefault(require("puppeteer-extra-plugin-stealth"));
+import puppeteerPageProxy from 'puppeteer-extra-plugin-page-proxy';
+import { ServiceCrashedError } from '../shared/errors.js';
+import { parse as tldParse } from 'tldts';
+import puppeteerStealth from 'puppeteer-extra-plugin-stealth';
 // Add this new function for cookie validation
 const validateCookie = (cookie) => {
     const requiredFields = ['name', 'value'];
@@ -81,10 +44,10 @@ const validateCookie = (cookie) => {
         }
     }
 };
-const READABILITY_JS = fs_1.default.readFileSync(require.resolve('@mozilla/readability/Readability.js'), 'utf-8');
+const READABILITY_JS = fs.readFileSync(nodeRequire.resolve('@mozilla/readability/Readability.js'), 'utf-8');
 const puppeteer = addExtra(puppeteerCore);
-puppeteer.use((0, puppeteer_extra_plugin_stealth_1.default)());
-puppeteer.use((0, puppeteer_extra_plugin_page_proxy_1.default)({
+puppeteer.use(puppeteerStealth());
+puppeteer.use(puppeteerPageProxy({
     interceptResolutionPriority: 1,
 }));
 const SCRIPT_TO_INJECT_INTO_FRAME = `
@@ -197,11 +160,11 @@ function giveSnapshot(stopActiveSnapshot) {
     return r;
 }
 `;
-let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
+let PuppeteerControl = class PuppeteerControl extends AsyncService {
     constructor() {
         super();
         this._sn = 0;
-        this.logger = new index_js_1.Logger('PuppeteerControl'); // Renamed for clarity
+        this.logger = new Logger('PuppeteerControl'); // Renamed for clarity
         // Resource tracking for leak prevention
         this.startTime = Date.now();
         this.maxLifetime = 10 * 60 * 1000; // 10 minutes max lifetime in tests
@@ -221,7 +184,7 @@ let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
         this.circuitBreakerHosts = new Set();
         // Map to store snapshot handlers for each page
         this.snapshotHandlers = new WeakMap();
-        this.setMaxListeners(2 * Math.floor(os_1.default.totalmem() / (256 * 1024 * 1024)) + 1);
+        this.setMaxListeners(2 * Math.floor(os.totalmem() / (256 * 1024 * 1024)) + 1);
         this.on('crippled', () => {
             this.__loadedPage.length = 0;
             this.livePages.clear();
@@ -229,7 +192,7 @@ let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
             this.pagePool.length = 0;
             this.currentActivePages = 0;
             // Reject all queued requests
-            this.requestQueue.forEach(req => req.reject(new errors_js_1.ServiceCrashedError({ message: 'Browser crashed' })));
+            this.requestQueue.forEach(req => req.reject(new ServiceCrashedError({ message: 'Browser crashed' })));
             this.requestQueue.length = 0;
         });
         ``;
@@ -257,7 +220,7 @@ let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
             page = await context.newPage();
         }
         catch (error) {
-            this.logger.error(`Failed to create page ${sn}:`, { error: (0, civkit_1.marshalErrorLike)(error) });
+            this.logger.error(`Failed to create page ${sn}:`, { error: marshalErrorLike(error) });
             throw error;
         }
         const managedPage = {
@@ -310,7 +273,7 @@ let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
                 return req.abort('blockedbyclient', 1000);
             }
             try {
-                const tldParsed = (0, tldts_1.parse)(requestUrl);
+                const tldParsed = tldParse(requestUrl);
                 if (tldParsed.domain)
                     domainSet.add(tldParsed.domain);
             }
@@ -378,10 +341,10 @@ let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
                         }
                     }
                     catch (error) {
-                        this.logger.warn(`Error closing page ${sn}:`, { error: (0, civkit_1.marshalErrorLike)(error) });
+                        this.logger.warn(`Error closing page ${sn}:`, { error: marshalErrorLike(error) });
                     }
                 })(),
-                (0, civkit_1.delay)(5000)
+                delay(5000)
             ]).finally(() => {
                 resolve();
             });
@@ -487,7 +450,7 @@ let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
             return;
         }
         const healthyPage = await this.newPage().catch((err) => {
-            this.logger.warn(`Health check failed`, { err: (0, civkit_1.marshalErrorLike)(err) });
+            this.logger.warn(`Health check failed`, { err: marshalErrorLike(err) });
             return null;
         });
         if (healthyPage) {
@@ -583,10 +546,10 @@ let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
         this.logger.info(`Ditching page ${sn}`);
         this.livePages.delete(page);
         try {
-            await Promise.race([page.close(), (0, civkit_1.delay)(5000)]);
+            await Promise.race([page.close(), delay(5000)]);
         }
         catch (err) {
-            this.logger.error(`Failed to ditch page ${sn}`, { err: (0, civkit_1.marshalErrorLike)(err) });
+            this.logger.error(`Failed to ditch page ${sn}`, { err: marshalErrorLike(err) });
         }
     }
     async *scrape(parsedUrl, options = {}) {
@@ -612,8 +575,8 @@ let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
             if (options.overrideUserAgent) {
                 await page.setUserAgent(options.overrideUserAgent);
             }
-            const nextSnapshotDeferred = (0, civkit_1.Defer)();
-            const crippleListener = () => nextSnapshotDeferred.reject(new errors_js_1.ServiceCrashedError({ message: `Browser crashed` }));
+            const nextSnapshotDeferred = Defer();
+            const crippleListener = () => nextSnapshotDeferred.reject(new ServiceCrashedError({ message: `Browser crashed` }));
             this.once('crippled', crippleListener);
             nextSnapshotDeferred.promise.finally(() => this.off('crippled', crippleListener));
             let lastSnapshot;
@@ -630,19 +593,19 @@ let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
             const gotoPromise = page.goto(url, { waitUntil: 'load', timeout })
                 .catch(err => {
                 if (err.name === 'TimeoutError' || err.message?.includes('ERR_NAME_NOT_RESOLVED')) {
-                    this.logger.warn(`Page ${sn}: Navigation to ${url} failed`, { err: (0, civkit_1.marshalErrorLike)(err) });
+                    this.logger.warn(`Page ${sn}: Navigation to ${url} failed`, { err: marshalErrorLike(err) });
                     return; // Don't re-throw, just let it proceed to snapshotting if possible
                 }
                 throw err; // Re-throw other errors
             });
             const waitForPromise = options.waitForSelector
                 ? page.waitForSelector(Array.isArray(options.waitForSelector) ? options.waitForSelector.join(', ') : options.waitForSelector, { timeout }).catch(err => {
-                    this.logger.warn(`Page ${sn}: waitForSelector failed for ${url}`, { err: (0, civkit_1.marshalErrorLike)(err) });
+                    this.logger.warn(`Page ${sn}: waitForSelector failed for ${url}`, { err: marshalErrorLike(err) });
                 })
                 : Promise.resolve();
             await Promise.all([gotoPromise, waitForPromise]);
             // Wait for a snapshot to be reported
-            await Promise.race([nextSnapshotDeferred.promise, (0, civkit_1.delay)(options.minIntervalMs || 1000)]);
+            await Promise.race([nextSnapshotDeferred.promise, delay(options.minIntervalMs || 1000)]);
             const finalSnapshot = lastSnapshot || await page.evaluate('giveSnapshot()').catch(() => null);
             if (finalSnapshot) {
                 this.logger.info(`Page ${sn}: Snapshot of ${url} done`, { title: finalSnapshot.title || 'Untitled' });
@@ -663,7 +626,7 @@ let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
             }
         }
         catch (error) {
-            this.logger.error(`Scraping failed for ${url}:`, { error: (0, civkit_1.marshalErrorLike)(error) });
+            this.logger.error(`Scraping failed for ${url}:`, { error: marshalErrorLike(error) });
             yield {
                 title: 'Error: Scraping failed',
                 href: url,
@@ -693,7 +656,7 @@ let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
             return null;
         }
         await page.goto(googleArchiveUrl, { waitUntil: 'load', timeout: 15_000 }).catch((err) => {
-            this.logger.warn(`Page salvation did not fully succeed.`, { err: (0, civkit_1.marshalErrorLike)(err) });
+            this.logger.warn(`Page salvation did not fully succeed.`, { err: marshalErrorLike(err) });
         });
         this.logger.info(`Salvation completed.`);
         return true;
@@ -837,17 +800,17 @@ let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
         }
     }
 };
-exports.PuppeteerControl = PuppeteerControl;
 __decorate([
-    (0, civkit_1.maxConcurrency)(1),
+    maxConcurrency(1),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], PuppeteerControl.prototype, "healthCheck", null);
-exports.PuppeteerControl = PuppeteerControl = __decorate([
-    (0, tsyringe_1.singleton)(),
+PuppeteerControl = __decorate([
+    singleton(),
     __metadata("design:paramtypes", [])
 ], PuppeteerControl);
-const puppeteerControl = tsyringe_1.container.resolve(PuppeteerControl);
-exports.default = puppeteerControl;
+export { PuppeteerControl };
+const puppeteerControl = container.resolve(PuppeteerControl);
+export default puppeteerControl;
 //# sourceMappingURL=puppeteer.js.map

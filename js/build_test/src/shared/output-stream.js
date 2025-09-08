@@ -1,7 +1,4 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.OutputServerEventStream = void 0;
-class OutputServerEventStream {
+export class OutputServerEventStream {
     write(data) {
         console.log('OutputServerEventStream write:', data);
     }
@@ -9,5 +6,4 @@ class OutputServerEventStream {
         console.log('OutputServerEventStream ended');
     }
 }
-exports.OutputServerEventStream = OutputServerEventStream;
 //# sourceMappingURL=output-stream.js.map

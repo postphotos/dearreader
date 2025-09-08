@@ -1,8 +1,5 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.RateLimitControl = void 0;
-const civkit_1 = require("civkit");
-class RateLimitControl extends civkit_1.AsyncService {
+import { AsyncService } from 'civkit';
+export class RateLimitControl extends AsyncService {
     constructor() {
         super();
     }
@@ -20,5 +17,4 @@ class RateLimitControl extends civkit_1.AsyncService {
         console.log(`Decrementing rate limit for key: ${desc.key}`);
     }
 }
-exports.RateLimitControl = RateLimitControl;
 //# sourceMappingURL=rate-limit.js.map

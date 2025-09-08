@@ -1,11 +1,5 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.RobotsChecker = void 0;
-const axios_1 = __importDefault(require("axios"));
-class RobotsChecker {
+import axios from 'axios';
+export class RobotsChecker {
     constructor() {
         this.robotsTxtCache = new Map();
     }
@@ -15,7 +9,7 @@ class RobotsChecker {
             const robotsUrl = `${baseUrl}/robots.txt`;
             let robotsTxt = this.robotsTxtCache.get(robotsUrl);
             if (!robotsTxt) {
-                const response = await axios_1.default.get(robotsUrl);
+                const response = await axios.get(robotsUrl);
                 robotsTxt = response.data;
                 this.robotsTxtCache.set(robotsUrl, robotsTxt);
             }
@@ -64,5 +58,4 @@ class RobotsChecker {
         return 1; // 1 second default delay
     }
 }
-exports.RobotsChecker = RobotsChecker;
 //# sourceMappingURL=robots-checker.js.map

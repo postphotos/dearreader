@@ -1,76 +1,55 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 var CrawlerHost_1;
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.CrawlerHost = void 0;
-const civkit_1 = require("civkit");
-const tsyringe_1 = require("tsyringe");
-const index_js_1 = require("../shared/index.js");
-const lodash_1 = __importDefault(require("lodash"));
-const puppeteer_js_1 = require("../services/puppeteer.js");
+import { marshalErrorLike, RPCHost, HashManager, AssertionFailureError, Defer, } from 'civkit';
+import { singleton } from 'tsyringe';
+import { AsyncContext, FirebaseStorageBucketControl, Logger } from '../shared/index.js';
+import _ from 'lodash';
+import { PuppeteerControl } from '../services/puppeteer.js';
 // import { AltTextService } from '../services/alt-text';
-const turndown_1 = __importDefault(require("turndown"));
+import TurndownService from 'turndown';
 // No type definitions available for turndown-plugin-gfm — require it at runtime and treat as any
 // @ts-ignore
-const turndownPluginGfm = __importStar(require("turndown-plugin-gfm"));
+import * as turndownPluginGfm from 'turndown-plugin-gfm';
 // import { Crawled } from '../db/crawled';
-const misc_js_1 = require("../utils/misc.js");
-const crypto_1 = require("crypto");
-const yaml = __importStar(require("js-yaml"));
-const scrapping_options_js_1 = require("../dto/scrapping-options.js");
+import { cleanAttribute } from '../utils/misc.js';
+import { randomUUID } from 'crypto';
+import * as yaml from 'js-yaml';
+import { CrawlerOptions } from '../dto/scrapping-options.js';
 // import { PDFExtractor } from '../services/pdf-extract.js';
-const pdf_extract_js_1 = __importDefault(require("../services/pdf-extract.js"));
-const robots_checker_js_1 = require("../services/robots-checker.js");
-const domain_blockade_js_1 = require("../db/domain-blockade.js");
-const jsdom_js_1 = require("../services/jsdom.js");
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
+import PDFExtractor from '../services/pdf-extract.js';
+import { RobotsChecker } from '../services/robots-checker.js';
+import { DomainBlockade } from '../db/domain-blockade.js';
+import { JSDomControl } from '../services/jsdom.js';
+import * as fs from 'fs';
+import * as path from 'path';
 // import { URL } from 'url'; // Use the global URL instead of Node's URL
 console.log('Initializing CrawlerHost');
+// Helper: safely resolve a string or URL to a URL object.
+// If the input is a relative path, resolve against the provided base or default to http://localhost:3000
+function safeNormalizeUrl(input, base) {
+    try {
+        if (input instanceof URL)
+            return input;
+        // If base provided, let URL resolve against it
+        if (base)
+            return new URL(input, base);
+        // Try as absolute URL first
+        return new URL(input);
+    }
+    catch (_) {
+        // If it's a relative path, resolve against default local base
+        const defaultBase = base ? String(base) : 'http://localhost:3000';
+        return new URL(input.toString(), defaultBase);
+    }
+}
 // (Remove this line entirely)
 /**
  * Sends a response to the client with the specified data and metadata, setting status, headers, and content type as needed.
@@ -95,9 +74,9 @@ function sendResponse(res, data, meta) {
     res.send(data);
     return data;
 }
-let CrawlerHost = class CrawlerHost extends civkit_1.RPCHost {
+let CrawlerHost = class CrawlerHost extends RPCHost {
     static { CrawlerHost_1 = this; }
-    static { this.md5Hasher = new civkit_1.HashManager('md5', 'hex'); }
+    static { this.md5Hasher = new HashManager('md5', 'hex'); }
     constructor(puppeteerControl, jsdomControl, 
     // protected altTextService: AltTextService,
     // protected pdfExtractor: PDFExtractor,
@@ -109,7 +88,7 @@ let CrawlerHost = class CrawlerHost extends civkit_1.RPCHost {
         this.robotsChecker = robotsChecker;
         this.firebaseObjectStorage = firebaseObjectStorage;
         this.threadLocal = threadLocal;
-        this.logger = new index_js_1.Logger('CrawlerHost');
+        this.logger = new Logger('CrawlerHost');
         this.turnDownPlugins = [turndownPluginGfm.tables];
         this.cacheRetentionMs = 1000 * 3600 * 24 * 7;
         this.cacheValidMs = 1000 * 3600;
@@ -154,7 +133,7 @@ let CrawlerHost = class CrawlerHost extends civkit_1.RPCHost {
         puppeteerControl.on('abuse', async (abuseEvent) => {
             console.log('Abuse event received', abuseEvent);
             this.logger.warn(`Abuse detected on ${abuseEvent.url}, blocking ${abuseEvent.url.hostname}`, { reason: abuseEvent.reason, sn: abuseEvent.sn });
-            const blockade = new domain_blockade_js_1.DomainBlockade();
+            const blockade = new DomainBlockade();
             blockade.domain = abuseEvent.url.hostname.toLowerCase();
             blockade.triggerReason = `${abuseEvent.reason}`;
             blockade.triggerUrl = abuseEvent.url.toString();
@@ -378,7 +357,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
     }
     getTurndown(options) {
         console.log('Getting Turndown service', options);
-        const turnDownService = new turndown_1.default({
+        const turnDownService = new TurndownService({
             codeBlockStyle: 'fenced',
             preformattedCode: true,
         });
@@ -403,7 +382,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                 filter: (node) => Boolean(node.tagName === 'IMG' && node.getAttribute('src')?.startsWith('data:')),
                 replacement: (_content, node) => {
                     const src = (node.getAttribute('src') || '').trim();
-                    const alt = (0, misc_js_1.cleanAttribute)(node.getAttribute('alt')) || '';
+                    const alt = cleanAttribute(node.getAttribute('alt')) || '';
                     if (options.url) {
                         const refUrl = new URL(options.url.toString());
                         const mappedUrl = new URL(`blob:${refUrl.origin}/${CrawlerHost_1.md5Hasher.hash(src)}`);
@@ -433,7 +412,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                 let href = node.getAttribute('href');
                 if (href)
                     href = href.replace(/([()])/g, '\\$1');
-                let title = (0, misc_js_1.cleanAttribute)(node.getAttribute('title'));
+                let title = cleanAttribute(node.getAttribute('title'));
                 if (title)
                     title = ' "' + title.replace(/"/g, '\\"') + '"';
                 const fixedContent = content.replace(/\s+/g, ' ').trim();
@@ -491,7 +470,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                 imageSummary[img.src] = img.alt || '';
             }
             mixin.images =
-                (0, lodash_1.default)(imageSummary)
+                _(imageSummary)
                     .toPairs()
                     .map(([url, alt], i) => {
                     return [`Image ${(imageIdxTrack?.get(url) || [i + 1]).join(',')}${alt ? `: ${alt}` : ''}`, url];
@@ -502,7 +481,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
         if (this.threadLocal.get('withLinksSummary')) {
             console.log('Generating link summary');
             inferred ??= this.jsdomControl.inferSnapshot(snapshot);
-            mixin.links = lodash_1.default.invert(inferred.links || {});
+            mixin.links = _.invert(inferred.links || {});
             console.log(`Generated link summary with ${Object.keys(mixin.links).length} links`);
         }
         return mixin;
@@ -512,7 +491,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
         if (mode === 'screenshot') {
             if (snapshot.screenshot && !snapshot.screenshotUrl) {
                 console.log('Saving screenshot');
-                const fileName = `screenshot-${(0, crypto_1.randomUUID)()}.png`;
+                const fileName = `screenshot-${randomUUID()}.png`;
                 await this.saveFileLocally(fileName, snapshot.screenshot);
                 snapshot.screenshotUrl = `/instant-screenshots/${fileName}`;
                 console.log('Screenshot saved and URL generated', { screenshotUrl: snapshot.screenshotUrl });
@@ -528,7 +507,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
         if (mode === 'pageshot') {
             if (snapshot.pageshot && !snapshot.pageshotUrl) {
                 console.log('Saving pageshot');
-                const fileName = `pageshot-${(0, crypto_1.randomUUID)()}.png`;
+                const fileName = `pageshot-${randomUUID()}.png`;
                 await this.saveFileLocally(fileName, snapshot.pageshot);
                 snapshot.pageshotUrl = `/instant-screenshots/${fileName}`;
                 console.log('Pageshot saved and URL generated', { pageshotUrl: snapshot.pageshotUrl });
@@ -606,7 +585,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             }
             const urlToAltMap = {};
             if (snapshot.imgs?.length && this.threadLocal.get('withGeneratedAlt')) {
-                const tasks = lodash_1.default.uniqBy(snapshot.imgs, 'src').map(async (x) => {
+                const tasks = _.uniqBy(snapshot.imgs, 'src').map(async (x) => {
                     const r = "ALT TEXT!!!"; // Placeholder for actual alt text generation
                     if (r && x.src) {
                         urlToAltMap[x.src.trim()] = r;
@@ -631,7 +610,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                         catch (_err) {
                             void 0;
                         }
-                        const alt = (0, misc_js_1.cleanAttribute)(node.getAttribute('alt'));
+                        const alt = cleanAttribute(node.getAttribute('alt'));
                         if (!src) {
                             return '';
                         }
@@ -731,7 +710,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
         };
         if (this.threadLocal.get('withImagesSummary')) {
             formatted.images =
-                (0, lodash_1.default)(imageSummary)
+                _(imageSummary)
                     .toPairs()
                     .map(([url, alt], i) => {
                     return [`Image ${(imageIdxTrack?.get(url) || [i + 1]).join(',')}${alt ? `: ${alt}` : ''}`, url];
@@ -746,7 +725,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             formatted.links = this.jsdomControl.inferSnapshot(snapshot).links || {};
             // Always include images for JSON responses
             if (!formatted.images) {
-                formatted.images = (0, lodash_1.default)(imageSummary)
+                formatted.images = _(imageSummary)
                     .toPairs()
                     .map(([url, alt], i) => {
                     return [`Image ${(imageIdxTrack?.get(url) || [i + 1]).join(',')}${alt ? `: ${alt}` : ''}`, url];
@@ -833,7 +812,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
         return sendResponse(res, responseText, { contentType: 'text/plain' });
     }
     getUrlDigest(urlToCrawl) {
-        const normalizedURL = new URL(urlToCrawl);
+        const normalizedURL = safeNormalizeUrl(urlToCrawl);
         if (!normalizedURL.hash.startsWith('#/')) {
             normalizedURL.hash = '';
         }
@@ -871,19 +850,19 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
         const iterators = urls.map((url) => this.scrap(url, options, crawlerOpts));
         const results = Array(iterators.length).fill(undefined);
         let concluded = false;
-        let nextDeferred = (0, civkit_1.Defer)();
+        let nextDeferred = Defer();
         const handler = async (it, idx) => {
             try {
                 for await (const x of it) {
                     results[idx] = x;
                     if (x) {
                         nextDeferred.resolve();
-                        nextDeferred = (0, civkit_1.Defer)();
+                        nextDeferred = Defer();
                     }
                 }
             }
             catch (err) {
-                this.logger.warn(`Failed to scrap ${urls[idx]}`, { err: (0, civkit_1.marshalErrorLike)(err) });
+                this.logger.warn(`Failed to scrap ${urls[idx]}`, { err: marshalErrorLike(err) });
             }
         };
         Promise.all(iterators.map(handler)).finally(() => {
@@ -959,7 +938,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             throw err;
         }
         if (!lastSnapshot) {
-            throw new civkit_1.AssertionFailureError(`No content available`);
+            throw new AssertionFailureError(`No content available`);
         }
         return this.formatSnapshot(mode, lastSnapshot, url);
     }
@@ -1085,8 +1064,8 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                 return this.serveScreenshot(noSlashURL, res);
             }
             const crawlerOptions = req.method === 'POST' ?
-                new scrapping_options_js_1.CrawlerOptions(req.body, req) :
-                new scrapping_options_js_1.CrawlerOptions(req.query, req);
+                new CrawlerOptions(req.body, req) :
+                new CrawlerOptions(req.query, req);
             console.log('Crawler options:', crawlerOptions);
             // Store request headers for formatSnapshot to use
             this.threadLocal.set('accept', req.headers.accept || '');
@@ -1094,7 +1073,15 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             const urlToCrawl = noSlashURL;
             let parsedUrl;
             try {
-                parsedUrl = new URL(urlToCrawl);
+                // Build a base from the incoming request so relative paths like 'queue/stats' can be resolved
+                const protoFromGet = (typeof req.get === 'function') ? req.get('x-forwarded-proto') : undefined;
+                const headerProto = req.headers && (req.headers['x-forwarded-proto'] || req.headers['X-Forwarded-Proto']);
+                const protocol = protoFromGet || headerProto || req.protocol || 'http';
+                const hostFromGet = (typeof req.get === 'function') ? req.get('host') : undefined;
+                const headerHost = req.headers && (req.headers['host'] || req.headers['Host']);
+                const host = hostFromGet || headerHost || req.headers?.host || 'localhost:3000';
+                const requestBase = `${protocol}://${host}`;
+                parsedUrl = safeNormalizeUrl(urlToCrawl, requestBase);
                 if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
                     throw new Error('Invalid protocol');
                 }
@@ -1151,7 +1138,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             }
             catch (scrapError) {
                 console.error('Error during scraping:', scrapError);
-                if (scrapError instanceof civkit_1.AssertionFailureError &&
+                if (scrapError instanceof AssertionFailureError &&
                     (scrapError.message.includes('Invalid TLD') || scrapError.message.includes('ERR_NAME_NOT_RESOLVED'))) {
                     const errorSnapshot = {
                         title: 'Error: Invalid domain or TLD',
@@ -1177,14 +1164,14 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
         }
     }
 };
-exports.CrawlerHost = CrawlerHost;
-exports.CrawlerHost = CrawlerHost = CrawlerHost_1 = __decorate([
-    (0, tsyringe_1.singleton)(),
-    __metadata("design:paramtypes", [puppeteer_js_1.PuppeteerControl,
-        jsdom_js_1.JSDomControl,
-        pdf_extract_js_1.default,
-        robots_checker_js_1.RobotsChecker,
-        index_js_1.FirebaseStorageBucketControl,
-        index_js_1.AsyncContext])
+CrawlerHost = CrawlerHost_1 = __decorate([
+    singleton(),
+    __metadata("design:paramtypes", [PuppeteerControl,
+        JSDomControl,
+        PDFExtractor,
+        RobotsChecker,
+        FirebaseStorageBucketControl,
+        AsyncContext])
 ], CrawlerHost);
+export { CrawlerHost };
 //# sourceMappingURL=crawler.js.map

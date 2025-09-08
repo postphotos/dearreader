@@ -1,4 +1,3 @@
-"use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -8,19 +7,17 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.JSDomControl = void 0;
-const tsyringe_1 = require("tsyringe");
-const civkit_1 = require("civkit");
-const index_js_1 = require("../shared/index.js");
-const jsdom_1 = require("jsdom");
-const readability_1 = require("@mozilla/readability");
-const virtualConsole = new jsdom_1.VirtualConsole();
+import { container, singleton } from 'tsyringe';
+import { AsyncService, marshalErrorLike } from 'civkit';
+import { Logger } from '../shared/index.js';
+import { JSDOM, VirtualConsole } from 'jsdom';
+import { Readability } from '@mozilla/readability';
+const virtualConsole = new VirtualConsole();
 virtualConsole.on('error', () => void 0);
-let JSDomControl = class JSDomControl extends civkit_1.AsyncService {
+let JSDomControl = class JSDomControl extends AsyncService {
     constructor() {
         super(...arguments);
-        this.logger = new index_js_1.Logger('CHANGE_LOGGER_NAME');
+        this.logger = new Logger('CHANGE_LOGGER_NAME');
     }
     async init() {
         await this.dependencyReady();
@@ -34,7 +31,7 @@ let JSDomControl = class JSDomControl extends civkit_1.AsyncService {
             return snapshot;
         }
         const t0 = Date.now();
-        const jsdom = new jsdom_1.JSDOM(snapshot.html, { url: snapshot.href, virtualConsole });
+        const jsdom = new JSDOM(snapshot.html, { url: snapshot.href, virtualConsole });
         const allNodes = [];
         jsdom.window.document.querySelectorAll('svg').forEach((x) => x.innerHTML = '');
         if (options?.withIframe) {
@@ -92,7 +89,7 @@ let JSDomControl = class JSDomControl extends civkit_1.AsyncService {
             }
         }
         else {
-            rootDoc = new jsdom_1.JSDOM('', { url: snapshot.href, virtualConsole }).window.document;
+            rootDoc = new JSDOM('', { url: snapshot.href, virtualConsole }).window.document;
             for (const n of allNodes) {
                 rootDoc.body.appendChild(n);
                 rootDoc.body.appendChild(rootDoc.createTextNode('\n\n'));
@@ -103,10 +100,10 @@ let JSDomControl = class JSDomControl extends civkit_1.AsyncService {
         }
         let parsed;
         try {
-            parsed = new readability_1.Readability(rootDoc.cloneNode(true)).parse();
+            parsed = new Readability(rootDoc.cloneNode(true)).parse();
         }
         catch (err) {
-            this.logger.warn(`Failed to parse selected element`, { err: (0, civkit_1.marshalErrorLike)(err) });
+            this.logger.warn(`Failed to parse selected element`, { err: marshalErrorLike(err) });
         }
         // No innerText in jsdom
         // https://github.com/jsdom/jsdom/issues/1245
@@ -143,7 +140,7 @@ let JSDomControl = class JSDomControl extends civkit_1.AsyncService {
         const t0 = Date.now();
         const extendedSnapshot = { ...snapshot };
         try {
-            const jsdom = new jsdom_1.JSDOM(snapshot.html, { url: snapshot.href, virtualConsole });
+            const jsdom = new JSDOM(snapshot.html, { url: snapshot.href, virtualConsole });
             jsdom.window.document.querySelectorAll('svg').forEach((x) => x.innerHTML = '');
             const links = Array.from(jsdom.window.document.querySelectorAll('a[href]'))
                 .map((x) => [x.getAttribute('href'), x.textContent.replace(/\s+/g, ' ').trim()])
@@ -196,7 +193,7 @@ let JSDomControl = class JSDomControl extends civkit_1.AsyncService {
         return extendedSnapshot;
     }
     snippetToElement(snippet, url) {
-        const parsed = new jsdom_1.JSDOM(snippet || '', { url, virtualConsole });
+        const parsed = new JSDOM(snippet || '', { url, virtualConsole });
         return parsed.window.document.documentElement;
     }
     runTurndown(turndownService, html) {
@@ -212,11 +209,11 @@ let JSDomControl = class JSDomControl extends civkit_1.AsyncService {
         }
     }
 };
-exports.JSDomControl = JSDomControl;
-exports.JSDomControl = JSDomControl = __decorate([
-    (0, tsyringe_1.singleton)(),
+JSDomControl = __decorate([
+    singleton(),
     __metadata("design:paramtypes", [])
 ], JSDomControl);
-const jsdomControl = tsyringe_1.container.resolve(JSDomControl);
-exports.default = jsdomControl;
+export { JSDomControl };
+const jsdomControl = container.resolve(JSDomControl);
+export default jsdomControl;
 //# sourceMappingURL=jsdom.js.map

@@ -14,7 +14,9 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 FROM js-base AS js-deps
 WORKDIR /app
 COPY js/package.json js/package-lock.json* ./
-RUN npm install
+# Install production and dev dependencies so TypeScript and dev tools are available
+# in the development image (needed to run tsc inside the container)
+RUN npm install --include=dev
 
 # --- JS Dev/Test Source Stage ---
 FROM js-deps AS js-dev

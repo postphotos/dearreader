@@ -1,7 +1,4 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.tidyMarkdown = tidyMarkdown;
-function tidyMarkdown(markdown) {
+export function tidyMarkdown(markdown) {
     // Step 1: Handle complex broken links with text and optional images spread across multiple lines
     let normalizedMarkdown = markdown.replace(/\[\s*([^\]\n]+?)\s*\]\s*\(\s*([^)]+)\s*\)/g, (match, text, url) => {
         // Remove internal new lines and excessive spaces within the text

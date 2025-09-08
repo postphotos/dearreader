@@ -1,27 +1,22 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-require("reflect-metadata");
-const express_1 = __importDefault(require("express"));
-const crawler_js_1 = require("./cloud-functions/crawler.js");
-const logger_js_1 = require("./shared/logger.js");
-const tsyringe_1 = require("tsyringe");
-const puppeteer_js_1 = require("./services/puppeteer.js");
-const jsdom_js_1 = require("./services/jsdom.js");
-const index_js_1 = require("./shared/index.js");
-const index_js_2 = require("./shared/index.js");
+import 'reflect-metadata';
+import express from 'express';
+import { CrawlerHost } from './cloud-functions/crawler.js';
+import { Logger } from './shared/logger.js';
+import { container } from 'tsyringe';
+import { PuppeteerControl } from './services/puppeteer.js';
+import { JSDomControl } from './services/jsdom.js';
+import { FirebaseStorageBucketControl } from './shared/index.js';
+import { AsyncContext } from './shared/index.js';
 // Local Express server setup instead of Firebase Functions
-const app = (0, express_1.default)();
-app.use(express_1.default.json());
-tsyringe_1.container.registerSingleton(logger_js_1.Logger);
-tsyringe_1.container.registerSingleton(puppeteer_js_1.PuppeteerControl);
-tsyringe_1.container.registerSingleton(jsdom_js_1.JSDomControl);
-tsyringe_1.container.registerSingleton(index_js_1.FirebaseStorageBucketControl);
-tsyringe_1.container.registerSingleton(index_js_2.AsyncContext);
-tsyringe_1.container.registerSingleton(crawler_js_1.CrawlerHost);
-const crawlerHost = tsyringe_1.container.resolve(crawler_js_1.CrawlerHost);
+const app = express();
+app.use(express.json());
+container.registerSingleton(Logger);
+container.registerSingleton(PuppeteerControl);
+container.registerSingleton(JSDomControl);
+container.registerSingleton(FirebaseStorageBucketControl);
+container.registerSingleton(AsyncContext);
+container.registerSingleton(CrawlerHost);
+const crawlerHost = container.resolve(CrawlerHost);
 // API endpoints for local crawler
 app.post('/crawl', async (req, res) => {
     try {
@@ -36,7 +31,7 @@ app.get('/', (req, res) => {
     res.json({ message: 'DearReader Local Crawler Server Running' });
 });
 // Export for use in server.js
-exports.default = app;
+export default app;
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
     // Application specific logging, throwing an error, or other logic here

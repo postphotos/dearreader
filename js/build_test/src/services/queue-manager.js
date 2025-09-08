@@ -1,4 +1,3 @@
-"use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -8,10 +7,8 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.QueueManager = void 0;
-const tsyringe_1 = require("tsyringe");
-const logger_js_1 = require("../shared/logger.js");
+import { singleton } from 'tsyringe';
+import { Logger } from '../shared/logger.js';
 let QueueManager = class QueueManager {
     constructor(logger) {
         this.logger = logger;
@@ -106,9 +103,9 @@ let QueueManager = class QueueManager {
         return `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }
 };
-exports.QueueManager = QueueManager;
-exports.QueueManager = QueueManager = __decorate([
-    (0, tsyringe_1.singleton)(),
-    __metadata("design:paramtypes", [logger_js_1.Logger])
+QueueManager = __decorate([
+    singleton(),
+    __metadata("design:paramtypes", [Logger])
 ], QueueManager);
+export { QueueManager };
 //# sourceMappingURL=queue-manager.js.map

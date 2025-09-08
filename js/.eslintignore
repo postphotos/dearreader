@@ -1,0 +1,10 @@
+node_modules/
+build/
+build_test/
+dist/
+.venv/
+.venv/**
+**/node_modules/
+**/build/
+**/build_test/
+**/.venv/

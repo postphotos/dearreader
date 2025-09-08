@@ -1,7 +1,5 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const chai_1 = require("chai");
-const queue_manager_js_1 = require("../../services/queue-manager.js");
+import { expect } from 'chai';
+import { QueueManager } from '../../services/queue-manager.js';
 // Mock Express Response
 class MockResponse {
     constructor() {
@@ -43,7 +41,7 @@ describe('Queue Endpoints', () => {
             warn: () => { },
             debug: () => { }
         };
-        queueManager = new queue_manager_js_1.QueueManager(mockLogger);
+        queueManager = new QueueManager(mockLogger);
     });
     describe('/queue endpoint', () => {
         it('should return queue statistics as JSON', async () => {
@@ -59,13 +57,13 @@ describe('Queue Endpoints', () => {
                 status: "operational"
             };
             mockRes.json(response);
-            (0, chai_1.expect)(mockRes.getContentType()).to.equal('application/json');
+            expect(mockRes.getContentType()).to.equal('application/json');
             const data = mockRes.getData();
-            (0, chai_1.expect)(data).to.have.property('total_requests', 2);
-            (0, chai_1.expect)(data).to.have.property('active_requests', 0);
-            (0, chai_1.expect)(data).to.have.property('pending_requests', 2);
-            (0, chai_1.expect)(data).to.have.property('status', 'operational');
-            (0, chai_1.expect)(data).to.have.property('timestamp');
+            expect(data).to.have.property('total_requests', 2);
+            expect(data).to.have.property('active_requests', 0);
+            expect(data).to.have.property('pending_requests', 2);
+            expect(data).to.have.property('status', 'operational');
+            expect(data).to.have.property('timestamp');
         });
         it('should return correct statistics after task completion', async () => {
             const taskId = await queueManager.enqueue({ url: 'https://example.com', priority: 1 });
@@ -73,9 +71,9 @@ describe('Queue Endpoints', () => {
             const task = await queueManager.dequeue();
             queueManager.completeTask(taskId);
             const stats = queueManager.getStatistics();
-            (0, chai_1.expect)(stats.total_requests).to.equal(1);
-            (0, chai_1.expect)(stats.completed_requests).to.equal(1);
-            (0, chai_1.expect)(stats.pending_requests).to.equal(0);
+            expect(stats.total_requests).to.equal(1);
+            expect(stats.completed_requests).to.equal(1);
+            expect(stats.pending_requests).to.equal(0);
         });
         it('should return correct statistics after task failure', async () => {
             const taskId = await queueManager.enqueue({ url: 'https://example.com', priority: 1 });
@@ -83,9 +81,9 @@ describe('Queue Endpoints', () => {
             const task = await queueManager.dequeue();
             queueManager.failTask(taskId, 'Network error');
             const stats = queueManager.getStatistics();
-            (0, chai_1.expect)(stats.total_requests).to.equal(1);
-            (0, chai_1.expect)(stats.failed_requests).to.equal(1);
-            (0, chai_1.expect)(stats.pending_requests).to.equal(0);
+            expect(stats.total_requests).to.equal(1);
+            expect(stats.failed_requests).to.equal(1);
+            expect(stats.pending_requests).to.equal(0);
         });
     });
     describe('/queue-ui endpoint', () => {
@@ -110,13 +108,13 @@ describe('Queue Endpoints', () => {
 </body>
 </html>`;
             mockRes.type('text/html').send(html);
-            (0, chai_1.expect)(mockRes.getContentType()).to.equal('text/html');
+            expect(mockRes.getContentType()).to.equal('text/html');
             const data = mockRes.getData();
-            (0, chai_1.expect)(data).to.include('DearReader Queue Monitor');
-            (0, chai_1.expect)(data).to.include('queue-stats');
-            (0, chai_1.expect)(data).to.include('refreshQueueStats()');
-            (0, chai_1.expect)(data).to.include('/style.css');
-            (0, chai_1.expect)(data).to.include('/main.js');
+            expect(data).to.include('DearReader Queue Monitor');
+            expect(data).to.include('queue-stats');
+            expect(data).to.include('refreshQueueStats()');
+            expect(data).to.include('/style.css');
+            expect(data).to.include('/main.js');
         });
         it('should include proper HTML structure', () => {
             const mockRes = new MockResponse();
@@ -139,11 +137,11 @@ describe('Queue Endpoints', () => {
 </html>`;
             mockRes.type('text/html').send(html);
             const data = mockRes.getData();
-            (0, chai_1.expect)(data).to.include('<!DOCTYPE html>');
-            (0, chai_1.expect)(data).to.include('<meta charset="UTF-8">');
-            (0, chai_1.expect)(data).to.include('<title>DearReader Queue Monitor</title>');
-            (0, chai_1.expect)(data).to.include('<div class="container">');
-            (0, chai_1.expect)(data).to.include('<h1>DearReader Queue Monitor</h1>');
+            expect(data).to.include('<!DOCTYPE html>');
+            expect(data).to.include('<meta charset="UTF-8">');
+            expect(data).to.include('<title>DearReader Queue Monitor</title>');
+            expect(data).to.include('<div class="container">');
+            expect(data).to.include('<h1>DearReader Queue Monitor</h1>');
         });
     });
     describe('Queue Statistics Integration', () => {
@@ -158,12 +156,12 @@ describe('Queue Endpoints', () => {
                 queueManager.completeTask(task.id);
             }
             const stats = queueManager.getStatistics();
-            (0, chai_1.expect)(stats.total_requests).to.equal(3);
-            (0, chai_1.expect)(stats.completed_requests).to.equal(1);
-            (0, chai_1.expect)(stats.pending_requests).to.equal(2);
-            (0, chai_1.expect)(stats.active_requests).to.equal(0);
-            (0, chai_1.expect)(stats.failed_requests).to.equal(0);
-            (0, chai_1.expect)(stats.max_concurrent).to.be.a('number');
+            expect(stats.total_requests).to.equal(3);
+            expect(stats.completed_requests).to.equal(1);
+            expect(stats.pending_requests).to.equal(2);
+            expect(stats.active_requests).to.equal(0);
+            expect(stats.failed_requests).to.equal(0);
+            expect(stats.max_concurrent).to.be.a('number');
         });
         it('should handle concurrent task processing', async () => {
             const tasks = [];
@@ -179,30 +177,30 @@ describe('Queue Endpoints', () => {
                 }
             }
             const stats = queueManager.getStatistics();
-            (0, chai_1.expect)(stats.total_requests).to.equal(5);
-            (0, chai_1.expect)(stats.completed_requests).to.equal(3);
-            (0, chai_1.expect)(stats.pending_requests).to.equal(2);
+            expect(stats.total_requests).to.equal(5);
+            expect(stats.completed_requests).to.equal(3);
+            expect(stats.pending_requests).to.equal(2);
         });
     });
     describe('Error Handling', () => {
         it('should handle queue statistics errors gracefully', () => {
             // Test with empty queue
             const stats = queueManager.getStatistics();
-            (0, chai_1.expect)(stats.total_requests).to.equal(0);
-            (0, chai_1.expect)(stats.completed_requests).to.equal(0);
-            (0, chai_1.expect)(stats.failed_requests).to.equal(0);
-            (0, chai_1.expect)(stats.pending_requests).to.equal(0);
-            (0, chai_1.expect)(stats.active_requests).to.equal(0);
+            expect(stats.total_requests).to.equal(0);
+            expect(stats.completed_requests).to.equal(0);
+            expect(stats.failed_requests).to.equal(0);
+            expect(stats.pending_requests).to.equal(0);
+            expect(stats.active_requests).to.equal(0);
         });
         it('should handle malformed task data', async () => {
             try {
                 // This should work fine with proper validation
                 await queueManager.enqueue({ url: 'https://example.com', priority: 1 });
-                (0, chai_1.expect)(queueManager.getAllTasks()).to.have.lengthOf(1);
+                expect(queueManager.getAllTasks()).to.have.lengthOf(1);
             }
             catch (error) {
                 // If there's an error, it should be handled properly
-                (0, chai_1.expect)(error).to.be.instanceOf(Error);
+                expect(error).to.be.instanceOf(Error);
             }
         });
     });

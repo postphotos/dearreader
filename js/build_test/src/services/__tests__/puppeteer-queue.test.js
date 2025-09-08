@@ -1,7 +1,5 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-require("reflect-metadata");
-const chai_1 = require("chai");
+import 'reflect-metadata';
+import { expect } from 'chai';
 // Mock browser and page for testing
 const mockPage = {
     isClosed: () => false,
@@ -140,8 +138,8 @@ describe('PuppeteerControl Queue System', () => {
             const promise = puppeteerControl.getNextPage(0);
             // Use a timeout to allow the event loop to process the promise
             await new Promise(resolve => setTimeout(resolve, 10));
-            (0, chai_1.expect)(puppeteerControl.requestQueue).to.have.lengthOf(1);
-            (0, chai_1.expect)(puppeteerControl.requestQueue[0]).to.have.property('priority', 0);
+            expect(puppeteerControl.requestQueue).to.have.lengthOf(1);
+            expect(puppeteerControl.requestQueue[0]).to.have.property('priority', 0);
             // Prevent unhandled promise rejection for the test
             promise.catch(() => { });
         });
@@ -155,10 +153,10 @@ describe('PuppeteerControl Queue System', () => {
             // This test should check the order of processing, not the queue state after processing.
             // For this mock, we'll check the sorted queue before processing would dequeue it.
             const queue = puppeteerControl.requestQueue;
-            (0, chai_1.expect)(queue).to.have.lengthOf(3);
-            (0, chai_1.expect)(queue[0].priority).to.equal(5);
-            (0, chai_1.expect)(queue[1].priority).to.equal(1);
-            (0, chai_1.expect)(queue[2].priority).to.equal(0);
+            expect(queue).to.have.lengthOf(3);
+            expect(queue[0].priority).to.equal(5);
+            expect(queue[1].priority).to.equal(1);
+            expect(queue[2].priority).to.equal(0);
         });
         it('should prioritize requests by timestamp when priorities are equal', async () => {
             puppeteerControl.maxConcurrentPages = 0; // Ensure no pages are processed
@@ -168,8 +166,8 @@ describe('PuppeteerControl Queue System', () => {
             await new Promise(resolve => setTimeout(resolve, 10));
             puppeteerControl.processQueue();
             const queue = puppeteerControl.requestQueue;
-            (0, chai_1.expect)(queue).to.have.lengthOf(2);
-            (0, chai_1.expect)(queue[0].timestamp).to.be.at.most(queue[1].timestamp);
+            expect(queue).to.have.lengthOf(2);
+            expect(queue[0].timestamp).to.be.at.most(queue[1].timestamp);
             // Prevent unhandled promise rejection
             promise1.catch(() => { });
             promise2.catch(() => { });
@@ -178,14 +176,14 @@ describe('PuppeteerControl Queue System', () => {
     describe('Page Pool Management', () => {
         it('should track active pages correctly', () => {
             puppeteerControl.currentActivePages = 5;
-            (0, chai_1.expect)(puppeteerControl.currentActivePages).to.equal(5);
+            expect(puppeteerControl.currentActivePages).to.equal(5);
         });
         it('should respect max concurrent pages limit', () => {
             puppeteerControl.maxConcurrentPages = 1;
             puppeteerControl.currentActivePages = 1;
             const promise = puppeteerControl.getNextPage(0);
             puppeteerControl.processQueue();
-            (0, chai_1.expect)(puppeteerControl.requestQueue).to.have.lengthOf(1);
+            expect(puppeteerControl.requestQueue).to.have.lengthOf(1);
             promise.catch(() => { });
         });
         it('should release pages back to pool', () => {
@@ -193,8 +191,8 @@ describe('PuppeteerControl Queue System', () => {
             puppeteerControl.pagePool = [managedPage];
             puppeteerControl.currentActivePages = 1;
             puppeteerControl.releasePage(mockPage);
-            (0, chai_1.expect)(managedPage.inUse).to.be.false;
-            (0, chai_1.expect)(puppeteerControl.currentActivePages).to.equal(0);
+            expect(managedPage.inUse).to.be.false;
+            expect(puppeteerControl.currentActivePages).to.equal(0);
         });
     });
     describe('Queue Processing', () => {
@@ -204,16 +202,16 @@ describe('PuppeteerControl Queue System', () => {
             const promise = puppeteerControl.getNextPage(0);
             puppeteerControl.processQueue();
             const resolvedPage = await promise;
-            (0, chai_1.expect)(resolvedPage).to.equal(mockPage);
-            (0, chai_1.expect)(managedPage.inUse).to.be.true;
+            expect(resolvedPage).to.equal(mockPage);
+            expect(managedPage.inUse).to.be.true;
         });
         it('should create new pages when pool is not full', async () => {
             const promise = puppeteerControl.getNextPage(0);
             puppeteerControl.processQueue();
             const resolvedPage = await promise;
-            (0, chai_1.expect)(resolvedPage).to.have.property('isClosed');
-            (0, chai_1.expect)(resolvedPage.isClosed()).to.be.false;
-            (0, chai_1.expect)(resolvedPage.url()).to.equal('https://example.com');
+            expect(resolvedPage).to.have.property('isClosed');
+            expect(resolvedPage.isClosed()).to.be.false;
+            expect(resolvedPage.url()).to.equal('https://example.com');
         });
     });
     describe('Error Handling', () => {
@@ -224,7 +222,7 @@ describe('PuppeteerControl Queue System', () => {
                 await promise;
             }
             catch (error) {
-                (0, chai_1.expect)(error.message).to.equal('Page request timeout');
+                expect(error.message).to.equal('Page request timeout');
             }
         });
         it('should reject all queued requests on service crash', async () => {
@@ -234,14 +232,14 @@ describe('PuppeteerControl Queue System', () => {
                 puppeteerControl.getNextPage(1)
             ];
             await new Promise(resolve => setTimeout(resolve, 10));
-            (0, chai_1.expect)(puppeteerControl.requestQueue).to.have.lengthOf(2);
+            expect(puppeteerControl.requestQueue).to.have.lengthOf(2);
             puppeteerControl.emit('crippled');
             const results = await Promise.all(promises.map(p => p.catch((e) => e)));
             results.forEach(result => {
-                (0, chai_1.expect)(result).to.be.an('error');
-                (0, chai_1.expect)(result.message).to.equal('Service has been crippled');
+                expect(result).to.be.an('error');
+                expect(result.message).to.equal('Service has been crippled');
             });
-            (0, chai_1.expect)(puppeteerControl.requestQueue).to.have.lengthOf(0);
+            expect(puppeteerControl.requestQueue).to.have.lengthOf(0);
         });
     });
     describe('Priority Queue Behavior', () => {
@@ -254,11 +252,11 @@ describe('PuppeteerControl Queue System', () => {
             await new Promise(resolve => setTimeout(resolve, 10));
             puppeteerControl.processQueue();
             const queue = puppeteerControl.requestQueue;
-            (0, chai_1.expect)(queue).to.have.length.of.at.least(4);
-            (0, chai_1.expect)(queue[0].priority).to.equal(10);
-            (0, chai_1.expect)(queue[1].priority).to.equal(5);
-            (0, chai_1.expect)(queue[2].priority).to.equal(1);
-            (0, chai_1.expect)(queue[3].priority).to.equal(0);
+            expect(queue).to.have.length.of.at.least(4);
+            expect(queue[0].priority).to.equal(10);
+            expect(queue[1].priority).to.equal(5);
+            expect(queue[2].priority).to.equal(1);
+            expect(queue[3].priority).to.equal(0);
         });
         it('should maintain FIFO order for same priority', async () => {
             puppeteerControl.maxConcurrentPages = 0; // Ensure no pages are processed
@@ -268,8 +266,8 @@ describe('PuppeteerControl Queue System', () => {
             await new Promise(resolve => setTimeout(resolve, 10));
             puppeteerControl.processQueue();
             const queue = puppeteerControl.requestQueue;
-            (0, chai_1.expect)(queue).to.have.length.of.at.least(2);
-            (0, chai_1.expect)(queue[0].timestamp).to.be.at.most(queue[1].timestamp);
+            expect(queue).to.have.length.of.at.least(2);
+            expect(queue[0].timestamp).to.be.at.most(queue[1].timestamp);
         });
     });
 });

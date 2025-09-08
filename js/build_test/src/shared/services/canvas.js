@@ -1,4 +1,3 @@
-"use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -8,15 +7,13 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.CanvasService = void 0;
-const civkit_1 = require("civkit");
-const tsyringe_1 = require("tsyringe");
-const logger_js_1 = require("../logger.js");
-let CanvasService = class CanvasService extends civkit_1.AsyncService {
+import { AsyncService } from 'civkit';
+import { singleton } from 'tsyringe';
+import { Logger } from '../logger.js';
+let CanvasService = class CanvasService extends AsyncService {
     constructor() {
         super();
-        this.logger = new logger_js_1.Logger('CanvasService');
+        this.logger = new Logger('CanvasService');
     }
     async init() {
         this.logger.info('CanvasService initialized');
@@ -35,9 +32,9 @@ let CanvasService = class CanvasService extends civkit_1.AsyncService {
         return Buffer.from('mock image data');
     }
 };
-exports.CanvasService = CanvasService;
-exports.CanvasService = CanvasService = __decorate([
-    (0, tsyringe_1.singleton)(),
+CanvasService = __decorate([
+    singleton(),
     __metadata("design:paramtypes", [])
 ], CanvasService);
+export { CanvasService };
 //# sourceMappingURL=canvas.js.map

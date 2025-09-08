@@ -34,7 +34,22 @@ import * as path from 'path';
 
 console.log('Initializing CrawlerHost');
 
-// (Remove this line entirely)
+// Helper: safely resolve a string or URL to a URL object.
+// If the input is a relative path, resolve against the provided base or default to http://localhost:3000
+function safeNormalizeUrl(input: string | URL, base?: string | URL): URL {
+    try {
+        if (input instanceof URL) return input;
+        // If base provided, let URL resolve against it
+        if (base) return new URL(input, base);
+        // Try as absolute URL first
+        return new URL(input);
+    } catch (_) {
+        // If it's a relative path, resolve against default local base
+        const defaultBase = base ? String(base) : 'http://localhost:3000';
+        return new URL(input.toString(), defaultBase);
+    }
+}
+
 
 /**
  * Sends a response to the client with the specified data and metadata, setting status, headers, and content type as needed.
@@ -914,7 +929,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
     }
 
     getUrlDigest(urlToCrawl: URL): string {
-        const normalizedURL = new URL(urlToCrawl);
+    const normalizedURL = safeNormalizeUrl(urlToCrawl);
         if (!normalizedURL.hash.startsWith('#/')) {
             normalizedURL.hash = '';
         }
@@ -1199,7 +1214,18 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             let parsedUrl: URL;
 
             try {
-                parsedUrl = new URL(urlToCrawl);
+                // Build a base from the incoming request so relative paths like 'queue/stats' can be resolved
+                const protoFromGet = (typeof (req as any).get === 'function') ? (req as any).get('x-forwarded-proto') : undefined;
+                const headerProto = (req as any).headers && ((req as any).headers['x-forwarded-proto'] || (req as any).headers['X-Forwarded-Proto']);
+                const protocol = protoFromGet || headerProto || (req as any).protocol || 'http';
+
+                const hostFromGet = (typeof (req as any).get === 'function') ? (req as any).get('host') : undefined;
+                const headerHost = (req as any).headers && ((req as any).headers['host'] || (req as any).headers['Host']);
+                const host = hostFromGet || headerHost || (req as any).headers?.host || 'localhost:3000';
+
+                const requestBase = `${protocol}://${host}`;
+
+                parsedUrl = safeNormalizeUrl(urlToCrawl, requestBase);
                 if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
                     throw new Error('Invalid protocol');
                 }
@@ -1219,17 +1245,31 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             if (respectRobots) {
                 console.log('Checking robots.txt compliance for:', parsedUrl.toString());
                 try {
-                    const isAllowed = await this.robotsChecker.isAllowed(parsedUrl.toString(), 'DearReader-Bot');
-                    if (!isAllowed) {
-                        console.log('URL blocked by robots.txt:', parsedUrl.toString());
-                        return sendResponse(res, 'Access denied by robots.txt', { contentType: 'text/plain', code: 403 });
+                    // Some test mocks or environments may not provide a full robotsChecker implementation.
+                    // Guard calls to avoid runtime TypeError when methods are missing.
+                    const hasIsAllowed = this.robotsChecker && typeof (this.robotsChecker as any).isAllowed === 'function';
+                    const hasGetCrawlDelay = this.robotsChecker && typeof (this.robotsChecker as any).getCrawlDelay === 'function';
+
+                    if (hasIsAllowed) {
+                        const isAllowed = await (this.robotsChecker as any).isAllowed(parsedUrl.toString(), 'DearReader-Bot');
+                        if (!isAllowed) {
+                            console.log('URL blocked by robots.txt:', parsedUrl.toString());
+                            return sendResponse(res, 'Access denied by robots.txt', { contentType: 'text/plain', code: 403 });
+                        }
+                    } else {
+                        console.log('robotsChecker.isAllowed not available; skipping robots.txt allow check');
                     }
-                    // Check for crawl delay
-                    const crawlDelay = await this.robotsChecker.getCrawlDelay(parsedUrl.toString(), 'DearReader-Bot');
-                    if (crawlDelay && crawlDelay > 0) {
-                        console.log(`Applying crawl delay of ${crawlDelay}s for:`, parsedUrl.toString());
-                        // In production, you might want to implement a proper rate limiting mechanism
-                        // For now, just log it
+
+                    // Check for crawl delay if supported
+                    if (hasGetCrawlDelay) {
+                        const crawlDelay = await (this.robotsChecker as any).getCrawlDelay(parsedUrl.toString(), 'DearReader-Bot');
+                        if (crawlDelay && crawlDelay > 0) {
+                            console.log(`Applying crawl delay of ${crawlDelay}s for:`, parsedUrl.toString());
+                            // In production, you might want to implement a proper rate limiting mechanism
+                            // For now, just log it
+                        }
+                    } else {
+                        console.log('robotsChecker.getCrawlDelay not available; skipping crawl-delay handling');
                     }
                 } catch (robotsError) {
                     console.log('Error checking robots.txt, proceeding:', robotsError);

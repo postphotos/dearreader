@@ -1,3 +1,4 @@
+import './polyfills/dommatrix.js';
 import 'reflect-metadata';
 import express from 'express';
 import { container } from 'tsyringe';
@@ -8,9 +9,14 @@ import { JSDomControl } from './services/jsdom.js';
 import { FirebaseStorageBucketControl } from './shared/index.js';
 import { AsyncContext } from './shared/index.js';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// ESM: emulate __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Register services with the dependency injection container
 container.registerSingleton(Logger);
@@ -69,19 +75,16 @@ app.get('/queue-ui', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'queue.html'));
 });
 
-app.all('*', async (req, res) => {
+app.use(async (req, res, next) => {
   try {
     await crawlerHost.crawl(req, res);
   } catch (error: any) {
     console.error('Error during crawl:', error);
-
-    // Kontrola typu chyby
-    if (error.message.includes('Invalid TLD')) {
+    if (error && typeof error.message === 'string' && error.message.includes('Invalid TLD')) {
       res.status(400).json({ error: 'Invalid URL or TLD' });
-    } else {
-      // Ošetrenie iných chýb
-      res.status(500).json({ error: 'An error occurred during the crawl' });
+      return;
     }
+    res.status(500).json({ error: 'An error occurred during the crawl' });
   }
 });
 

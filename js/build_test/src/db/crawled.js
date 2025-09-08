@@ -1,4 +1,3 @@
-"use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -9,11 +8,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 var Crawled_1;
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Crawled = void 0;
-const civkit_1 = require("civkit");
-const firestore_js_1 = require("../shared/lib/firestore.js");
-let Crawled = class Crawled extends firestore_js_1.FirestoreRecord {
+import { Also, parseJSONText, Prop } from 'civkit';
+import { FirestoreRecord } from '../shared/lib/firestore.js';
+let Crawled = class Crawled extends FirestoreRecord {
     static { Crawled_1 = this; }
     static { this.collectionName = 'crawled'; }
     static { this.patchedFields = [
@@ -22,7 +19,7 @@ let Crawled = class Crawled extends firestore_js_1.FirestoreRecord {
     static from(input) {
         for (const field of this.patchedFields) {
             if (typeof input[field] === 'string') {
-                input[field] = (0, civkit_1.parseJSONText)(input[field]);
+                input[field] = parseJSONText(input[field]);
             }
         }
         return super.from(input);
@@ -37,46 +34,46 @@ let Crawled = class Crawled extends firestore_js_1.FirestoreRecord {
         return copy;
     }
 };
-exports.Crawled = Crawled;
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         required: true
     }),
     __metadata("design:type", String)
 ], Crawled.prototype, "url", void 0);
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         required: true
     }),
     __metadata("design:type", String)
 ], Crawled.prototype, "urlPathDigest", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Object)
 ], Crawled.prototype, "snapshot", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Boolean)
 ], Crawled.prototype, "screenshotAvailable", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Boolean)
 ], Crawled.prototype, "pageshotAvailable", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Boolean)
 ], Crawled.prototype, "snapshotAvailable", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Date)
 ], Crawled.prototype, "createdAt", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Date)
 ], Crawled.prototype, "expireAt", void 0);
-exports.Crawled = Crawled = Crawled_1 = __decorate([
-    (0, civkit_1.Also)({
+Crawled = Crawled_1 = __decorate([
+    Also({
         dictOf: Object
     })
 ], Crawled);
+export { Crawled };
 //# sourceMappingURL=crawled.js.map

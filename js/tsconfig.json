@@ -5,6 +5,7 @@
         "noImplicitReturns": true,
         "noUnusedLocals": false,
         "outDir": "build",
+    "rootDir": "src",
         "sourceMap": true,
         "strict": true,
         "allowJs": true,
@@ -16,11 +17,12 @@
         "emitDecoratorMetadata": true,
         "esModuleInterop": true,
         "allowSyntheticDefaultImports": true,
-        "noImplicitAny": false,
-        "noImplicitOverride": true,        "noEmit": true,
-        "types": ["node"],
+    "noImplicitAny": false,
+    "noImplicitOverride": true,
+    "noEmit": false,
+    "types": ["node"],
         "forceConsistentCasingInFileNames": true
     },
-    "compileOnSave": true,    "include": ["src/**/*.ts", "test/**/*.ts"],
-    "exclude": ["node_modules", "build"]
+    "compileOnSave": true,    "include": ["src/**/*.ts"],
+    "exclude": ["node_modules", "build", "test", "**/__tests__/**"]
 }

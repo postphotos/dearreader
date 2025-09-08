@@ -5,7 +5,7 @@ import { AsyncService, Defer, marshalErrorLike, delay, maxConcurrency } from 'ci
 import { Logger } from '../shared/index.js';
 import { createRequire } from 'module';
 
-const require = createRequire(import.meta.url);
+const nodeRequire = createRequire(import.meta.url);
 
 import type { Browser, Page, BrowserContext } from 'puppeteer';
 
@@ -16,10 +16,12 @@ let puppeteerCore: any;
 let addExtra: any;
 
 if (process.env.USE_PUPPETEER_MOCK === 'true') {
-  console.log('🔧 Using Puppeteer mock implementation');
-  const { mockPuppeteer, mockAddExtra } = await import('../../test/mock-puppeteer.js');
-  puppeteerCore = mockPuppeteer;
-  addExtra = mockAddExtra;
+    console.log('🔧 Using Puppeteer mock implementation');
+    // Dynamic runtime import so TypeScript does not treat test files as part of production build
+    const mockPath = new URL('../../test/mock-puppeteer.js', import.meta.url).href;
+    const { mockPuppeteer, mockAddExtra } = await import(mockPath);
+    puppeteerCore = mockPuppeteer;
+    addExtra = mockAddExtra;
 } else {
   puppeteerCore = await import('puppeteer');
   const puppeteerExtra = await import('puppeteer-extra');
@@ -72,7 +74,7 @@ const validateCookie = (cookie: CookieParam) => {
     }
 };
 
-const READABILITY_JS = fs.readFileSync(require.resolve('@mozilla/readability/Readability.js'), 'utf-8');
+const READABILITY_JS = fs.readFileSync(nodeRequire.resolve('@mozilla/readability/Readability.js'), 'utf-8');
 
 
 export interface ImgBrief {

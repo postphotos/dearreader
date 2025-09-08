@@ -12,6 +12,7 @@ Usage:
     uv run demo.py
 """
 
+import os
 import requests
 import json
 import time
@@ -23,8 +24,11 @@ from urllib.parse import quote
 class ReaderAPI:
     """Simple wrapper for the Reader API"""
 
-    def __init__(self, base_url: str = "http://127.0.0.1:3000"):
-        self.base_url = base_url.rstrip('/')
+    def __init__(self, base_url: Optional[str] = None):
+        # Allow overriding the reader base URL via environment variable when running inside Docker
+        env_url = os.getenv('READER_BASE_URL')
+        resolved = base_url or env_url or "http://127.0.0.1:3000"
+        self.base_url = resolved.rstrip('/')
 
     def get_json(self, url: str, **params) -> Dict[str, Any]:
         """Get JSON response with full metadata, links, and content"""
@@ -235,7 +239,7 @@ def check_server_status(reader: ReaderAPI) -> bool:
         print("\n� To start the server:")
         print("   docker run -p 3000:3000 -v ./storage:/app/local-storage reader-app")
         print("   or")
-        print("   cd backend/functions && npm run serve")
+        print("   cd js && npm run serve")
         return False
     except requests.exceptions.RequestException as e:
         print(f"❌ Server error: {e}")

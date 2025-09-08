@@ -1,4 +1,3 @@
-"use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -9,11 +8,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 var SearchResult_1;
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.SearchResult = void 0;
-const civkit_1 = require("civkit");
-const firestore_js_1 = require("../shared/lib/firestore.js");
-let SearchResult = class SearchResult extends firestore_js_1.FirestoreRecord {
+import { Also, parseJSONText, Prop } from 'civkit';
+import { FirestoreRecord } from '../shared/lib/firestore.js';
+let SearchResult = class SearchResult extends FirestoreRecord {
     static { SearchResult_1 = this; }
     static { this.collectionName = 'searchResults'; }
     static { this.patchedFields = [
@@ -23,7 +20,7 @@ let SearchResult = class SearchResult extends firestore_js_1.FirestoreRecord {
     static from(input) {
         for (const field of this.patchedFields) {
             if (typeof input[field] === 'string') {
-                input[field] = (0, civkit_1.parseJSONText)(input[field]);
+                input[field] = parseJSONText(input[field]);
             }
         }
         return super.from(input);
@@ -38,34 +35,34 @@ let SearchResult = class SearchResult extends firestore_js_1.FirestoreRecord {
         return copy;
     }
 };
-exports.SearchResult = SearchResult;
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         required: true
     }),
     __metadata("design:type", Object)
 ], SearchResult.prototype, "query", void 0);
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         required: true
     }),
     __metadata("design:type", String)
 ], SearchResult.prototype, "queryDigest", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Object)
 ], SearchResult.prototype, "response", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Date)
 ], SearchResult.prototype, "createdAt", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Date)
 ], SearchResult.prototype, "expireAt", void 0);
-exports.SearchResult = SearchResult = SearchResult_1 = __decorate([
-    (0, civkit_1.Also)({
+SearchResult = SearchResult_1 = __decorate([
+    Also({
         dictOf: Object
     })
 ], SearchResult);
+export { SearchResult };
 //# sourceMappingURL=searched.js.map

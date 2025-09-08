@@ -62,9 +62,7 @@ Shut down all running services.
 - **server**: Production-optimized multi-service container.
 
 ### Dockerfiles
-- `docker/Dockerfile`: Production multi-service build file (your main production image).
-- `docker/Dockerfile.dev`: Multi-stage file for development and testing of JS and Python services.
-- `py/Dockerfile.dev`: Development environment for Python backend.
+- `docker/Dockerfile`: Unified multi-stage Dockerfile supporting both development targets (dev/test) and a production target. Use `--target` to select the appropriate stage when building.
 
 ### Docker Compose Profiles
 - **dev**: Development services with hot-reloading (`js-functions`, `python`, `js-test`).
@@ -79,12 +77,11 @@ Shut down all running services.
 ├── dev.sh                      # Dev environment script
 ├── run.sh                      # Task runner (test, prod-up, stop)
 ├── docker/
-│   ├── Dockerfile              # Production multi-service build
-│   └── Dockerfile.dev          # Development & testing builds
+│   └── Dockerfile              # Unified multi-stage Dockerfile (dev & prod targets)
 ├── js/
 │   └── functions/              # JS source code
 └── py/
-    ├── Dockerfile.dev          # Python development image
+    # (Python dev is provided as a build target in docker/Dockerfile)
     └── requirements.txt
 ```
 

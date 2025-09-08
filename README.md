@@ -314,7 +314,7 @@ This fork includes a comprehensive development environment with Firebase Functio
 1. **Clone and Install Dependencies:**
    ```bash
    git clone https://github.com/intergalacticalvariable/reader.git
-   cd reader/backend/functions
+   cd reader/js
    npm install
    ```
 

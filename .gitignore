@@ -2,7 +2,7 @@ node_modules/
 .DS_Store
 /package-lock.json
 .aider*
-backend/functions/node_modules/
+js/node_modules/
 __pycache__/
 *.pyc
 .env

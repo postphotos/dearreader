@@ -1,4 +1,3 @@
-"use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -8,53 +7,51 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ImgAlt = void 0;
-const civkit_1 = require("civkit");
-const firestore_js_1 = require("../shared/lib/firestore.js");
-let ImgAlt = class ImgAlt extends firestore_js_1.FirestoreRecord {
+import { Also, Prop } from 'civkit';
+import { FirestoreRecord } from '../shared/lib/firestore.js';
+let ImgAlt = class ImgAlt extends FirestoreRecord {
     static { this.collectionName = 'imgAlts'; }
 };
-exports.ImgAlt = ImgAlt;
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         required: true
     }),
     __metadata("design:type", String)
 ], ImgAlt.prototype, "src", void 0);
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         required: true
     }),
     __metadata("design:type", String)
 ], ImgAlt.prototype, "urlDigest", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Number)
 ], ImgAlt.prototype, "width", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Number)
 ], ImgAlt.prototype, "height", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", String)
 ], ImgAlt.prototype, "generatedAlt", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", String)
 ], ImgAlt.prototype, "originalAlt", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Date)
 ], ImgAlt.prototype, "createdAt", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Date)
 ], ImgAlt.prototype, "expireAt", void 0);
-exports.ImgAlt = ImgAlt = __decorate([
-    (0, civkit_1.Also)({
+ImgAlt = __decorate([
+    Also({
         dictOf: Object
     })
 ], ImgAlt);
+export { ImgAlt };
 //# sourceMappingURL=img-alt.js.map

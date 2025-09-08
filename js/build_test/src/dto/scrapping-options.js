@@ -1,4 +1,3 @@
-"use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -8,11 +7,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.CrawlerOptionsHeaderOnly = exports.CrawlerOptions = void 0;
-const civkit_1 = require("civkit"); // Adjust the import based on where your decorators are defined
-const set_cookie_parser_1 = require("set-cookie-parser");
-let CrawlerOptions = class CrawlerOptions extends civkit_1.AutoCastable {
+import { Also, AutoCastable, Prop } from 'civkit'; // Adjust the import based on where your decorators are defined
+import { parseString as parseSetCookieString } from 'set-cookie-parser';
+let CrawlerOptions = class CrawlerOptions extends AutoCastable {
     static from(input, ...args) {
         const instance = super.from(input, ...args);
         const req = args[0];
@@ -80,15 +77,69 @@ let CrawlerOptions = class CrawlerOptions extends civkit_1.AutoCastable {
             const setCookieHeaders = getHeader('x-set-cookie')?.split(', ') || instance.setCookies;
             if (Array.isArray(setCookieHeaders)) {
                 for (const setCookie of setCookieHeaders) {
-                    cookies.push({
-                        ...(0, set_cookie_parser_1.parseString)(setCookie, { decodeValues: false }),
-                    });
+                    const parsed = parseSetCookieString(setCookie, { decodeValues: false });
+                    if (Array.isArray(parsed)) {
+                        for (const p of parsed) {
+                            cookies.push({
+                                name: p.name,
+                                value: p.value,
+                                url: p.url,
+                                domain: p.domain,
+                                path: p.path,
+                                secure: p.secure,
+                                httpOnly: p.httpOnly,
+                                sameSite: p.sameSite,
+                                expires: typeof p.expires === 'number' ? p.expires : (p.expires instanceof Date ? Math.floor(p.expires.getTime() / 1000) : undefined),
+                            });
+                        }
+                    }
+                    else if (parsed && typeof parsed === 'object') {
+                        const p = parsed;
+                        cookies.push({
+                            name: p.name,
+                            value: p.value,
+                            url: p.url,
+                            domain: p.domain,
+                            path: p.path,
+                            secure: p.secure,
+                            httpOnly: p.httpOnly,
+                            sameSite: p.sameSite,
+                            expires: typeof p.expires === 'number' ? p.expires : (p.expires instanceof Date ? Math.floor(p.expires.getTime() / 1000) : undefined),
+                        });
+                    }
                 }
             }
             else if (setCookieHeaders && typeof setCookieHeaders === 'string') {
-                cookies.push({
-                    ...(0, set_cookie_parser_1.parseString)(setCookieHeaders, { decodeValues: false }),
-                });
+                const parsed = parseSetCookieString(setCookieHeaders, { decodeValues: false });
+                if (Array.isArray(parsed)) {
+                    for (const p of parsed) {
+                        cookies.push({
+                            name: p.name,
+                            value: p.value,
+                            url: p.url,
+                            domain: p.domain,
+                            path: p.path,
+                            secure: p.secure,
+                            httpOnly: p.httpOnly,
+                            sameSite: p.sameSite,
+                            expires: typeof p.expires === 'number' ? p.expires : (p.expires instanceof Date ? Math.floor(p.expires.getTime() / 1000) : undefined),
+                        });
+                    }
+                }
+                else if (parsed && typeof parsed === 'object') {
+                    const p = parsed;
+                    cookies.push({
+                        name: p.name,
+                        value: p.value,
+                        url: p.url,
+                        domain: p.domain,
+                        path: p.path,
+                        secure: p.secure,
+                        httpOnly: p.httpOnly,
+                        sameSite: p.sameSite,
+                        expires: typeof p.expires === 'number' ? p.expires : (p.expires instanceof Date ? Math.floor(p.expires.getTime() / 1000) : undefined),
+                    });
+                }
             }
             const proxyUrl = getHeader('x-proxy-url');
             instance.proxyUrl ??= proxyUrl;
@@ -99,97 +150,96 @@ let CrawlerOptions = class CrawlerOptions extends civkit_1.AutoCastable {
         return instance;
     }
 };
-exports.CrawlerOptions = CrawlerOptions;
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", String)
 ], CrawlerOptions.prototype, "url", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", String)
 ], CrawlerOptions.prototype, "html", void 0);
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         default: 'default',
     }),
     __metadata("design:type", String)
 ], CrawlerOptions.prototype, "respondWith", void 0);
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         default: false,
     }),
     __metadata("design:type", Boolean)
 ], CrawlerOptions.prototype, "withGeneratedAlt", void 0);
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         default: false,
     }),
     __metadata("design:type", Boolean)
 ], CrawlerOptions.prototype, "withLinksSummary", void 0);
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         default: false,
     }),
     __metadata("design:type", Boolean)
 ], CrawlerOptions.prototype, "withImagesSummary", void 0);
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         default: false,
     }),
     __metadata("design:type", Boolean)
 ], CrawlerOptions.prototype, "noCache", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", Number)
 ], CrawlerOptions.prototype, "cacheTolerance", void 0);
 __decorate([
-    (0, civkit_1.Prop)({ arrayOf: String }),
+    Prop({ arrayOf: String }),
     __metadata("design:type", Object)
 ], CrawlerOptions.prototype, "targetSelector", void 0);
 __decorate([
-    (0, civkit_1.Prop)({ arrayOf: String }),
+    Prop({ arrayOf: String }),
     __metadata("design:type", Object)
 ], CrawlerOptions.prototype, "waitForSelector", void 0);
 __decorate([
-    (0, civkit_1.Prop)({ arrayOf: String }),
+    Prop({ arrayOf: String }),
     __metadata("design:type", Object)
 ], CrawlerOptions.prototype, "removeSelector", void 0);
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         default: false,
     }),
     __metadata("design:type", Boolean)
 ], CrawlerOptions.prototype, "keepImgDataUrl", void 0);
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         default: false,
     }),
     __metadata("design:type", Boolean)
 ], CrawlerOptions.prototype, "withIframe", void 0);
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         arrayOf: String,
     }),
     __metadata("design:type", Array)
 ], CrawlerOptions.prototype, "setCookies", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", String)
 ], CrawlerOptions.prototype, "proxyUrl", void 0);
 __decorate([
-    (0, civkit_1.Prop)(),
+    Prop(),
     __metadata("design:type", String)
 ], CrawlerOptions.prototype, "userAgent", void 0);
 __decorate([
-    (0, civkit_1.Prop)({
+    Prop({
         validate: (v) => v > 0 && v <= 180,
         type: Number,
         nullable: true,
     }),
     __metadata("design:type", Number)
 ], CrawlerOptions.prototype, "timeout", void 0);
-exports.CrawlerOptions = CrawlerOptions = __decorate([
-    (0, civkit_1.Also)({
+CrawlerOptions = __decorate([
+    Also({
         openapi: {
             operation: {
                 parameters: {
@@ -295,13 +345,13 @@ exports.CrawlerOptions = CrawlerOptions = __decorate([
         }
     })
 ], CrawlerOptions);
-class CrawlerOptionsHeaderOnly extends CrawlerOptions {
+export { CrawlerOptions };
+export class CrawlerOptionsHeaderOnly extends CrawlerOptions {
     static from(...args) {
         const req = args[0];
         return super.from({}, req);
     }
 }
-exports.CrawlerOptionsHeaderOnly = CrawlerOptionsHeaderOnly;
 function filterSelector(s) {
     if (!s) {
         return s;

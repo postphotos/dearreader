@@ -1,7 +1,4 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.RPCReflect = RPCReflect;
-function RPCReflect() {
+export function RPCReflect() {
     return function (target, propertyKey, parameterIndex) {
         console.log(`RPCReflect decorator applied to parameter ${parameterIndex} of ${String(propertyKey)}`);
     };
