@@ -4,13 +4,14 @@ import { container, singleton } from 'tsyringe';
 import { AsyncService, Defer, marshalErrorLike, delay, maxConcurrency } from 'civkit';
 import { Logger } from '../shared/index.js';
 import { createRequire } from 'module';
-import fetch from 'node-fetch';
 
 const require = createRequire(import.meta.url);
 
 import type { Browser, Page, BrowserContext } from 'puppeteer';
 
-// Conditionally import Puppeteer or mock based on environment
+// Import fetch conditionally - use native fetch in Node 18+
+const fetch = globalThis.fetch;
+
 let puppeteerCore: any;
 let addExtra: any;
 
