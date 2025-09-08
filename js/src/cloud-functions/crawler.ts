@@ -20,7 +20,7 @@ import { randomUUID } from 'crypto';
 import * as yaml from 'js-yaml';
 
 
-import { CrawlerOptions } from '../dto/scrapping-options.js';
+import { CrawlerOptions } from '../dto/scraping-options.js';
 // import { PDFExtractor } from '../services/pdf-extract.js';
 import PDFExtractor from '../services/pdf-extract.js';
 import { RobotsChecker } from '../services/robots-checker.js';

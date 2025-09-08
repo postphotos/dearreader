@@ -71,12 +71,12 @@ class TestReaderAPI:
             },
             'status': 'success'
         }
-    
+
         mock_response = make_mock_resp(200, json_data=expected_data)
         mock_get.return_value = mock_response
-    
+
         result = self.api.get_json(self.test_url)
-    
+
         assert result == expected_data
         mock_get.assert_called_once()
         call_args = mock_get.call_args
@@ -87,12 +87,12 @@ class TestReaderAPI:
     def test_get_markdown_success(self, mock_get):
         """Test successful markdown response"""
         markdown_content = "# Hello World\n\nThis is a test page."
-    
+
         mock_response = make_mock_resp(200, text=markdown_content)
         mock_get.return_value = mock_response
-    
+
         result = self.api.get_markdown(self.test_url)
-    
+
         assert result == markdown_content
         mock_get.assert_called_once()
         call_args = mock_get.call_args
@@ -102,12 +102,12 @@ class TestReaderAPI:
     def test_get_html_success(self, mock_get):
         """Test successful HTML response"""
         html_content = "<html><body><h1>Test</h1></body></html>"
-    
+
         mock_response = make_mock_resp(200, text=html_content)
         mock_get.return_value = mock_response
-    
+
         result = self.api.get_html(self.test_url)
-    
+
         assert result == html_content
         mock_get.assert_called_once()
         call_args = mock_get.call_args
@@ -118,9 +118,9 @@ class TestReaderAPI:
         """Test requests with additional parameters"""
         mock_response = make_mock_resp(200, json_data={'test': 'data'})
         mock_get.return_value = mock_response
-    
+
         result = self.api.get_json(self.test_url, timeout=30, format='clean')
-    
+
         mock_get.assert_called_once()
         call_args = mock_get.call_args
         assert call_args[1]['params'] == {'timeout': 30, 'format': 'clean'}
@@ -130,7 +130,7 @@ class TestReaderAPI:
         """Test HTTP error handling"""
         mock_response = make_mock_resp(404, text='Not Found')
         mock_get.return_value = mock_response
-    
+
         with pytest.raises(requests.HTTPError):
             self.api.get_json(self.test_url)
 
@@ -155,7 +155,7 @@ class TestReaderAPI:
         """Test handling of invalid JSON responses"""
         mock_response = make_mock_resp(200, text='invalid json')
         mock_get.return_value = mock_response
-    
+
         with pytest.raises(ValueError):  # json() will raise ValueError for invalid JSON
             self.api.get_json(self.test_url)
 

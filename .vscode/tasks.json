@@ -4,116 +4,121 @@
         {
             "type": "npm",
             "script": "build",
-            "group": "build",
-            "options": {
-                "cwd": "${workspaceFolder}/backend/functions"
-            },
-            "problemMatcher": [],
             "label": "Backend:rebuild",
-            "detail": "Backend:rebuild"
+            "group": "build",
+            "detail": "Build JS backend",
+            "options": {
+                "cwd": "${workspaceFolder}/js"
+            },
+            "problemMatcher": []
         },
         {
             "type": "npm",
             "script": "emu:reset",
-            "group": "build",
-            "options": {
-                "cwd": "${workspaceFolder}/backend/functions"
-            },
-            "problemMatcher": [],
             "label": "Backend:reset-emulator",
-            "detail": "Backend:reset-emulator"
+            "group": "build",
+            "detail": "Reset emulators for backend",
+            "options": {
+                "cwd": "${workspaceFolder}/js"
+            },
+            "problemMatcher": []
         },
         {
-            "type": "typescript",
+            "type": "npm",
+            "script": "build:watch",
+            "label": "Backend:build:watch",
+            "group": "build",
+            "detail": "Watch and build JS backend",
             "options": {
-                "cwd": "${workspaceFolder}/backend/functions"
+                "cwd": "${workspaceFolder}/js"
             },
-            "tsconfig": "backend/functions/tsconfig.json",
-            "option": "watch",
             "isBackground": true,
             "problemMatcher": [
                 "$tsc-watch"
-            ],
-            "group": "build",
-            "label": "Backend:build:watch"
+            ]
         },
         {
             "type": "npm",
             "script": "emu:debug",
+            "label": "Backend:start-emulator-debug",
             "group": "none",
+            "detail": "Start backend emulator (debug)",
             "options": {
-                "cwd": "${workspaceFolder}/backend/functions"
+                "cwd": "${workspaceFolder}/js"
             },
+            "isBackground": true,
+            "dependsOn": [
+                "Backend:build:watch"
+            ],
             "problemMatcher": [
                 {
                     "base": "$tsc",
                     "background": {
-                        "activeOnStart": false,
-                        "beginsPattern": "shutdown requested|Starting emulators",
+                        "beginsPattern": "Debugger listening",
                         "endsPattern": "Debugger listening"
                     }
                 }
-            ],
-            "label": "Backend:start-emulator-debug",
-            "detail": "Backend:start-emulator-debug",
-            "dependsOn": [
-                "Backend:build:watch"
-            ],
-            "isBackground": true,
+            ]
         },
         {
             "type": "npm",
             "script": "dev",
-            "options": {
-                "cwd": "${workspaceFolder}/webapp",
-            },
-            "group": "build",
             "label": "Frontend:start:dev",
-            "detail": "Frontend:start:dev",
+            "group": "build",
+            "detail": "Start frontend dev server",
+            "options": {
+                "cwd": "${workspaceFolder}/webapp"
+            },
             "isBackground": true,
             "problemMatcher": {
                 "base": "$vite",
                 "background": {
                     "activeOnStart": true,
-                    "endsPattern": "OK",
-                    "beginsPattern": "vite"
+                    "beginsPattern": "vite",
+                    "endsPattern": "OK"
                 }
-            },
+            }
         },
         {
             "type": "npm",
             "script": "dev",
+            "label": "Frontend:start:emu",
+            "group": "build",
+            "detail": "Start frontend dev server (with emulator env)",
             "options": {
                 "cwd": "${workspaceFolder}/webapp",
                 "env": {
-                    "FIREBASE_EMULATE": "true",
+                    "FIREBASE_EMULATE": "true"
                 }
             },
-            "group": "build",
-            "label": "Frontend:start:emu",
-            "detail": "Frontend:start:emu",
             "isBackground": true,
             "problemMatcher": {
                 "base": "$vite",
                 "background": {
                     "activeOnStart": true,
-                    "endsPattern": "OK",
-                    "beginsPattern": "vite"
+                    "beginsPattern": "vite",
+                    "endsPattern": "OK"
                 }
-            },
+            }
         },
         {
             "type": "npm",
             "script": "emu:debug2",
+            "label": "Backend:start-emulator-debug:with-proxy",
             "group": "none",
+            "detail": "Start backend emulator (debug) with proxy env",
             "options": {
-                "cwd": "${workspaceFolder}/backend/functions",
+                "cwd": "${workspaceFolder}/js",
                 "env": {
                     "https_proxy": "http://127.0.0.1:7890",
                     "http_proxy": "http://127.0.0.1:7890",
                     "all_proxy": "socks5://127.0.0.1:7890"
                 }
             },
+            "isBackground": true,
+            "dependsOn": [
+                "Backend:build:watch"
+            ],
             "problemMatcher": [
                 {
                     "base": "$tsc",
@@ -123,34 +128,27 @@
                         "endsPattern": "Debugger listening"
                     }
                 }
-            ],
-            "label": "Backend:start-emulator-debug:with-proxy",
-            "detail": "Backend:start-emulator-debug:with-proxy",
-            "dependsOn": [
-                "Backend:build:watch"
-            ],
-            "isBackground": true,
+            ]
         },
         {
             "label": "Fullstack:prepare",
             "dependsOn": [
                 "Frontend:start:emu",
-                "Backend:build:watch",
-            ],
+                "Backend:build:watch"
+            ]
         },
         {
             "label": "Fullstack:debug",
             "dependsOn": [
-                // "Frontend:start:emu",
-                "Backend:start-emulator-debug",
-            ],
+                "Backend:start-emulator-debug"
+            ]
         },
         {
             "label": "Fullstack:debug:with-proxy",
             "dependsOn": [
                 "Frontend:start:emu",
-                "Backend:start-emulator-debug:with-proxy",
-            ],
+                "Backend:start-emulator-debug:with-proxy"
+            ]
         }
     ]
 }

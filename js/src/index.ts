@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 import express from 'express';
+import config from './config.js';
+import { concurrencyMiddleware } from './middleware/concurrency.js';
 import { CrawlerHost } from './cloud-functions/crawler.js';
 import { Logger } from './shared/logger.js';
 import { container } from 'tsyringe';
@@ -11,6 +13,8 @@ import { AsyncContext } from './shared/index.js';
 // Local Express server setup instead of Firebase Functions
 const app = express();
 app.use(express.json());
+// apply global concurrency middleware early
+app.use(concurrencyMiddleware);
 
 container.registerSingleton(Logger);
 container.registerSingleton(PuppeteerControl);

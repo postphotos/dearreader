@@ -4,7 +4,7 @@
     {
       "name": "Debug Fullstack: attach",
       "request": "attach",
-      "cwd": "${workspaceFolder}/backend/functions",
+  "cwd": "${workspaceFolder}/js",
       "skipFiles": [
         "<node_internals>/**"
       ],
@@ -14,7 +14,7 @@
     {
       "name": "Debug Fullstack: attach: with proxy",
       "request": "attach",
-      "cwd": "${workspaceFolder}/backend/functions",
+  "cwd": "${workspaceFolder}/js",
       "skipFiles": [
         "<node_internals>/**"
       ],
@@ -47,7 +47,7 @@
         "--import=../.firebase-emu",
         "--export-on-exit=../.firebase-emu",
       ],
-      "cwd": "${workspaceFolder}/backend/functions",
+  "cwd": "${workspaceFolder}/js",
       "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/firebase",
       "skipFiles": [
         "<node_internals>/**"

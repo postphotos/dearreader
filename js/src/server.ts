@@ -10,6 +10,8 @@ import { FirebaseStorageBucketControl } from './shared/index.js';
 import { AsyncContext } from './shared/index.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import config from './config.js';
+import { concurrencyMiddleware } from './middleware/concurrency.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -34,6 +36,9 @@ await crawlerHost.init();
 console.log('CrawlerHost initialized successfully');
 
 app.use(express.json());
+
+// Global concurrency middleware
+app.use(concurrencyMiddleware);
 
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, '..', 'public')));
