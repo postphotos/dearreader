@@ -575,14 +575,17 @@ export class PuppeteerControl extends AsyncService {
             '--disable-background-networking', '--disable-component-update'
         ];
 
-        this.browser = await puppeteer.launch({
-            executablePath: '/usr/bin/chromium',
+        const execPath = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROMIUM_EXECUTABLE || undefined;
+        const launchOpts: any = {
             args,
             timeout: 10_000,
             handleSIGINT: false,
             handleSIGTERM: false,
-            handleSIGHUP: false
-        }).catch((err: any) => {
+            handleSIGHUP: false,
+        };
+        if (execPath) launchOpts.executablePath = execPath;
+
+        this.browser = await puppeteer.launch(launchOpts).catch((err: any) => {
             this.logger.error(`Browser launch failed.`, { err });
             process.nextTick(() => this.emit('error', err));
             return Promise.reject(err);

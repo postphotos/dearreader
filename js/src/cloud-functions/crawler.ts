@@ -1215,7 +1215,16 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             this.threadLocal.set('accept', req.headers.accept || '');
             this.threadLocal.set('x-return-format', req.headers['x-return-format'] || '');
 
-            const urlToCrawl = noSlashURL;
+            // Prefer explicit URL in POST JSON body, then query param, then path
+            let urlToCrawl = noSlashURL;
+            if (req.method === 'POST' && req.body && typeof req.body.url === 'string' && req.body.url.trim()) {
+                urlToCrawl = req.body.url.trim();
+            }
+            else if (req.query && (req.query.url || req.query.u)) {
+                // express query values can be string or string[]
+                const q = (req.query.url || req.query.u) as any;
+                urlToCrawl = Array.isArray(q) ? q[0] : String(q);
+            }
             let parsedUrl: URL;
 
             try {

@@ -12,6 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import config from './config.js';
 import { concurrencyMiddleware } from './middleware/concurrency.js';
+import fs from 'fs';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -43,8 +44,18 @@ app.use(concurrencyMiddleware);
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// Serve static files from the local-storage directory
-app.use('/instant-screenshots', express.static(path.join('/app', 'local-storage', 'instant-screenshots')));
+// Serve static files from the local-storage directory (prefer Docker mount /app/local-storage, fallback to project storage/)
+const externalStoragePath = path.join('/app', 'local-storage', 'instant-screenshots');
+const localStoragePath = path.join(__dirname, '..', '..', 'storage', 'instant-screenshots');
+const storageToServe = fs.existsSync(path.join('/app', 'local-storage')) ? externalStoragePath : localStoragePath;
+if (!fs.existsSync(storageToServe)) {
+  try {
+    fs.mkdirSync(storageToServe, { recursive: true });
+  } catch (e) {
+    console.warn('Could not create storage directory:', storageToServe, e);
+  }
+}
+app.use('/instant-screenshots', express.static(storageToServe));
 
 // Queue status endpoint
 app.get('/queue', (req, res) => {

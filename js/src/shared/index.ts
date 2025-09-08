@@ -37,10 +37,34 @@ export class FirebaseStorageBucketControl {
     private localStorageDir: string;
 
     constructor() {
-        this.localStorageDir = path.join('/app', 'local-storage');
-        if (!fs.existsSync(this.localStorageDir)) {
-            fs.mkdirSync(this.localStorageDir, { recursive: true });
+        // Prefer Docker-mounted path /app/local-storage when available, otherwise use project-local storage directory.
+        const preferred = process.env.LOCAL_STORAGE_DIR || path.join('/app', 'local-storage');
+        const fallback = path.join(process.cwd(), 'storage');
+        let chosen = preferred;
+        try {
+            // try creating preferred; if it fails or is on a read-only fs, fall back
+            if (!fs.existsSync(preferred)) {
+                fs.mkdirSync(preferred, { recursive: true });
+            }
+            chosen = preferred;
+        } catch (e) {
+            // fallback to project storage
+            if (!fs.existsSync(fallback)) {
+                try {
+                    fs.mkdirSync(fallback, { recursive: true });
+                } catch (e2) {
+                    // last resort: use OS temp dir
+                    chosen = path.join(process.cwd(), '.local-storage');
+                    if (!fs.existsSync(chosen)) {
+                        fs.mkdirSync(chosen, { recursive: true });
+                    }
+                }
+            } else {
+                // fallback exists
+            }
+            chosen = fs.existsSync(fallback) ? fallback : chosen;
         }
+        this.localStorageDir = chosen;
     }
 
     async uploadFile(filePath: string, destination: string): Promise<string> {
