@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DearReader - Test Suite</title>
+  <link rel="stylesheet" href="/main.css">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    .test-section {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: var(--border-radius-lg);
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .test-result {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: var(--border-radius-sm);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .test-result.pass {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .test-result.fail {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--error);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .test-button {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: var(--border-radius-md);
+      cursor: pointer;
+      margin: 5px;
+      font-size: 14px;
+    }
+
+    .test-button:hover {
+      background: var(--primary-dark);
+    }
+
+    .test-summary {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: var(--border-radius-lg);
+      padding: 20px;
+      margin-top: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="hero">
+      <h1><i class="fas fa-vial"></i> DearReader Test Suite</h1>
+      <p class="subtitle">Testing client-side functionality and UI components</p>
+    </div>
+
+    <div class="main-content">
+      <div class="card">
+        <h2><i class="fas fa-flask"></i> Utils Tests</h2>
+
+        <div class="test-section">
+          <h3>Clipboard Functions</h3>
+          <button class="test-button" onclick="testCopyToClipboard()">Test Copy to Clipboard</button>
+          <div id="clipboard-test" class="test-result hidden"></div>
+        </div>
+
+        <div class="test-section">
+          <h3>Status Messages</h3>
+          <button class="test-button" onclick="testShowStatus('success')">Show Success Status</button>
+          <button class="test-button" onclick="testShowStatus('error')">Show Error Status</button>
+          <button class="test-button" onclick="testShowStatus('info')">Show Info Status</button>
+        </div>
+
+        <div class="test-section">
+          <h3>File Size Formatting</h3>
+          <button class="test-button" onclick="testFormatFileSize()">Test File Size Formatting</button>
+          <div id="filesize-test" class="test-result hidden"></div>
+        </div>
+
+        <div class="test-section">
+          <h3>Viewport Detection</h3>
+          <button class="test-button" onclick="testIsInViewport()">Test Viewport Detection</button>
+          <div id="viewport-test" class="test-result hidden"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><i class="fas fa-keyboard"></i> Keyboard Shortcuts</h2>
+
+        <div class="test-section">
+          <p>Try these keyboard shortcuts:</p>
+          <ul>
+            <li><strong>Ctrl+K</strong> or <strong>Cmd+K</strong> - Focus URL input</li>
+            <li><strong>Escape</strong> - Hide results</li>
+          </ul>
+          <div id="keyboard-test" class="test-result hidden"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><i class="fas fa-mobile-alt"></i> Responsive Design Tests</h2>
+
+        <div class="test-section">
+          <p>Resize your browser window to test responsive design:</p>
+          <div class="test-result pass" id="responsive-test">
+            <i class="fas fa-check"></i> Current viewport: <span id="viewport-size">Loading...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="test-summary">
+      <h3>Test Results Summary</h3>
+      <div id="test-summary">
+        <div class="test-result pass">
+          <i class="fas fa-info-circle"></i> Run individual tests above to see results
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="status" class="status"></div>
+
+  <script src="main.js"></script>
+  <script src="app.js"></script>
+  <script>
+    // Test functions
+    async function testCopyToClipboard() {
+      const resultDiv = document.getElementById('clipboard-test');
+      try {
+        const success = await Utils.copyToClipboard('Test clipboard content');
+        resultDiv.className = 'test-result ' + (success ? 'pass' : 'fail');
+        resultDiv.innerHTML = success
+          ? '<i class="fas fa-check"></i> Clipboard copy successful'
+          : '<i class="fas fa-times"></i> Clipboard copy failed';
+        resultDiv.style.display = 'block';
+      } catch (error) {
+        resultDiv.className = 'test-result fail';
+        resultDiv.innerHTML = '<i class="fas fa-times"></i> Clipboard error: ' + error.message;
+        resultDiv.style.display = 'block';
+      }
+    }
+
+    function testShowStatus(type) {
+      const messages = {
+        success: 'Operation completed successfully!',
+        error: 'An error occurred during the operation.',
+        info: 'This is an informational message.'
+      };
+      Utils.showStatus(messages[type], type);
+    }
+
+    function testFormatFileSize() {
+      const resultDiv = document.getElementById('filesize-test');
+      const testCases = [
+        { input: 0, expected: '0 Bytes' },
+        { input: 1024, expected: '1 KB' },
+        { input: 1024 * 1024, expected: '1 MB' },
+        { input: 1024 * 1024 * 1024, expected: '1 GB' }
+      ];
+
+      let allPassed = true;
+      const results = testCases.map(test => {
+        const result = Utils.formatFileSize(test.input);
+        const passed = result === test.expected;
+        if (!passed) allPassed = false;
+        return `${test.input} bytes → ${result} (${passed ? 'PASS' : 'FAIL - expected: ' + test.expected})`;
+      });
+
+      resultDiv.className = 'test-result ' + (allPassed ? 'pass' : 'fail');
+      resultDiv.innerHTML = (allPassed ? '<i class="fas fa-check"></i> ' : '<i class="fas fa-times"></i> ') +
+        'File size formatting tests:<br>' + results.join('<br>');
+      resultDiv.style.display = 'block';
+    }
+
+    function testIsInViewport() {
+      const resultDiv = document.getElementById('viewport-test');
+      const testElement = document.createElement('div');
+      testElement.style.cssText = 'position: absolute; top: 100px; left: 100px; width: 100px; height: 100px;';
+      document.body.appendChild(testElement);
+
+      const isVisible = Utils.isInViewport(testElement);
+      document.body.removeChild(testElement);
+
+      resultDiv.className = 'test-result ' + (typeof isVisible === 'boolean' ? 'pass' : 'fail');
+      resultDiv.innerHTML = (typeof isVisible === 'boolean' ? '<i class="fas fa-check"></i> ' : '<i class="fas fa-times"></i> ') +
+        `Viewport detection: Element is ${isVisible ? 'visible' : 'not visible'}`;
+      resultDiv.style.display = 'block';
+    }
+
+    // Update viewport size display
+    function updateViewportSize() {
+      const sizeSpan = document.getElementById('viewport-size');
+      sizeSpan.textContent = `${window.innerWidth} x ${window.innerHeight}px`;
+    }
+
+    // Test keyboard shortcuts
+    let keyboardTestTimeout;
+    document.addEventListener('keydown', (e) => {
+      const resultDiv = document.getElementById('keyboard-test');
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        resultDiv.className = 'test-result pass';
+        resultDiv.innerHTML = '<i class="fas fa-check"></i> Ctrl+K shortcut detected - URL input focused';
+        resultDiv.style.display = 'block';
+        clearTimeout(keyboardTestTimeout);
+        keyboardTestTimeout = setTimeout(() => {
+          resultDiv.style.display = 'none';
+        }, 3000);
+      } else if (e.key === 'Escape') {
+        resultDiv.className = 'test-result pass';
+        resultDiv.innerHTML = '<i class="fas fa-check"></i> Escape key detected - Results hidden';
+        resultDiv.style.display = 'block';
+        clearTimeout(keyboardTestTimeout);
+        keyboardTestTimeout = setTimeout(() => {
+          resultDiv.style.display = 'none';
+        }, 3000);
+      }
+    });
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+      updateViewportSize();
+      window.addEventListener('resize', updateViewportSize);
+    });
+  </script>
+</body>
+</html>
