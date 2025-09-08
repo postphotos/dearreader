@@ -205,6 +205,7 @@ let PuppeteerControl = class PuppeteerControl extends AsyncService {
         }
     }
     briefPages() {
+        // eslint-disable-next-line max-len
         this.logger.info(`Status: ${this.livePages.size} pages alive: ${Array.from(this.livePages).map((x) => this.snMap.get(x)).sort().join(', ')}; ${this.__loadedPage.length} idle pages: ${this.__loadedPage.map((x) => this.snMap.get(x)).sort().join(', ')}`);
         this.logger.info(`Pool status: ${this.pagePool.length} total pages, ${this.currentActivePages} active, ${this.requestQueue.length} queued`);
     }

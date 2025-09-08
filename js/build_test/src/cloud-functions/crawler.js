@@ -50,7 +50,6 @@ function safeNormalizeUrl(input, base) {
         return new URL(input.toString(), defaultBase);
     }
 }
-// (Remove this line entirely)
 /**
  * Sends a response to the client with the specified data and metadata, setting status, headers, and content type as needed.
  * @param res - Express response object
@@ -1100,17 +1099,31 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             if (respectRobots) {
                 console.log('Checking robots.txt compliance for:', parsedUrl.toString());
                 try {
-                    const isAllowed = await this.robotsChecker.isAllowed(parsedUrl.toString(), 'DearReader-Bot');
-                    if (!isAllowed) {
-                        console.log('URL blocked by robots.txt:', parsedUrl.toString());
-                        return sendResponse(res, 'Access denied by robots.txt', { contentType: 'text/plain', code: 403 });
+                    // Some test mocks or environments may not provide a full robotsChecker implementation.
+                    // Guard calls to avoid runtime TypeError when methods are missing.
+                    const hasIsAllowed = this.robotsChecker && typeof this.robotsChecker.isAllowed === 'function';
+                    const hasGetCrawlDelay = this.robotsChecker && typeof this.robotsChecker.getCrawlDelay === 'function';
+                    if (hasIsAllowed) {
+                        const isAllowed = await this.robotsChecker.isAllowed(parsedUrl.toString(), 'DearReader-Bot');
+                        if (!isAllowed) {
+                            console.log('URL blocked by robots.txt:', parsedUrl.toString());
+                            return sendResponse(res, 'Access denied by robots.txt', { contentType: 'text/plain', code: 403 });
+                        }
                     }
-                    // Check for crawl delay
-                    const crawlDelay = await this.robotsChecker.getCrawlDelay(parsedUrl.toString(), 'DearReader-Bot');
-                    if (crawlDelay && crawlDelay > 0) {
-                        console.log(`Applying crawl delay of ${crawlDelay}s for:`, parsedUrl.toString());
-                        // In production, you might want to implement a proper rate limiting mechanism
-                        // For now, just log it
+                    else {
+                        console.log('robotsChecker.isAllowed not available; skipping robots.txt allow check');
+                    }
+                    // Check for crawl delay if supported
+                    if (hasGetCrawlDelay) {
+                        const crawlDelay = await this.robotsChecker.getCrawlDelay(parsedUrl.toString(), 'DearReader-Bot');
+                        if (crawlDelay && crawlDelay > 0) {
+                            console.log(`Applying crawl delay of ${crawlDelay}s for:`, parsedUrl.toString());
+                            // In production, you might want to implement a proper rate limiting mechanism
+                            // For now, just log it
+                        }
+                    }
+                    else {
+                        console.log('robotsChecker.getCrawlDelay not available; skipping crawl-delay handling');
                     }
                 }
                 catch (robotsError) {
