@@ -7,28 +7,27 @@ project. It handles npm dependencies, Docker builds, static analysis, and runs
 integration and performance tests.
 
 Usage:
-    All commands can be run with 'uv run app.py <command>'.
+    All commands can be run with 'uv run py/app.py <command>' or './run.sh <command>'.
 
-    ┌──────────────────┬──────────────────────────────────────────────────────────────┐
-    │ Command          │ Description                                                  │
-    ├──────────────────┼──────────────────────────────────────────────────────────────┤
-    │ start / basic    │ (Default) Runs core checks: npm, pyright, and the demo.      │
-    │ all              │ Runs the full pipeline: npm, docker, pyright, demo, speedtest. │
-    │ tests            │ Runs all available tests: npm, TypeScript build, demo, etc.  │
-    │ npm              │ Only runs 'npm install' and 'npm test'.                      │
-    │ docker           │ Builds and runs the Docker container.                        │
-    │ docker-clear     │ Clears Docker cache, then builds and runs the container.     │
-    │ pyright          │ Runs the Pyright static type checker.                        │
-    │ demo             │ Runs the demo.py integration test script.                    │
-    │ speedtest        │ Runs the speedtest.py performance script.                    │
-    │ stop             │ Stops and removes the running Docker container.              │
-    └──────────────────┴──────────────────────────────────────────────────────────────┘
+Available Commands:
+    start / basic    - (Default) Runs core checks: npm, pyright, and the demo
+    all              - Runs the full pipeline: npm, docker, pyright, demo, speedtest
+    tests            - Runs all available tests: npm, TypeScript build, demo, etc
+    npm              - Only runs 'npm install' and 'npm test'
+    docker           - Builds and runs the Docker container
+    docker-clear     - Clears Docker cache, then builds and runs the container
+    pyright          - Runs the Pyright static type checker
+    demo             - Runs the demo.py integration test script
+    speedtest        - Runs the speedtest.py performance script
+    stop             - Stops and removes the running Docker container
+    js-test          - Runs JavaScript tests via docker-compose
+    prod-up          - Starts production environment via docker-compose
 
 Options:
-    --verbose          : Shows live output from commands instead of capturing it.
-    --debug            : If 'npm test' times out, re-runs it with no time limit.
-    --force            : Continues the pipeline even if a step fails.
-    --no-cache         : Disables the Docker build cache (used with 'docker' command).
+    --verbose        - Shows live output from commands instead of capturing it
+    --debug          - If 'npm test' times out, re-runs it with no time limit
+    --force          - Continues the pipeline even if some steps fail
+    --no-cache       - Disables the Docker build cache (used with 'docker' command)
 """
 import argparse
 import os
@@ -39,7 +38,9 @@ import sys
 import time
 import select
 import webbrowser
-import yaml as yaml # type: ignore
+import yaml as yaml # Add yaml import
+import socket
+import psutil
 from typing import Tuple, Callable, Optional, Dict
 
 # --- Configuration ---
@@ -167,8 +168,79 @@ def run_cmd(
             _terminate_process_group(proc)
             return 1, "", ""
 
-# --- Pipeline Steps ---
-def step_npm(debug: bool = False, verbose: bool = False) -> int:
+def check_port_available(port: int) -> bool:
+    """Check if a port is available."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind(('localhost', port))
+            return True
+        except OSError:
+            return False
+
+def find_process_using_port(port: int) -> Optional[psutil.Process]:
+    """Find the process using a specific port."""
+    for conn in psutil.net_connections():
+        if conn.laddr and conn.laddr.port == port and conn.status == 'LISTEN':
+            try:
+                return psutil.Process(conn.pid)
+            except psutil.NoSuchProcess:
+                continue
+    return None
+
+def handle_port_conflict(port: int, service_name: str) -> bool:
+    """Handle port conflict by offering to kill the conflicting process."""
+    print_warning(f"Port {port} is already in use by another process.")
+
+    process = find_process_using_port(port)
+    if process:
+        try:
+            process_name = process.name()
+            process_cmd = ' '.join(process.cmdline()[:3]) if process.cmdline() else 'Unknown'
+            print_warning(f"Process using port {port}: {process_name} (PID: {process.pid})")
+            print_warning(f"Command: {process_cmd}")
+
+            # Auto-kill if it's a known development process
+            if any(keyword in process_cmd.lower() for keyword in ['python', 'node', 'npm', 'uv', 'app.py']):
+                print_info(f"Found development process. Attempting to terminate it...")
+                try:
+                    process.terminate()
+                    process.wait(timeout=5)
+                    print_success(f"Successfully terminated process {process.pid}")
+                    time.sleep(2)  # Wait for port to be released
+                    return True
+                except psutil.TimeoutExpired:
+                    print_warning(f"Process {process.pid} didn't terminate gracefully. Force killing...")
+                    process.kill()
+                    time.sleep(2)
+                    return True
+                except psutil.NoSuchProcess:
+                    print_info(f"Process {process.pid} was already terminated.")
+                    time.sleep(1)
+                    return True
+            else:
+                print_error(f"Port {port} is in use by: {process_name}")
+                print_info("Please stop this process or choose a different port.")
+                return False
+        except psutil.NoSuchProcess:
+            print_info(f"Process was already terminated.")
+            time.sleep(1)
+            return True
+        except Exception as e:
+            print_error(f"Error handling process: {e}")
+            return False
+    else:
+        print_error(f"Port {port} is in use but couldn't identify the process.")
+        return False
+
+def ensure_port_available(port: int, service_name: str) -> bool:
+    """Ensure a port is available, handling conflicts automatically."""
+    if check_port_available(port):
+        return True
+
+    print_info(f"Checking port {port} availability for {service_name}...")
+    return handle_port_conflict(port, service_name)
+
+def step_npm(verbose: bool = False, debug: bool = False) -> int:
     """Run npm install and test."""
     print_info("--- Step 1: Running npm install and tests ---")
     npm_dir = "js"
@@ -234,6 +306,13 @@ def step_docker(verbose: bool = False, clear_cache: bool = False) -> int:
     print_success("Docker image built.")
 
     print_info(f"Running Docker container '{DOCKER_CONTAINER_NAME}'...")
+
+    # Check if port 3000 is available before trying to run the container
+    if not ensure_port_available(3000, "Docker container"):
+        print_error("Cannot start Docker container due to port conflict.")
+        print_info("Try running './run.sh stop' to stop any existing containers, or manually kill the process using port 3000.")
+        return 1
+
     # Handle Windows paths for Docker volume mounting
     storage_path = os.path.abspath('./storage').replace('\\', '/')
     run_cmd_list = [
@@ -315,6 +394,55 @@ def step_stop(verbose: bool = False) -> int:
         print_info(f"Container '{DOCKER_CONTAINER_NAME}' was not running or could not be removed.")
     return 0
 
+def step_js_test(verbose: bool = False) -> int:
+    """Run JavaScript tests via docker-compose."""
+    print_info("--- Running JavaScript tests ---")
+
+    # Check if ports 3000 and 5000 are available (used by js-server and python services)
+    if not ensure_port_available(3000, "JS server"):
+        print_error("Cannot run JS tests - port 3000 is in use.")
+        return 1
+
+    if not ensure_port_available(5000, "Python service"):
+        print_error("Cannot run JS tests - port 5000 is in use.")
+        return 1
+
+    code, _, err = run_cmd(["docker-compose", "--profile", "dev", "run", "--rm", "js-test"], timeout=300, live=verbose)
+    if code != 0:
+        print_error("JavaScript tests failed.")
+        if err and not verbose: print(err, file=sys.stderr)
+        return code
+    print_success("JavaScript tests passed.")
+    return 0
+
+def step_prod_up(verbose: bool = False) -> int:
+    """Start production environment via docker-compose."""
+    print_info("--- Starting PRODUCTION environment ---")
+
+    # Check if port 80 is available (used by the server service)
+    if not ensure_port_available(80, "Production server"):
+        print_error("Cannot start production - port 80 is in use.")
+        return 1
+
+    print_info("Stopping any existing services...")
+    run_cmd(["docker-compose", "down", "--remove-orphans"], timeout=60)
+
+    print_info("Building and starting production services...")
+    code, _, err = run_cmd(["docker-compose", "--profile", "prod", "up", "--build", "-d"], timeout=600, live=verbose)
+    if code != 0:
+        print_error("Failed to start production environment.")
+        if err and not verbose: print(err, file=sys.stderr)
+        return code
+
+    print_success("Production environment started.")
+    print_info("Tailing logs... (Press Ctrl+C to stop)")
+    # Start tailing logs in the background
+    try:
+        run_cmd(["docker-compose", "logs", "-f", "server"], live=True)
+    except KeyboardInterrupt:
+        print_info("Stopping log tail...")
+    return 0
+
 def step_tests(verbose: bool = False, debug: bool = False, force: bool = False) -> int:
     """Run ALL tests: npm, TypeScript build, pyright, demo, and speedtest."""
     print_info("--- Running ALL available tests ---")
@@ -364,7 +492,7 @@ def main():
         "command",
         nargs="?",
         default="start",
-        choices=["basic", "start", "all", "npm", "docker", "docker-clear", "pyright", "demo", "speedtest", "tests", "stop"],
+        choices=["basic", "start", "all", "npm", "docker", "docker-clear", "pyright", "demo", "speedtest", "tests", "stop", "js-test", "prod-up"],
         help="Command to run (default: start). See docstring for details."
     )
     parser.add_argument("--verbose", action="store_true", help="Show live command output.")
@@ -399,6 +527,10 @@ def main():
             final_rc = step_speedtest(verbose=args.verbose)
         elif args.command == "stop":
             final_rc = step_stop(verbose=args.verbose)
+        elif args.command == "js-test":
+            final_rc = step_js_test(verbose=args.verbose)
+        elif args.command == "prod-up":
+            final_rc = step_prod_up(verbose=args.verbose)
         elif args.command == "tests":
             final_rc = step_tests(verbose=args.verbose, debug=args.debug, force=args.force)
 

@@ -8,7 +8,7 @@ services:
       dockerfile: docker/Dockerfile.dev
       target: js-dev
     container_name: reader-js-local
-    command: npm run serve --prefix js
+    command: npm run serve
     volumes:
       - ./js:/app/js
     ports:
@@ -37,7 +37,8 @@ services:
       dockerfile: docker/Dockerfile.dev
       target: js-dev
     container_name: reader-js-test-runner
-    command: npm test --prefix js
+    command: ./test-smart.sh
+    working_dir: /app/js
     profiles: ["dev"]
     volumes:
       - ./js:/app/js
@@ -45,6 +46,7 @@ services:
     environment:
       - NODE_ENV=test
       - CI=true
+      - SMART_TEST_CLEANUP=true
 
   # -----------------------------------------------
   # --- PRODUCTION PROFILE SERVICE

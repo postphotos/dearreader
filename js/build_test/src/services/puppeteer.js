@@ -1,69 +1,79 @@
-import os from 'os';
-import fs from 'fs';
-import { container, singleton } from 'tsyringe';
-import { AsyncService, Defer, marshalErrorLike, delay, maxConcurrency } from 'civkit';
-import { Logger } from '../shared/index.js';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-
-import type { Browser, Page, BrowserContext } from 'puppeteer';
-
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PuppeteerControl = void 0;
+const os_1 = __importDefault(require("os"));
+const fs_1 = __importDefault(require("fs"));
+const tsyringe_1 = require("tsyringe");
+const civkit_1 = require("civkit");
+const index_js_1 = require("../shared/index.js");
+const module_1 = require("module");
+const require = (0, module_1.createRequire)(import.meta.url);
 // Import fetch conditionally - use native fetch in Node 18+
 const fetch = globalThis.fetch;
-
-let puppeteerCore: any;
-let addExtra: any;
-
+let puppeteerCore;
+let addExtra;
 if (process.env.USE_PUPPETEER_MOCK === 'true') {
-  console.log('🔧 Using Puppeteer mock implementation');
-  const { mockPuppeteer, mockAddExtra } = await import('../../test/mock-puppeteer.js');
-  puppeteerCore = mockPuppeteer;
-  addExtra = mockAddExtra;
-} else {
-  puppeteerCore = await import('puppeteer');
-  const puppeteerExtra = await import('puppeteer-extra');
-  addExtra = puppeteerExtra.addExtra;
+    console.log('🔧 Using Puppeteer mock implementation');
+    const { mockPuppeteer, mockAddExtra } = await Promise.resolve().then(() => __importStar(require('../../test/mock-puppeteer.js')));
+    puppeteerCore = mockPuppeteer;
+    addExtra = mockAddExtra;
 }
-
-// Define CookieParam type since it's not exported from puppeteer
-export interface CookieParam {
-    name: string;
-    value: string;
-    url?: string;
-    domain?: string;
-    path?: string;
-    secure?: boolean;
-    httpOnly?: boolean;
-    sameSite?: 'Strict' | 'Lax' | 'None';
-    expires?: number;
+else {
+    puppeteerCore = await Promise.resolve().then(() => __importStar(require('puppeteer')));
+    const puppeteerExtra = await Promise.resolve().then(() => __importStar(require('puppeteer-extra')));
+    addExtra = puppeteerExtra.addExtra;
 }
-
-import puppeteerPageProxy from 'puppeteer-extra-plugin-page-proxy';
-import { ServiceCrashedError } from '../shared/errors.js';
-import { parse as tldParse } from 'tldts';
-import puppeteerStealth from 'puppeteer-extra-plugin-stealth';
-
-// Queue for managing concurrent requests
-interface QueuedRequest {
-    resolve: (value: Page) => void;
-    reject: (error: any) => void;
-    priority: number;
-    timestamp: number;
-}
-
-// Page wrapper with context tracking
-interface ManagedPage {
-    page: Page;
-    context: BrowserContext;
-    sn: number;
-    createdAt: number;
-    inUse: boolean;
-    lastUsed: number;
-}
-
+const puppeteer_extra_plugin_page_proxy_1 = __importDefault(require("puppeteer-extra-plugin-page-proxy"));
+const errors_js_1 = require("../shared/errors.js");
+const tldts_1 = require("tldts");
+const puppeteer_extra_plugin_stealth_1 = __importDefault(require("puppeteer-extra-plugin-stealth"));
 // Add this new function for cookie validation
-const validateCookie = (cookie: CookieParam) => {
+const validateCookie = (cookie) => {
     const requiredFields = ['name', 'value'];
     for (const field of requiredFields) {
         if (!(field in cookie)) {
@@ -71,72 +81,12 @@ const validateCookie = (cookie: CookieParam) => {
         }
     }
 };
-
-const READABILITY_JS = fs.readFileSync(require.resolve('@mozilla/readability/Readability.js'), 'utf-8');
-
-
-export interface ImgBrief {
-    src: string;
-    loaded?: boolean;
-    width?: number;
-    height?: number;
-    naturalWidth?: number;
-    naturalHeight?: number;
-    alt?: string;
-}
-
-export interface ReadabilityParsed {
-    title: string;
-    content: string;
-    textContent: string;
-    length: number;
-    excerpt: string;
-    byline: string;
-    dir: string;
-    siteName: string;
-    lang: string;
-    publishedTime: string;
-}
-
-export interface PageSnapshot {
-    title: string;
-    href: string;
-    rebase?: string;
-    html: string;
-    text: string;
-    parsed?: Partial<ReadabilityParsed> | null;
-    screenshot?: Buffer;
-    pageshot?: Buffer;
-    imgs?: ImgBrief[];
-    pdfs?: string[];
-    maxElemDepth?: number;
-    elemCount?: number;
-    childFrames?: PageSnapshot[];
-    error?: string;
-}
-
-export interface ExtendedSnapshot extends PageSnapshot {
-    links: { [url: string]: string; };
-    imgs: ImgBrief[];
-}
-
-export interface ScrappingOptions {
-    proxyUrl?: string;
-    cookies?: CookieParam[];
-    favorScreenshot?: boolean;
-    waitForSelector?: string | string[];
-    minIntervalMs?: number;
-    overrideUserAgent?: string;
-    timeoutMs?: number;
-}
-
+const READABILITY_JS = fs_1.default.readFileSync(require.resolve('@mozilla/readability/Readability.js'), 'utf-8');
 const puppeteer = addExtra(puppeteerCore);
-
-puppeteer.use(puppeteerStealth());
-puppeteer.use(puppeteerPageProxy({
+puppeteer.use((0, puppeteer_extra_plugin_stealth_1.default)());
+puppeteer.use((0, puppeteer_extra_plugin_page_proxy_1.default)({
     interceptResolutionPriority: 1,
 }));
-
 const SCRIPT_TO_INJECT_INTO_FRAME = `
 ${READABILITY_JS}
 
@@ -247,49 +197,31 @@ function giveSnapshot(stopActiveSnapshot) {
     return r;
 }
 `;
-
-@singleton()
-export class PuppeteerControl extends AsyncService {
-
-    _sn = 0;
-    browser!: Browser;
-    logger = new Logger('PuppeteerControl'); // Renamed for clarity
-
-    private __healthCheckInterval?: NodeJS.Timeout;
-    private __cleanupInterval?: NodeJS.Timeout;
-    private __emergencyCleanupInterval?: NodeJS.Timeout;
-    private __resourceMonitorInterval?: NodeJS.Timeout;
-
-    // Resource tracking for leak prevention
-    private startTime = Date.now();
-    private maxLifetime = 10 * 60 * 1000; // 10 minutes max lifetime in tests
-    private isClosing = false;
-
-    // New queue-based system
-    private requestQueue: QueuedRequest[] = [];
-    private pagePool: ManagedPage[] = [];
-    private maxConcurrentPages = 10; // Configurable max concurrent pages
-    private currentActivePages = 0;
-    private processing = false;
-    private readonly PAGE_IDLE_TIMEOUT = 60 * 1000; // 1 minute for idle pages
-
-    __loadedPage: Page[] = [];
-
-    finalizerMap = new WeakMap<Page, ReturnType<typeof global.setTimeout>>();
-    snMap = new WeakMap<Page, number>();
-    livePages = new Set<Page>();
-    lastPageCreatedAt: number = 0;
-
-    circuitBreakerHosts: Set<string> = new Set();
-
-    // Map to store snapshot handlers for each page
-    snapshotHandlers = new WeakMap<Page, (snapshot: PageSnapshot) => void>();
-
-    constructor(
-    ) {
+let PuppeteerControl = class PuppeteerControl extends civkit_1.AsyncService {
+    constructor() {
         super();
-        this.setMaxListeners(2 * Math.floor(os.totalmem() / (256 * 1024 * 1024)) + 1);
-
+        this._sn = 0;
+        this.logger = new index_js_1.Logger('PuppeteerControl'); // Renamed for clarity
+        // Resource tracking for leak prevention
+        this.startTime = Date.now();
+        this.maxLifetime = 10 * 60 * 1000; // 10 minutes max lifetime in tests
+        this.isClosing = false;
+        // New queue-based system
+        this.requestQueue = [];
+        this.pagePool = [];
+        this.maxConcurrentPages = 10; // Configurable max concurrent pages
+        this.currentActivePages = 0;
+        this.processing = false;
+        this.PAGE_IDLE_TIMEOUT = 60 * 1000; // 1 minute for idle pages
+        this.__loadedPage = [];
+        this.finalizerMap = new WeakMap();
+        this.snMap = new WeakMap();
+        this.livePages = new Set();
+        this.lastPageCreatedAt = 0;
+        this.circuitBreakerHosts = new Set();
+        // Map to store snapshot handlers for each page
+        this.snapshotHandlers = new WeakMap();
+        this.setMaxListeners(2 * Math.floor(os_1.default.totalmem() / (256 * 1024 * 1024)) + 1);
         this.on('crippled', () => {
             this.__loadedPage.length = 0;
             this.livePages.clear();
@@ -297,43 +229,38 @@ export class PuppeteerControl extends AsyncService {
             this.pagePool.length = 0;
             this.currentActivePages = 0;
             // Reject all queued requests
-            this.requestQueue.forEach(req => req.reject(new ServiceCrashedError({ message: 'Browser crashed' })));
+            this.requestQueue.forEach(req => req.reject(new errors_js_1.ServiceCrashedError({ message: 'Browser crashed' })));
             this.requestQueue.length = 0;
         });
-``
+        ``;
         // Start cleanup interval
         this.__cleanupInterval = setInterval(() => this.cleanupIdlePages(), 30_000);
-
         // Start emergency cleanup for test environments
         if (process.env.NODE_ENV === 'test' || process.env.CI === 'true') {
             this.__emergencyCleanupInterval = setInterval(() => this.emergencyCleanup(), 60_000);
             this.__resourceMonitorInterval = setInterval(() => this.monitorResources(), 30_000);
         }
     }
-
     briefPages() {
         this.logger.info(`Status: ${this.livePages.size} pages alive: ${Array.from(this.livePages).map((x) => this.snMap.get(x)).sort().join(', ')}; ${this.__loadedPage.length} idle pages: ${this.__loadedPage.map((x) => this.snMap.get(x)).sort().join(', ')}`);
         this.logger.info(`Pool status: ${this.pagePool.length} total pages, ${this.currentActivePages} active, ${this.requestQueue.length} queued`);
     }
-
-    private async createManagedPage(): Promise<ManagedPage> {
+    async createManagedPage() {
         const sn = this._sn++;
-        let context: BrowserContext;
-        let page: Page;
-
+        let context;
+        let page;
         if (!this.browser) {
             throw new Error('Browser not initialized');
         }
-
         try {
             context = this.browser.defaultBrowserContext();
             page = await context.newPage();
-        } catch (error) {
-            this.logger.error(`Failed to create page ${sn}:`, { error: marshalErrorLike(error as Error) });
+        }
+        catch (error) {
+            this.logger.error(`Failed to create page ${sn}:`, { error: (0, civkit_1.marshalErrorLike)(error) });
             throw error;
         }
-
-        const managedPage: ManagedPage = {
+        const managedPage = {
             page,
             context,
             sn,
@@ -341,21 +268,16 @@ export class PuppeteerControl extends AsyncService {
             inUse: false,
             lastUsed: Date.now()
         };
-
         this.snMap.set(page, sn);
         this.logger.info(`Page ${sn} created.`);
-
         await this.setupPage(page, sn);
-
         return managedPage;
     }
-
-    private async setupPage(page: Page, sn: number): Promise<void> {
-        const preparations: any[] = [];
-
+    async setupPage(page, sn) {
+        const preparations = [];
         preparations.push(page.setBypassCSP(true));
         preparations.push(page.setViewport({ width: 1024, height: 1024 }));
-        preparations.push(page.exposeFunction('reportSnapshot', (snapshot: PageSnapshot) => {
+        preparations.push(page.exposeFunction('reportSnapshot', (snapshot) => {
             if (snapshot.href === 'about:blank') {
                 return;
             }
@@ -366,23 +288,18 @@ export class PuppeteerControl extends AsyncService {
         }));
         preparations.push(page.evaluateOnNewDocument(SCRIPT_TO_INJECT_INTO_FRAME));
         preparations.push(page.setRequestInterception(true));
-
         await Promise.all(preparations);
         await page.goto('about:blank', { waitUntil: 'domcontentloaded' });
-
         this.setupPageRequestHandling(page, sn);
-
         this.livePages.add(page);
         this.lastPageCreatedAt = Date.now();
     }
-
-    private setupPageRequestHandling(page: Page, sn: number): void {
-        const domainSet = new Set<string>();
+    setupPageRequestHandling(page, sn) {
+        const domainSet = new Set();
         let reqCounter = 0;
-        let t0: number | undefined;
+        let t0;
         let halt = false;
-
-        page.on('request', (req: any) => {
+        page.on('request', (req) => {
             reqCounter++;
             if (halt) {
                 return req.abort('blockedbyclient', 1000);
@@ -392,34 +309,29 @@ export class PuppeteerControl extends AsyncService {
             if (!requestUrl.startsWith("http:") && !requestUrl.startsWith("https:") && requestUrl !== 'about:blank') {
                 return req.abort('blockedbyclient', 1000);
             }
-
             try {
-                const tldParsed = tldParse(requestUrl);
-                if (tldParsed.domain) domainSet.add(tldParsed.domain);
-            } catch (error) {
+                const tldParsed = (0, tldts_1.parse)(requestUrl);
+                if (tldParsed.domain)
+                    domainSet.add(tldParsed.domain);
+            }
+            catch (error) {
                 this.logger.warn(`Failed to parse TLD for URL: ${requestUrl}. Using fallback method.`);
                 const simpleDomain = this.extractDomain(requestUrl);
-                if (simpleDomain) domainSet.add(simpleDomain);
+                if (simpleDomain)
+                    domainSet.add(simpleDomain);
             }
-
             const parsedUrl = new URL(requestUrl);
-
             if (this.circuitBreakerHosts.has(parsedUrl.hostname.toLowerCase())) {
                 page.emit('abuse', { url: requestUrl, page, sn, reason: `Abusive request: ${requestUrl}` });
                 return req.abort('blockedbyclient', 1000);
             }
-
-            if (
-                parsedUrl.hostname === 'localhost' ||
-                parsedUrl.hostname.startsWith('127.')
-            ) {
+            if (parsedUrl.hostname === 'localhost' ||
+                parsedUrl.hostname.startsWith('127.')) {
                 page.emit('abuse', { url: requestUrl, page, sn, reason: `Suspicious action: Request to localhost: ${requestUrl}` });
                 return req.abort('blockedbyclient', 1000);
             }
-
             const dt = Math.ceil((Date.now() - t0) / 1000);
             const rps = reqCounter / dt;
-
             if (reqCounter > 1000) {
                 if (rps > 60 || reqCounter > 2000) {
                     page.emit('abuse', { url: requestUrl, page, sn, reason: `DDoS attack suspected: Too many requests` });
@@ -427,44 +339,35 @@ export class PuppeteerControl extends AsyncService {
                     return req.abort('blockedbyclient', 1000);
                 }
             }
-
             if (domainSet.size > 200) {
                 page.emit('abuse', { url: requestUrl, page, sn, reason: `DDoS attack suspected: Too many domains` });
                 halt = true;
                 return req.abort('blockedbyclient', 1000);
             }
-
-            req.continue().catch(() => {/* Ignore errors on continue */});
+            req.continue().catch(() => { });
         });
     }
-
-    private destroyManagedPage(managedPage: ManagedPage): Promise<void> {
-        return new Promise<void>((resolve) => {
+    destroyManagedPage(managedPage) {
+        return new Promise((resolve) => {
             const { page, sn } = managedPage;
-
             if (this.finalizerMap.has(page)) {
-                clearTimeout(this.finalizerMap.get(page)!);
+                clearTimeout(this.finalizerMap.get(page));
                 this.finalizerMap.delete(page);
             }
-
             this.logger.info(`Destroying managed page ${sn}`);
             this.livePages.delete(page);
             this.snMap.delete(page);
-
             const index = this.pagePool.indexOf(managedPage);
             if (index !== -1) {
                 this.pagePool.splice(index, 1);
             }
-
             if (managedPage.inUse) {
                 this.currentActivePages--;
             }
-
             if (page.isClosed()) {
                 resolve();
                 return;
             }
-
             Promise.race([
                 (async () => {
                     try {
@@ -473,50 +376,45 @@ export class PuppeteerControl extends AsyncService {
                         if (context.pages && (await context.pages()).length === 0) {
                             await context.close();
                         }
-                    } catch (error) {
-                        this.logger.warn(`Error closing page ${sn}:`, { error: marshalErrorLike(error as Error) });
+                    }
+                    catch (error) {
+                        this.logger.warn(`Error closing page ${sn}:`, { error: (0, civkit_1.marshalErrorLike)(error) });
                     }
                 })(),
-                delay(5000)
+                (0, civkit_1.delay)(5000)
             ]).finally(() => {
                 resolve();
             });
         });
     }
-
-    private cleanupIdlePages(): void {
+    cleanupIdlePages() {
         const now = Date.now();
-        const idlePages = this.pagePool.filter(mp =>
-            !mp.inUse && (now - mp.lastUsed) > this.PAGE_IDLE_TIMEOUT
-        );
-
+        const idlePages = this.pagePool.filter(mp => !mp.inUse && (now - mp.lastUsed) > this.PAGE_IDLE_TIMEOUT);
         idlePages.forEach(mp => {
             this.logger.info(`Cleaning up idle page ${mp.sn}`);
             this.destroyManagedPage(mp);
         });
     }
-
-    private processQueue(): void {
+    processQueue() {
         if (this.processing || this.requestQueue.length === 0) {
             return;
         }
         this.processing = true;
-
         this.requestQueue.sort((a, b) => {
-            if (a.priority !== b.priority) return b.priority - a.priority;
+            if (a.priority !== b.priority)
+                return b.priority - a.priority;
             return a.timestamp - b.timestamp;
         });
-
         while (this.requestQueue.length > 0 && this.currentActivePages < this.maxConcurrentPages) {
-            const request = this.requestQueue.shift()!;
+            const request = this.requestQueue.shift();
             let availablePage = this.pagePool.find(mp => !mp.inUse);
-
             if (availablePage) {
                 availablePage.inUse = true;
                 availablePage.lastUsed = Date.now();
                 this.currentActivePages++;
                 request.resolve(availablePage.page);
-            } else if (this.pagePool.length < this.maxConcurrentPages) {
+            }
+            else if (this.pagePool.length < this.maxConcurrentPages) {
                 this.createManagedPage().then(managedPage => {
                     this.pagePool.push(managedPage);
                     managedPage.inUse = true;
@@ -525,15 +423,15 @@ export class PuppeteerControl extends AsyncService {
                 }).catch(error => {
                     request.reject(error);
                 });
-            } else {
+            }
+            else {
                 this.requestQueue.unshift(request);
                 break;
             }
         }
         this.processing = false;
     }
-
-    override async init() {
+    async init() {
         if (this.__healthCheckInterval) {
             clearInterval(this.__healthCheckInterval);
             this.__healthCheckInterval = undefined;
@@ -543,11 +441,11 @@ export class PuppeteerControl extends AsyncService {
             this.__cleanupInterval = undefined;
         }
         await this.dependencyReady();
-
         if (this.browser) {
             if (this.browser.connected) {
                 await this.browser.close();
-            } else {
+            }
+            else {
                 this.browser.process()?.kill('SIGKILL');
             }
         }
@@ -561,7 +459,6 @@ export class PuppeteerControl extends AsyncService {
             '--disable-default-apps', '--disable-sync', '--no-default-browser-check',
             '--disable-background-networking', '--disable-component-update'
         ];
-
         this.browser = await puppeteer.launch({
             executablePath: '/usr/bin/chromium',
             args,
@@ -569,7 +466,7 @@ export class PuppeteerControl extends AsyncService {
             handleSIGINT: false,
             handleSIGTERM: false,
             handleSIGHUP: false
-        }).catch((err: any) => {
+        }).catch((err) => {
             this.logger.error(`Browser launch failed.`, { err });
             process.nextTick(() => this.emit('error', err));
             return Promise.reject(err);
@@ -581,50 +478,44 @@ export class PuppeteerControl extends AsyncService {
         });
         this.logger.info(`Browser launched: ${this.browser.process()?.pid}`);
         this.emit('ready');
-
         this.__healthCheckInterval = setInterval(() => this.healthCheck(), 30_000);
         this.newPage().then((r) => this.__loadedPage.push(r));
     }
-
-    @maxConcurrency(1)
     async healthCheck() {
         if (Date.now() - this.lastPageCreatedAt <= 10_000) {
             this.briefPages();
             return;
         }
         const healthyPage = await this.newPage().catch((err) => {
-            this.logger.warn(`Health check failed`, { err: marshalErrorLike(err) });
+            this.logger.warn(`Health check failed`, { err: (0, civkit_1.marshalErrorLike)(err) });
             return null;
         });
-
         if (healthyPage) {
             this.__loadedPage.push(healthyPage);
             if (this.__loadedPage.length > 3) {
-                this.ditchPage(this.__loadedPage.shift()!);
+                this.ditchPage(this.__loadedPage.shift());
             }
             this.briefPages();
             return;
         }
-
         this.logger.warn(`Trying to clean up...`);
         this.browser.process()?.kill('SIGKILL');
         Reflect.deleteProperty(this, 'browser');
         this.emit('crippled');
         this.logger.warn(`Browser killed`);
     }
-
     // FIX: Corrected the structure of this method. It was previously malformed.
-    private extractDomain(url: string): string | null {
+    extractDomain(url) {
         try {
             const { hostname } = new URL(url);
             const parts = hostname.split('.');
             return parts.length > 1 ? parts.slice(-2).join('.') : hostname;
-        } catch (error: any) {
+        }
+        catch (error) {
             this.logger.warn(`Failed to extract domain from URL: ${url}. Error: ${error.message}`);
             return null; // Return null on failure
         }
     }
-
     // FIX: This method was previously inside `extractDomain` due to a copy-paste error.
     // It's now a proper class method, intended for creating pre-warmed/health-check pages.
     async newPage() {
@@ -635,36 +526,31 @@ export class PuppeteerControl extends AsyncService {
         const dedicatedContext = this.browser.defaultBrowserContext();
         const sn = this._sn++;
         const page = await dedicatedContext.newPage();
-        const preparations: any[] = [];
-
+        const preparations = [];
         preparations.push(page.setBypassCSP(true));
         preparations.push(page.setViewport({ width: 1024, height: 1024 }));
-        preparations.push(page.exposeFunction('reportSnapshot', (snapshot: PageSnapshot) => {
-            if (snapshot.href === 'about:blank') return;
+        preparations.push(page.exposeFunction('reportSnapshot', (snapshot) => {
+            if (snapshot.href === 'about:blank')
+                return;
             const handler = this.snapshotHandlers.get(page);
-            if (handler) handler(snapshot);
+            if (handler)
+                handler(snapshot);
         }));
         preparations.push(page.evaluateOnNewDocument(SCRIPT_TO_INJECT_INTO_FRAME));
         preparations.push(page.setRequestInterception(true));
-
         await Promise.all(preparations);
         await page.goto('about:blank', { waitUntil: 'domcontentloaded' });
-
         this.setupPageRequestHandling(page, sn);
-
         this.snMap.set(page, sn);
         this.logger.info(`Page ${sn} created (for pre-warming/health-check).`);
         this.lastPageCreatedAt = Date.now();
         this.livePages.add(page);
-
         return page;
     }
-
-    async getNextPage(priority: number = 0): Promise<Page> {
-        return new Promise<Page>((resolve, reject) => {
-            const request: QueuedRequest = { resolve, reject, priority, timestamp: Date.now() };
+    async getNextPage(priority = 0) {
+        return new Promise((resolve, reject) => {
+            const request = { resolve, reject, priority, timestamp: Date.now() };
             this.requestQueue.push(request);
-
             const timeout = setTimeout(() => {
                 const index = this.requestQueue.indexOf(request);
                 if (index !== -1) {
@@ -672,15 +558,12 @@ export class PuppeteerControl extends AsyncService {
                     reject(new Error('Page request timeout'));
                 }
             }, 30000);
-
-            request.resolve = (page: Page) => { clearTimeout(timeout); resolve(page); };
-            request.reject = (error: any) => { clearTimeout(timeout); reject(error); };
-
+            request.resolve = (page) => { clearTimeout(timeout); resolve(page); };
+            request.reject = (error) => { clearTimeout(timeout); reject(error); };
             this.processQueue();
         });
     }
-
-    releasePage(page: Page): void {
+    releasePage(page) {
         const managedPage = this.pagePool.find(mp => mp.page === page);
         if (managedPage && managedPage.inUse) {
             managedPage.inUse = false;
@@ -689,98 +572,85 @@ export class PuppeteerControl extends AsyncService {
             this.processQueue();
         }
     }
-
-    async ditchPage(page: Page) {
+    async ditchPage(page) {
         if (this.finalizerMap.has(page)) {
-            clearTimeout(this.finalizerMap.get(page)!);
+            clearTimeout(this.finalizerMap.get(page));
             this.finalizerMap.delete(page);
         }
-        if (page.isClosed()) return;
-
+        if (page.isClosed())
+            return;
         const sn = this.snMap.get(page);
         this.logger.info(`Ditching page ${sn}`);
         this.livePages.delete(page);
         try {
-            await Promise.race([page.close(), delay(5000)]);
-        } catch (err) {
-            this.logger.error(`Failed to ditch page ${sn}`, { err: marshalErrorLike(err as Error) });
+            await Promise.race([page.close(), (0, civkit_1.delay)(5000)]);
+        }
+        catch (err) {
+            this.logger.error(`Failed to ditch page ${sn}`, { err: (0, civkit_1.marshalErrorLike)(err) });
         }
     }
-
-    async *scrape(parsedUrl: URL, options: ScrappingOptions = {}): AsyncGenerator<PageSnapshot> {
+    async *scrape(parsedUrl, options = {}) {
         const url = parsedUrl.toString();
-        let page: Page | null = null;
-
+        let page = null;
         try {
             page = await this.getNextPage(1); // Higher priority for scraping
             const sn = this.snMap.get(page) ?? -1;
             this.logger.info(`Page ${sn}: Scraping ${url}`);
-
-            if (options.proxyUrl && (page as any).useProxy) {
-                await (page as any).useProxy(options.proxyUrl);
+            if (options.proxyUrl && page.useProxy) {
+                await page.useProxy(options.proxyUrl);
             }
-
             if (options.cookies) {
                 try {
                     options.cookies.forEach(validateCookie);
                     await page.setCookie(...options.cookies);
-                } catch (error) {
+                }
+                catch (error) {
                     this.logger.error(`Page ${sn}: Error setting cookies for ${url}`, { error, cookies: options.cookies });
                     throw error;
                 }
             }
-
             if (options.overrideUserAgent) {
                 await page.setUserAgent(options.overrideUserAgent);
             }
-
-            const nextSnapshotDeferred = Defer<PageSnapshot>();
-            const crippleListener = () => nextSnapshotDeferred.reject(new ServiceCrashedError({ message: `Browser crashed` }));
+            const nextSnapshotDeferred = (0, civkit_1.Defer)();
+            const crippleListener = () => nextSnapshotDeferred.reject(new errors_js_1.ServiceCrashedError({ message: `Browser crashed` }));
             this.once('crippled', crippleListener);
             nextSnapshotDeferred.promise.finally(() => this.off('crippled', crippleListener));
-
-            let lastSnapshot: PageSnapshot | undefined;
-            const hdl = (s: PageSnapshot) => {
-                if (s?.maxElemDepth && s.maxElemDepth > 256) return;
-                if (s?.elemCount && s.elemCount > 10_000) return;
+            let lastSnapshot;
+            const hdl = (s) => {
+                if (s?.maxElemDepth && s.maxElemDepth > 256)
+                    return;
+                if (s?.elemCount && s.elemCount > 10_000)
+                    return;
                 lastSnapshot = s;
                 nextSnapshotDeferred.resolve(s);
             };
             this.snapshotHandlers.set(page, hdl);
-
             const timeout = options.timeoutMs || 30_000;
-
             const gotoPromise = page.goto(url, { waitUntil: 'load', timeout })
                 .catch(err => {
-                    if (err.name === 'TimeoutError' || err.message?.includes('ERR_NAME_NOT_RESOLVED')) {
-                        this.logger.warn(`Page ${sn}: Navigation to ${url} failed`, { err: marshalErrorLike(err) });
-                        return; // Don't re-throw, just let it proceed to snapshotting if possible
-                    }
-                    throw err; // Re-throw other errors
-                });
-
+                if (err.name === 'TimeoutError' || err.message?.includes('ERR_NAME_NOT_RESOLVED')) {
+                    this.logger.warn(`Page ${sn}: Navigation to ${url} failed`, { err: (0, civkit_1.marshalErrorLike)(err) });
+                    return; // Don't re-throw, just let it proceed to snapshotting if possible
+                }
+                throw err; // Re-throw other errors
+            });
             const waitForPromise = options.waitForSelector
-                ? page.waitForSelector(
-                    Array.isArray(options.waitForSelector) ? options.waitForSelector.join(', ') : options.waitForSelector,
-                    { timeout }
-                  ).catch(err => {
-                      this.logger.warn(`Page ${sn}: waitForSelector failed for ${url}`, { err: marshalErrorLike(err) });
-                  })
+                ? page.waitForSelector(Array.isArray(options.waitForSelector) ? options.waitForSelector.join(', ') : options.waitForSelector, { timeout }).catch(err => {
+                    this.logger.warn(`Page ${sn}: waitForSelector failed for ${url}`, { err: (0, civkit_1.marshalErrorLike)(err) });
+                })
                 : Promise.resolve();
-
             await Promise.all([gotoPromise, waitForPromise]);
-
             // Wait for a snapshot to be reported
-            await Promise.race([nextSnapshotDeferred.promise, delay(options.minIntervalMs || 1000)]);
-
-            const finalSnapshot = lastSnapshot || await page.evaluate('giveSnapshot()').catch(() => null) as PageSnapshot | null;
-
+            await Promise.race([nextSnapshotDeferred.promise, (0, civkit_1.delay)(options.minIntervalMs || 1000)]);
+            const finalSnapshot = lastSnapshot || await page.evaluate('giveSnapshot()').catch(() => null);
             if (finalSnapshot) {
                 this.logger.info(`Page ${sn}: Snapshot of ${url} done`, { title: finalSnapshot.title || 'Untitled' });
                 yield finalSnapshot;
-            } else {
+            }
+            else {
                 this.logger.warn(`Page ${sn}: No snapshot available for ${url}, trying screenshot.`);
-                const screenshot = await page.screenshot().catch(() => undefined) as Buffer | undefined;
+                const screenshot = await page.screenshot().catch(() => undefined);
                 const title = await page.title().catch(() => 'Scraping Failed');
                 yield {
                     title,
@@ -791,9 +661,9 @@ export class PuppeteerControl extends AsyncService {
                     error: 'No snapshot available, screenshot taken as fallback.'
                 };
             }
-
-        } catch (error: any) {
-            this.logger.error(`Scraping failed for ${url}:`, { error: marshalErrorLike(error) });
+        }
+        catch (error) {
+            this.logger.error(`Scraping failed for ${url}:`, { error: (0, civkit_1.marshalErrorLike)(error) });
             yield {
                 title: 'Error: Scraping failed',
                 href: url,
@@ -801,18 +671,18 @@ export class PuppeteerControl extends AsyncService {
                 text: '',
                 error: error.message || 'An unknown error occurred during scraping.'
             };
-        } finally {
+        }
+        finally {
             if (page) {
                 this.snapshotHandlers.delete(page);
-                if (options.proxyUrl && (page as any).useProxy) {
-                    await (page as any).useProxy(null); // Clear proxy
+                if (options.proxyUrl && page.useProxy) {
+                    await page.useProxy(null); // Clear proxy
                 }
                 this.releasePage(page);
             }
         }
     }
-
-    async salvage(url: string, page: Page) {
+    async salvage(url, page) {
         this.logger.info(`Salvaging ${url}`);
         const googleArchiveUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}`;
         const resp = await fetch(googleArchiveUrl, {
@@ -822,32 +692,30 @@ export class PuppeteerControl extends AsyncService {
             this.logger.warn(`No salvation found for url: ${url}`, { status: resp.status });
             return null;
         }
-
-        await page.goto(googleArchiveUrl, { waitUntil: 'load', timeout: 15_000 }).catch((err: any) => {
-            this.logger.warn(`Page salvation did not fully succeed.`, { err: marshalErrorLike(err) });
+        await page.goto(googleArchiveUrl, { waitUntil: 'load', timeout: 15_000 }).catch((err) => {
+            this.logger.warn(`Page salvation did not fully succeed.`, { err: (0, civkit_1.marshalErrorLike)(err) });
         });
-
         this.logger.info(`Salvation completed.`);
         return true;
     }
-
-    async snapshotChildFrames(page: Page): Promise<PageSnapshot[]> {
+    async snapshotChildFrames(page) {
         const childFrames = page.mainFrame().childFrames();
         const results = await Promise.all(childFrames.map(async (frame) => {
             const frameUrl = frame.url();
-            if (!frameUrl || frameUrl === 'about:blank') return undefined;
+            if (!frameUrl || frameUrl === 'about:blank')
+                return undefined;
             try {
                 await frame.evaluate(SCRIPT_TO_INJECT_INTO_FRAME);
-                return await frame.evaluate(`giveSnapshot()`) as PageSnapshot;
-            } catch (err) {
+                return await frame.evaluate(`giveSnapshot()`);
+            }
+            catch (err) {
                 this.logger.warn(`Failed to snapshot child frame ${frameUrl}`, { err });
                 return undefined;
             }
         }));
-        return results.filter((r): r is PageSnapshot => Boolean(r));
+        return results.filter((r) => Boolean(r));
     }
-
-    async crawl(url: URL, options?: ScrappingOptions): Promise<PageSnapshot | undefined> {
+    async crawl(url, options) {
         const iterator = this.scrape(url, options);
         for await (const snapshot of iterator) {
             if (snapshot) {
@@ -856,11 +724,9 @@ export class PuppeteerControl extends AsyncService {
         }
         return undefined;
     }
-
     async close() {
         // Mark as closing to prevent new operations
         this.isClosing = true;
-
         // Clear intervals
         if (this.__healthCheckInterval) {
             clearInterval(this.__healthCheckInterval);
@@ -878,17 +744,16 @@ export class PuppeteerControl extends AsyncService {
             clearInterval(this.__resourceMonitorInterval);
             this.__resourceMonitorInterval = undefined;
         }
-
         // Reject all pending requests to clear their timeouts
         this.requestQueue.forEach(req => {
             try {
                 req.reject(new Error('PuppeteerControl is closing'));
-            } catch (e) {
+            }
+            catch (e) {
                 // Ignore errors from already resolved requests
             }
         });
         this.requestQueue.length = 0;
-
         // Clean up all page finalizers by going through all pages we know about
         for (const page of this.livePages) {
             if (this.finalizerMap.has(page)) {
@@ -899,51 +764,46 @@ export class PuppeteerControl extends AsyncService {
                 this.finalizerMap.delete(page);
             }
         }
-
         // Close all pages in the pool
         for (const managedPage of this.pagePool) {
             try {
                 if (!managedPage.page.isClosed()) {
                     await managedPage.page.close();
                 }
-            } catch (e) {
+            }
+            catch (e) {
                 // Ignore errors from already closed pages
             }
         }
         this.pagePool.length = 0;
-
         // Close loaded pages
         for (const page of this.__loadedPage) {
             try {
                 if (!page.isClosed()) {
                     await page.close();
                 }
-            } catch (e) {
+            }
+            catch (e) {
                 // Ignore errors from already closed pages
             }
         }
         this.__loadedPage.length = 0;
-
         // Close browser
         if (this.browser && this.browser.connected) {
             await this.browser.close();
         }
-
         // Clear sets (WeakMaps will be garbage collected when pages are destroyed)
         this.livePages.clear();
         this.circuitBreakerHosts.clear();
-
         // Mark as closing to prevent new operations
         this.isClosing = true;
     }
-
     // Emergency cleanup for test environments
-    private emergencyCleanup() {
-        if (this.isClosing) return;
-
+    emergencyCleanup() {
+        if (this.isClosing)
+            return;
         const currentTime = Date.now();
         const uptime = currentTime - this.startTime;
-
         // Force cleanup if running too long in test environment
         if (uptime > this.maxLifetime) {
             this.logger.warn('Emergency cleanup triggered due to excessive runtime');
@@ -956,33 +816,38 @@ export class PuppeteerControl extends AsyncService {
             });
         }
     }
-
     // Monitor resource usage and detect leaks
-    private monitorResources() {
-        if (this.isClosing) return;
-
+    monitorResources() {
+        if (this.isClosing)
+            return;
         const pageCount = this.livePages.size + this.__loadedPage.length + this.pagePool.length;
         const requestCount = this.requestQueue.length;
-
         // Log resource status
         this.logger.info(`Resource monitor: ${pageCount} pages, ${requestCount} pending requests, ${this.currentActivePages} active`);
-
         // Detect potential leaks
         if (pageCount > 50) {
             this.logger.warn(`Potential page leak detected: ${pageCount} pages`);
         }
-
         if (requestCount > 100) {
             this.logger.warn(`Potential request queue leak detected: ${requestCount} requests`);
         }
-
         // Force cleanup of idle resources
         if (pageCount > 20) {
             this.cleanupIdlePages();
         }
     }
-}
-
-const puppeteerControl = container.resolve(PuppeteerControl);
-
-export default puppeteerControl;
+};
+exports.PuppeteerControl = PuppeteerControl;
+__decorate([
+    (0, civkit_1.maxConcurrency)(1),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PuppeteerControl.prototype, "healthCheck", null);
+exports.PuppeteerControl = PuppeteerControl = __decorate([
+    (0, tsyringe_1.singleton)(),
+    __metadata("design:paramtypes", [])
+], PuppeteerControl);
+const puppeteerControl = tsyringe_1.container.resolve(PuppeteerControl);
+exports.default = puppeteerControl;
+//# sourceMappingURL=puppeteer.js.map
