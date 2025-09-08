@@ -96,9 +96,9 @@ EXAMPLES:
     ./dearreader logs -F            # Follow all logs
 
 QUICK START:
-    1. ./quickstart.sh          # 1-click setup (fastest!)
-    2. ./dearreader setup        # Manual setup
-    3. ./dearreader dev          # Start development
+    1. ./scripts/quickstart.sh    # 1-click setup (fastest!)
+    2. ./dearreader setup         # Manual setup
+    3. ./dearreader dev           # Start development
     4. Open http://localhost:3001
 
 EOF
@@ -148,15 +148,55 @@ run_cmd() {
 cmd_setup() {
     log_header "${ROCKET} Setting up DearReader Environment"
 
+    # Pre-flight checks
+    log_subheader "Pre-flight Checks"
+
+    # Check internet connectivity
+    if ! ping -c 1 -W 2 google.com >/dev/null 2>&1; then
+        log_error "No internet connection detected. Please check your network."
+        exit 1
+    fi
+    log_success "Internet connection verified"
+
+    # Check available disk space (need at least 2GB)
+    if [[ "$OSTYPE" != "msys" && "$OSTYPE" != "win32" ]]; then
+        local available_space=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G.*//')
+        if [ "$available_space" -lt 2 ]; then
+            log_error "Insufficient disk space. Need at least 2GB free."
+            exit 1
+        fi
+        log_success "Sufficient disk space available"
+    fi
+
     # Check prerequisites
     log_subheader "Checking Prerequisites"
     check_docker
-    log_success "Docker environment ready"
+
+    # Check for Node.js and npm
+    if ! command -v node >/dev/null 2>&1; then
+        log_error "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org"
+        exit 1
+    fi
+
+    if ! command -v npm >/dev/null 2>&1; then
+        log_error "npm is not installed. Please install npm (usually comes with Node.js)"
+        exit 1
+    fi
+
+    local node_version=$(node --version | sed 's/v//')
+    if [[ "$(printf '%s\n' "$node_version" "18.0.0" | sort -V | head -n1)" != "18.0.0" ]]; then
+        log_warn "Node.js version $node_version detected. Recommended: 18+"
+    fi
+
+    log_success "Node.js environment ready"
 
     # Check for uv (Python package manager)
     if ! command -v uv >/dev/null 2>&1; then
         log_warn "uv not found. Installing uv for faster Python package management..."
-        run_cmd "curl -LsSf https://astral.sh/uv/install.sh | sh" "Installing uv"
+        if ! run_cmd "curl -LsSf https://astral.sh/uv/install.sh | sh" "Installing uv"; then
+            log_error "Failed to install uv. Please install it manually: https://github.com/astral-sh/uv"
+            exit 1
+        fi
         export PATH="$HOME/.cargo/bin:$PATH"
     fi
 

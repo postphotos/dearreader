@@ -9,6 +9,38 @@ echo "🚀 DearReader Quick Start"
 echo "========================="
 echo ""
 
+# Check if running on supported OS
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+    echo "❌ Windows detected. Please use WSL or follow manual setup instructions."
+    echo "   See: https://docs.dearreader.dev/setup/windows"
+    exit 1
+fi
+
+echo "🔍 Checking system requirements..."
+
+# Check for essential tools
+for tool in curl docker docker-compose; do
+    if ! command -v $tool >/dev/null 2>&1; then
+        echo "❌ $tool is not installed. Please install it first."
+        case $tool in
+            docker)
+                echo "   macOS: https://docs.docker.com/desktop/mac/install/"
+                echo "   Linux: https://docs.docker.com/engine/install/"
+                ;;
+            docker-compose)
+                echo "   Usually comes with Docker Desktop"
+                ;;
+            curl)
+                echo "   macOS: brew install curl"
+                echo "   Linux: apt-get install curl"
+                ;;
+        esac
+        exit 1
+    fi
+done
+
+echo "✅ System requirements met"
+
 # Check if already set up
 if [ -f "./dearreader" ] && [ -d "./js/node_modules" ] && [ -d "./.venv" ]; then
     echo "✅ DearReader appears to be already set up!"
@@ -19,8 +51,21 @@ if [ -f "./dearreader" ] && [ -d "./js/node_modules" ] && [ -d "./.venv" ]; then
 fi
 
 echo "📦 Setting up DearReader..."
-./dearreader setup
+if ! ./dearreader setup; then
+    echo ""
+    echo "❌ Setup failed. Common solutions:"
+    echo "   1. Make sure Docker is running: docker version"
+    echo "   2. Try again: ./scripts/quickstart.sh"
+    echo "   3. Manual setup: ./dearreader setup --verbose"
+    echo "   4. Check logs: ./dearreader logs"
+    exit 1
+fi
 
 echo ""
 echo "🚀 Starting development environment..."
-./dearreader dev
+if ! ./dearreader dev; then
+    echo ""
+    echo "❌ Failed to start development environment."
+    echo "   Try: ./dearreader dev --verbose"
+    exit 1
+fi

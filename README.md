@@ -11,19 +11,26 @@ It converts any URL to an LLM-friendly input with `http://127.0.0.1:3001/https:/
 
 ### ⚡ Lightning Fast (Recommended)
 ```bash
+# 1. Verify your system is ready
+./scripts/verify.sh
+
+# 2. One-click setup and start
 ./scripts/quickstart.sh
 ```
-**That's it!** Automatically sets up everything and starts the development server at http://localhost:3001
+**That's it!** Automatically verifies, sets up everything, and starts the development server at http://localhost:3001
 
 ### 📋 Manual Setup
 ```bash
-# 1. Setup environment
+# 1. Check system requirements
+./scripts/verify.sh
+
+# 2. Setup environment
 ./dearreader setup
 
-# 2. Start development
+# 3. Start development
 ./dearreader dev
 
-# 3. Open browser
+# 4. Open browser
 open http://localhost:3001
 ```
 

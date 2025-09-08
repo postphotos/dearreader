@@ -34,6 +34,7 @@ This documentation covers all aspects of DearReader's functionality, setup, and 
 - **[Migration Guide](./migration.md)** - Migrating from old scripts to unified CLI
 - **[Development Progress](./CLINE_INPROGRESS.md)** - Current development status and roadmap
 - **[Troubleshooting](./troubleshooting.md)** - Common issues and solutions
+- **[Troubleshooting](./troubleshooting.md)** - Common issues and solutions
 - **[Testing](./testing.md)** - Running and writing tests
 - **[Contributing](./contributing.md)** - Development setup and contribution guidelines
 

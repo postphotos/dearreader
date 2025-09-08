@@ -5,6 +5,7 @@ This directory contains utility scripts for DearReader.
 ## Utility Scripts
 
 - **`quickstart.sh`** - One-click setup and start script (fastest way to get started)
+- **`verify.sh`** - System verification script (check if your system is ready)
 - **`cleanup.sh`** - Safe cleanup utility for removing old/deprecated files
 
 ## Legacy Scripts
@@ -20,6 +21,9 @@ These legacy scripts still work but show migration notices pointing to the new u
 ## Usage
 
 ```bash
+# Check if your system is ready
+./scripts/verify.sh
+
 # Quick start (recommended)
 ./scripts/quickstart.sh
 
