@@ -16,7 +16,7 @@ describe('CrawlerHost Robots Checker Edge Cases', () => {
   ( { _data: new Map(), get: () => undefined, set: () => {} } as any)
     );
 
-    const req: any = { url: '/https://example.com', method: 'GET', query: {}, headers: { accept: 'application/json' }, hostname: 'localhost' };
+    const req: any = { url: '/https://www.ala.org', method: 'GET', query: {}, headers: { accept: 'application/json' }, hostname: 'localhost' };
     const res: any = { _status: 200, _data: null, status(code:number){ this._status = code; return this; }, type(){ return this; }, send(data:any){ this._data = data; } };
 
     await crawler.crawl(req, res as any);

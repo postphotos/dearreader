@@ -35,7 +35,7 @@ This unified command will:
 ```
 
 ### 4. Verify Installation
-Open **http://localhost:3000** in your browser to see the dashboard.
+Open **http://localhost:3001** in your browser to see the dashboard.
 
 ## 🏗️ Installation Details
 
@@ -45,9 +45,9 @@ Open **http://localhost:3000** in your browser to see the dashboard.
 ```yaml
 # docker-compose.yml
 services:
-  js-functions:     # Node.js crawler service
+  js-server:       # Node.js crawler service
   python:          # Python data processing
-  postgres:        # Database (optional)
+  js-test:         # JavaScript test runner
 ```
 
 **Build Commands:**
@@ -86,7 +86,7 @@ Create `.env` file in root directory:
 
 ```bash
 # Server Configuration
-PORT=3000
+PORT=3001
 NODE_ENV=development
 
 # Database (optional)
@@ -133,23 +133,23 @@ reader/
 
 ```bash
 # Basic content extraction
-curl "http://localhost:3000/https://example.com"
+curl "http://localhost:3001/https://www.ala.org"
 
 # JSON response
-curl -H "Accept: application/json" "http://localhost:3000/https://example.com"
+curl -H "Accept: application/json" "http://localhost:3001/https://worldliteracyfoundation.org"
 
 # Screenshot request
-curl -H "X-Respond-With: screenshot" "http://localhost:3000/https://example.com"
+curl -H "X-Respond-With: screenshot" "http://localhost:3001/https://en.wikipedia.org/wiki/Reading"
 
 # Queue status
-curl "http://localhost:3000/queue/stats"
+curl "http://localhost:3001/queue/stats"
 ```
 
 ### Web Interface Test
 
-1. **Main Dashboard**: http://localhost:3000
-2. **Queue Monitor**: http://localhost:3000/queue-ui
-3. **API Documentation**: http://localhost:3000/api.html
+1. **Main Dashboard**: http://localhost:3001
+2. **Queue Monitor**: http://localhost:3001/queue-ui
+3. **API Documentation**: http://localhost:3001/api.html
 
 ## 🐛 Troubleshooting
 
@@ -174,8 +174,8 @@ chmod -R 755 js/ py/
 
 **Port conflicts:**
 ```bash
-# Check what's using port 3000
-lsof -i :3000
+# Check what's using port 3001
+lsof -i :3001
 
 # Use alternative port
 PORT=3001 ./run.sh dev
@@ -206,7 +206,7 @@ docker-compose ps
 
 After successful setup:
 
-1. **Explore Web Interface**: http://localhost:3000
+1. **Explore Web Interface**: http://localhost:3001
 2. **Try API Examples**: See API Reference
 3. **Review Configuration**: Customize settings
 4. **Read Full Documentation**: Complete user guides

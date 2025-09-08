@@ -27,7 +27,7 @@ services:
     environment:
       - DEV_SKIP_TOOL_CHECK=1
       - DEV_SKIP_NPM=1
-      - READER_BASE_URL=http://js-server:3000
+      - READER_BASE_URL=http://js-server:3001
     volumes:
       - ./py:/app/py
       - ./config.yaml:/app/config.yaml

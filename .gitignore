@@ -5,6 +5,7 @@ node_modules/
 js/node_modules/
 __pycache__/
 *.pyc
+.pytest_cache/
 .env
 .vscode/
 .venv/
@@ -13,3 +14,8 @@ __pycache__/
 reader/static/
 storage/
 logs/
+screenshots/
+# Legacy scripts (moved to scripts/legacy/)
+# scripts/legacy/setup.sh
+# scripts/legacy/dev.sh
+# scripts/legacy/run.sh

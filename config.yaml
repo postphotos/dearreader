@@ -2,7 +2,7 @@
 # Place this file in the root directory of your project
 
 # Default URL for the application
-url: http://localhost:3000/
+url: http://localhost:3001/
 
 # Robots.txt compliance settings
 robots:

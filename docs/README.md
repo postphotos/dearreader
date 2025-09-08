@@ -4,6 +4,8 @@
 
 DearReader is a **local web crawler server** that converts web pages to LLM-friendly formats. Built as a completely local solution without cloud dependencies.
 
+**Single-Purpose Focus**: This tool is designed specifically for converting individual webpages in a queue - NOT for storing or processing entire websites. For full-site crawling, indexing, or bulk processing, you'll need other specialized tools. No LLM processing happens directly here; this is purely a content extraction and formatting service.
+
 **Key Features:**
 - 🚀 **Local WebScraping**: Extract content from URLs locally
 - 📄 **Multiple Output Formats**: JSON, Markdown, HTML, Text, Screenshots
@@ -19,7 +21,7 @@ This documentation covers all aspects of DearReader's functionality, setup, and 
 ### Core Documentation
 - **[Setup Guide](./setup.md)** - Complete installation and configuration
 - **[API Reference](./api.md)** - Complete API documentation with examples
-- **[Web Interface](./web-interface.md)** - Guide to web UI at localhost:3000
+- **[Web Interface](./web-interface.md)** - Guide to web UI at localhost:3001
 - **[Configuration](./configuration.md)** - All configuration options
 
 ### Advanced Features
@@ -29,6 +31,8 @@ This documentation covers all aspects of DearReader's functionality, setup, and 
 
 ### Development & Maintenance
 - **[Command Reference](./commands.md)** - All command-line operations
+- **[Migration Guide](./migration.md)** - Migrating from old scripts to unified CLI
+- **[Development Progress](./CLINE_INPROGRESS.md)** - Current development status and roadmap
 - **[Troubleshooting](./troubleshooting.md)** - Common issues and solutions
 - **[Testing](./testing.md)** - Running and writing tests
 - **[Contributing](./contributing.md)** - Development setup and contribution guidelines
@@ -44,8 +48,8 @@ This documentation covers all aspects of DearReader's functionality, setup, and 
 
 1. **Quick Setup**: Run `./run.sh setup --verbose`
 2. **Start Development**: Run `./dev-app` or `./run.sh dev`
-3. **Access Web UI**: Open `http://localhost:3000`
-4. **API Testing**: Try `curl 'http://localhost:3000/https://example.com'`
+3. **Access Web UI**: Open `http://localhost:3001`
+4. **API Testing**: Try `curl 'http://localhost:3001/https://www.ala.org'`
 
 ---
 

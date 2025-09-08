@@ -3,7 +3,9 @@
 This is a feature-enhanced fork of [Jina AI's Reader](https://github.com/jina-ai/reader) optimized for local deployment and development. This fork uses a Debian-based Docker image (instead of Alpine) for better compatibility with Chromium/Puppeteer dependencies and native libraries, ensuring more reliable web scraping operations.
 
 ## 🎯 What it does
-It converts any URL to an LLM-friendly input with `http://127.0.0.1:3000/https://google.com`. Get improved output for your agent and RAG systems at no cost. This tool helps you prepare web content for Large Language Models, making it easier to process and analyze online information.
+It converts any URL to an LLM-friendly input with `http://127.0.0.1:3001/https://www.ala.org`. Get improved output for your agent and RAG systems at no cost. This tool helps you prepare web content for Large Language Models, making it easier to process and analyze online information.
+
+**Single-Purpose Focus**: DearReader is designed specifically for converting individual webpages in a queue - NOT for storing or processing entire websites. For full-site crawling, indexing, or bulk processing, you'll need other specialized tools. No LLM processing happens directly here; this is purely a content extraction and formatting service.
 
 ## 🏗️ Project Architecture
 
@@ -59,35 +61,31 @@ reader/
 - ✅ **Windows**: Full support via WSL or native Docker
 - ✅ **WSL (Windows Subsystem for Linux)**: Recommended for Windows users
 
-### Enhanced Consolidated Setup
+### Lightning Fast Setup
 
-1. Clone the repository:
+**1-Click Setup (Recommended):**
+```bash
+./scripts/quickstart.sh
+```
+**This automatically:**
+- ✅ Runs complete setup
+- ✅ Starts development environment
+- ✅ Opens browser to http://localhost:3001
+
+### Manual Setup (Alternative)
+
+1. **One-Command Complete Setup:**
    ```bash
-   git clone https://github.com/postphotos/reader.git
-   cd reader
+   ./dearreader setup
    ```
 
-2. **One-Command Complete Setup:**
+2. **Start Development Environment:**
    ```bash
-   ./run.sh setup --verbose
+   ./dearreader dev
    ```
 
-   **This automatically handles:**
-   - ✅ Docker and Docker Compose validation
-   - ✅ Docker image building
-   - ✅ Directory structure (storage, logs, js/node_modules)
-   - ✅ Python virtual environment with uv
-   - ✅ Node.js dependency installation
-   - ✅ Default configuration creation
-   - ✅ Cross-platform compatibility (Linux/Mac/Windows/WSL)
-
-3. **Start Development Environment:**
-   ```bash
-   ./run.sh dev
-   ```
-
-4. **Verify Installation:**
-   Open **http://localhost:3000** in your browser to access the web interface.
+3. **Verify Installation:**
+   Open **http://localhost:3001** in your browser to access the web interface.
 
 ### Manual Steps (Alternative)
 ```bash
@@ -103,7 +101,7 @@ uv pip install -r py/requirements.txt
 # Node.js dependencies
 npm install --prefix js/
 
-# Docker setup (already handled by run.sh setup)
+# Docker setup (already handled by ./dearreader setup)
 ```
 
 ## � Updating Dependencies
@@ -132,30 +130,29 @@ docker build -t reader-app ./docker
 ### Running the Container
 
 ```bash
-docker run -d --name reader-instance -p 3000:3000 -v $(pwd)/storage:/app/local-storage reader-app
+docker run -d --name reader-instance -p 3001:3000 -v $(pwd)/storage:/app/local-storage reader-app
 ```
 
 For Windows PowerShell, use:
 ```powershell
-docker run -d --name reader-instance -p 3000:3000 -v ${PWD}/storage:/app/local-storage reader-app
+docker run -d --name reader-instance -p 3001:3000 -v ${PWD}/storage:/app/local-storage reader-app
 ```
 
 For Windows Command Prompt, use:
 ```cmd
-docker run -d --name reader-instance -p 3000:3000 -v %cd%/storage:/app/local-storage reader-app
+docker run -d --name reader-instance -p 3001:3000 -v %cd%/storage:/app/local-storage reader-app
 ```
 
 For Windows PowerShell, use:
 ```powershell
-docker run -d --name reader-instance -p 3000:3000 -v ${PWD}/storage:/app/local-storage reader-app
+docker run -d --name reader-instance -p 3001:3000 -v ${PWD}/storage:/app/local-storage reader-app
 ```
 
-### Using the Run Script
+### Using the DearReader CLI
 
 For a streamlined process:
 ```bash
-chmod +x run.sh
-./run.sh
+./dearreader run prod
 ```
 
 ## 🧪 Testing
@@ -164,23 +161,17 @@ chmod +x run.sh
 
 Run all tests in the pipeline:
 ```bash
-python py/app.py tests
+./dearreader test all
 ```
 
 ### Individual Test Components
 
 ```bash
 # Run npm tests only
-python py/app.py npm
+./dearreader test js
 
-# Run type checking
-python py/app.py pyright
-
-# Run the demonstration script
-python py/app.py demo
-
-# Run performance tests
-python py/app.py speedtest
+# Run Python tests only
+./dearreader test python
 ```
 
 ### Test Options
@@ -191,11 +182,11 @@ python py/app.py speedtest
 
 ## 🖥️ Usage & API Specification
 
-Once the Docker container is running, you can access the Reader API at `http://127.0.0.1:3000`. The API provides full compatibility with Jina.ai's cloud service.
+Once the Docker container is running, you can access the Reader API at `http://127.0.0.1:3001`. The API provides full compatibility with Jina.ai's cloud service.
 
 ### Base Endpoint
 ```
-http://127.0.0.1:3000/{URL}
+http://127.0.0.1:3001/{URL}
 ```
 
 ### Response Formats
@@ -204,11 +195,20 @@ http://127.0.0.1:3000/{URL}
 Returns structured data with content, metadata, and extracted links:
 
 ```bash
-# Default JSON response
-curl 'http://127.0.0.1:3000/https://example.com'
+**Basic Usage:**
+```bash
+# Markdown content (default)
+curl "/https://www.ala.org"
 
-# Explicit JSON request
-curl -H "Accept: application/json" 'http://127.0.0.1:3000/https://example.com'
+# JSON response with metadata
+curl -H "Accept: application/json" "/https://worldliteracyfoundation.org"
+
+# Plain text extraction
+curl "/https://en.wikipedia.org/wiki/Reading"
+
+# Screenshot capture (returns image URL to saved screenshot)
+curl -H "X-Respond-With: screenshot" "/https://www.ala.org/advocacy"
+```
 ```
 
 **JSON Response Structure:**
@@ -247,23 +247,23 @@ curl -H "Accept: application/json" 'http://127.0.0.1:3000/https://example.com'
 Returns clean markdown content:
 
 ```bash
-curl -H "Accept: text/plain" 'http://127.0.0.1:3000/https://example.com'
+curl -H "Accept: text/plain" 'http://127.0.0.1:3001/https://www.ala.org'
 # or
-curl -H "X-Respond-With: markdown" 'http://127.0.0.1:3000/https://example.com'
+curl -H "X-Respond-With: markdown" 'http://127.0.0.1:3001/https://worldliteracyfoundation.org'
 ```
 
 #### 3. 🌐 HTML Response
 Returns cleaned HTML (documentElement.outerHTML):
 
 ```bash
-curl -H "X-Respond-With: html" 'http://127.0.0.1:3000/https://example.com'
+curl -H "X-Respond-With: html" 'http://127.0.0.1:3001/https://en.wikipedia.org/wiki/Reading'
 ```
 
 #### 4. 📄 Text Response
 Returns plain text (document.body.innerText):
 
 ```bash
-curl -H "X-Respond-With: text" 'http://127.0.0.1:3000/https://example.com'
+curl -H "X-Respond-With: text" 'http://127.0.0.1:3001/https://www.ala.org'
 ```
 
 #### 5. 📸 Screenshot Responses
@@ -271,10 +271,10 @@ Returns URL to locally saved screenshot:
 
 ```bash
 # Screen-size screenshot
-curl -H "X-Respond-With: screenshot" 'http://127.0.0.1:3000/https://example.com'
+curl -H "X-Respond-With: screenshot" 'http://127.0.0.1:3001/https://worldliteracyfoundation.org'
 
 # Full-page screenshot
-curl -H "X-Respond-With: pageshot" 'http://127.0.0.1:3000/https://example.com'
+curl -H "X-Respond-With: pageshot" 'http://127.0.0.1:3001/https://en.wikipedia.org/wiki/Reading'
 ```
 
 ### Query Parameters
@@ -396,17 +396,17 @@ The development environment supports:
 
 1. **Testing JSON Responses:**
    ```bash
-   curl -H "Accept: application/json" 'http://localhost:5001/YOUR_PROJECT/us-central1/crawler/https://example.com'
+   curl -H "Accept: application/json" 'http://localhost:3001/https://example.com'
    ```
 
 2. **Testing Error Handling:**
    ```bash
-   curl 'http://localhost:5001/YOUR_PROJECT/us-central1/crawler/invalid-url'
+   curl 'http://localhost:3001/invalid-url'
    ```
 
 3. **Testing Screenshots:**
    ```bash
-   curl -H "X-Respond-With: screenshot" 'http://localhost:5001/YOUR_PROJECT/us-central1/crawler/https://example.com'
+   curl -H "X-Respond-With: screenshot" 'http://localhost:3001/https://example.com'
    ```
 
 ## 🙏 Acknowledgements
