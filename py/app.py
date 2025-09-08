@@ -39,7 +39,7 @@ import sys
 import time
 import select
 import webbrowser
-import yaml as yaml # Add yaml import
+import yaml as yaml # type: ignore
 from typing import Tuple, Callable, Optional, Dict
 
 # --- Configuration ---
@@ -171,7 +171,7 @@ def run_cmd(
 def step_npm(debug: bool = False, verbose: bool = False) -> int:
     """Run npm install and test."""
     print_info("--- Step 1: Running npm install and tests ---")
-    npm_dir = "js/functions"
+    npm_dir = "js"
 
     print_info("Installing npm dependencies...")
     code, out, err = run_cmd(["npm", "install"], cwd=npm_dir, timeout=300, live=verbose)
@@ -321,7 +321,7 @@ def step_tests(verbose: bool = False, debug: bool = False, force: bool = False) 
 
     pipeline_steps = {
         "npm": lambda: step_npm(debug=debug, verbose=verbose),
-        "TypeScript Build": lambda: run_cmd(["npm", "run", "build"], cwd="js/functions", timeout=60)[0],
+        "TypeScript Build": lambda: run_cmd(["npm", "run", "build"], cwd="js", timeout=60)[0],
         "pyright": lambda: step_pyright(verbose=verbose),
         "Start Docker for tests": lambda: step_docker(verbose=verbose),
         "demo": lambda: step_demo(verbose=verbose),

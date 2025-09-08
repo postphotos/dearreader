@@ -1,21 +1,18 @@
 services:
-  # -------------------------------------------
-  # --- DEVELOPMENT PROFILE SERVICES
-  # -------------------------------------------
-  js-functions:
+  # -----------------------------------------------
+  # --- LOCAL DEVELOPMENT SERVICES (No Firebase)
+  # -----------------------------------------------
+  js-server:
     build:
       context: .
       dockerfile: docker/Dockerfile.dev
       target: js-dev
-    container_name: reader-js-functions
-    command: npm run emu:debug --prefix js/functions
+    container_name: reader-js-local
+    command: npm run serve --prefix js
     volumes:
       - ./js:/app/js
     ports:
-      - "5001:5001"
-      - "9099:9099"
-      - "8080:8080"
-      - "9229:9229"
+      - "3000:3000"
     environment:
       - NODE_ENV=development
     profiles: ["dev"]
@@ -40,7 +37,7 @@ services:
       dockerfile: docker/Dockerfile.dev
       target: js-dev
     container_name: reader-js-test-runner
-    command: npm test --prefix js/functions
+    command: npm test --prefix js
     profiles: ["dev"]
     volumes:
       - ./js:/app/js
@@ -49,17 +46,16 @@ services:
       - NODE_ENV=test
       - CI=true
 
-  # -------------------------------------------
+  # -----------------------------------------------
   # --- PRODUCTION PROFILE SERVICE
-  # -------------------------------------------
+  # -----------------------------------------------
   server:
     build:
       context: .
       dockerfile: docker/Dockerfile
     container_name: reader-server-prod
     ports:
-      - "80:8080"
-      - "443:5001"
+      - "8080:8080"
     environment:
       - NODE_ENV=production
     profiles: ["prod"]

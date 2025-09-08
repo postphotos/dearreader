@@ -37,7 +37,7 @@ echo "📁 Creating necessary directories..."
 mkdir -p storage
 mkdir -p docker
 mkdir -p logs
-mkdir -p js/functions/node_modules
+mkdir -p jsf/node_modules
 
 # Ensure Dockerfile is in docker directory
 if [ -f "Dockerfile" ] && [ ! -f "docker/Dockerfile" ]; then
@@ -90,7 +90,7 @@ fi
 
 # Install node dependencies
 echo "📥 Installing Node.js dependencies..."
-if npm install --prefix js/functions; then
+if npm install --prefix js/; then
     echo "✅ Setup complete! You can now run the application using ./run.sh"
     echo ""
 else

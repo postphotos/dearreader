@@ -838,6 +838,16 @@ export class PuppeteerControl extends AsyncService {
         }
         return undefined;
     }
+
+    async close() {
+        if (this.__healthCheckInterval) {
+            clearInterval(this.__healthCheckInterval);
+            this.__healthCheckInterval = undefined;
+        }
+        if (this.browser && this.browser.connected) {
+            await this.browser.close();
+        }
+    }
 }
 
 const puppeteerControl = container.resolve(PuppeteerControl);

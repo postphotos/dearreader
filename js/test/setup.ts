@@ -1,19 +1,15 @@
 import 'reflect-metadata';
 import * as fs from 'fs';
 
+import puppeteerControl from '../src/services/puppeteer.js';
+import { after } from 'mocha';
+
+
 // Type declarations for Node.js globals
 declare const process: any;
 
 // Global test setup
 // This file runs before all tests and sets up the testing environment
-
-// Set global Mocha timeout for all tests (45 seconds for Puppeteer operations)
-declare const global: any;
-if (typeof global.beforeEach === 'function') {
-  global.beforeEach(function(this: any) {
-    this.timeout(45000); // 45 seconds
-  });
-}
 
 // Configure Puppeteer for Chromium with better WSL support
 process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
@@ -31,7 +27,7 @@ const chromiumPaths = [
 let chromiumFound = false;
 for (const path of chromiumPaths) {
   try {
-    if (fs.existsSync(path)) {
+    if (path && fs.statSync(path).isFile()) {
       process.env.PUPPETEER_EXECUTABLE_PATH = path;
       console.log(`✅ Using Chromium at: ${path}`);
       chromiumFound = true;
@@ -67,3 +63,8 @@ process.env.PUPPETEER_ARGS = [
 process.env.PUPPETEER_HEADLESS = 'true';
 
 // You can add other global test setup here if needed
+
+// Global after hook to close puppeteer
+after(async () => {
+  await puppeteerControl.close();
+});
