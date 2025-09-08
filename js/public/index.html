@@ -651,8 +651,29 @@
               <option value="markdown">📝 Markdown (Clean text)</option>
               <option value="html">🌐 HTML (Cleaned HTML)</option>
               <option value="text">📖 Plain Text</option>
-              <option value="screenshot">📸 Screenshot URL</option>
+              <option value="screenshot">📸 Screenshot (PNG)</option>
               <option value="pdf">📕 PDF Content</option>
+            </select>
+          </div>
+
+          <!-- Screenshot Options (shown when screenshot is selected) -->
+          <div id="screenshotOptions" class="form-group" style="display: none;">
+            <label for="viewport"><i class="fas fa-desktop"></i> Screenshot Size</label>
+            <select id="viewport">
+              <option value="desktop">💻 Desktop (1280x1024)</option>
+              <option value="tablet">📱 Tablet (768x1024)</option>
+              <option value="mobile">📱 Mobile (375x667)</option>
+              <option value="fullpage">📄 Full Page</option>
+            </select>
+          </div>
+
+          <!-- PDF Options (shown when PDF is selected) -->
+          <div id="pdfOptions" class="form-group" style="display: none;">
+            <label for="pdfAction"><i class="fas fa-file-pdf"></i> PDF Action</label>
+            <select id="pdfAction">
+              <option value="extract">📖 Extract Text Content</option>
+              <option value="download">⬇️ Download PDF File</option>
+              <option value="screenshot">📸 Screenshot of PDF</option>
             </select>
           </div>
 
@@ -808,12 +829,24 @@
       }
     }
 
+    // Handle format change to show/hide options
+    document.getElementById('format').addEventListener('change', function(e) {
+      const format = e.target.value;
+      const screenshotOptions = document.getElementById('screenshotOptions');
+      const pdfOptions = document.getElementById('pdfOptions');
+
+      screenshotOptions.style.display = format === 'screenshot' ? 'block' : 'none';
+      pdfOptions.style.display = format === 'pdf' ? 'block' : 'none';
+    });
+
     // Handle form submission
     document.getElementById('extractForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
       const url = document.getElementById('url').value;
       const format = document.getElementById('format').value;
+      const viewport = document.getElementById('viewport')?.value || 'desktop';
+      const pdfAction = document.getElementById('pdfAction')?.value || 'extract';
       const extractBtn = document.getElementById('extractBtn');
 
       if (!url) {
@@ -836,6 +869,7 @@
         let headers = {};
         let endpoint = `/${encodeURIComponent(url)}`;
 
+        // Add format-specific headers
         switch (format) {
           case 'json':
             headers['Accept'] = 'application/json';
@@ -851,9 +885,23 @@
             break;
           case 'screenshot':
             headers['X-Respond-With'] = 'screenshot';
+            // Add viewport options
+            if (viewport === 'desktop') {
+              headers['X-Viewport-Width'] = '1280';
+              headers['X-Viewport-Height'] = '1024';
+            } else if (viewport === 'tablet') {
+              headers['X-Viewport-Width'] = '768';
+              headers['X-Viewport-Height'] = '1024';
+            } else if (viewport === 'mobile') {
+              headers['X-Viewport-Width'] = '375';
+              headers['X-Viewport-Height'] = '667';
+            } else if (viewport === 'fullpage') {
+              headers['X-Full-Page'] = 'true';
+            }
             break;
           case 'pdf':
             headers['X-Respond-With'] = 'pdf';
+            headers['X-PDF-Action'] = pdfAction;
             break;
         }
 
@@ -870,16 +918,24 @@
           const jsonData = await response.json();
           content = JSON.stringify(jsonData, null, 2);
           result.classList.add('success');
-        } else if (format === 'screenshot' || format === 'pdf') {
+        } else if (format === 'screenshot' || (format === 'pdf' && pdfAction === 'screenshot')) {
           // Handle binary content or URLs
           const textContent = await response.text();
           if (textContent.startsWith('http')) {
-            content = `Screenshot/PDF URL: ${textContent}
-
-📎 <a href="${textContent}" target="_blank">Open in new tab</a>`;
+            content = `📸 Screenshot captured successfully!\n\n� <a href="${textContent}" target="_blank" style="color: #667eea; text-decoration: none; font-weight: bold;">📎 Open Screenshot</a>\n\n💡 Right-click the link above and select "Save link as..." to download the image.`;
           } else {
             content = textContent;
           }
+          result.classList.add('success');
+        } else if (format === 'pdf' && pdfAction === 'download') {
+          // Handle PDF download
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          content = `📕 PDF downloaded successfully!\n\n🔗 <a href="${url}" download="document.pdf" style="color: #667eea; text-decoration: none; font-weight: bold;">📎 Download PDF</a>\n\n💡 Click the link above to download the PDF file.`;
+          result.classList.add('success');
+        } else if (format === 'pdf' && pdfAction === 'extract') {
+          // Handle PDF text extraction
+          content = await response.text();
           result.classList.add('success');
         } else {
           content = await response.text();

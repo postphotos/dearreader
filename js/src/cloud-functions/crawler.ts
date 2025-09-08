@@ -81,6 +81,7 @@ export interface ExtraScrappingOptions extends ScrappingOptions {
     targetSelector?: string | string[];
     removeSelector?: string | string[];
     keepImgDataUrl?: boolean;
+    pdfAction?: string;
 }
 
 export interface FormattedPage {
@@ -1040,6 +1041,10 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             overrideUserAgent: opts.userAgent,
             timeoutMs: opts.timeout ? opts.timeout * 1000 : undefined,
             withIframe: opts.withIframe,
+            viewportWidth: opts.viewportWidth || undefined,
+            viewportHeight: opts.viewportHeight || undefined,
+            fullPage: opts.fullPage || false,
+            pdfAction: opts.pdfAction,
         };
     }
 

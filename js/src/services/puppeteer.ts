@@ -130,6 +130,9 @@ export interface ScrappingOptions {
     minIntervalMs?: number;
     overrideUserAgent?: string;
     timeoutMs?: number;
+    viewportWidth?: number;
+    viewportHeight?: number;
+    fullPage?: boolean;
 }
 
 const puppeteer = addExtra(puppeteerCore);
@@ -353,11 +356,18 @@ export class PuppeteerControl extends AsyncService {
         return managedPage;
     }
 
-    private async setupPage(page: Page, sn: number): Promise<void> {
+    private async setupPage(page: Page, sn: number, options?: ScrappingOptions): Promise<void> {
         const preparations: any[] = [];
 
         preparations.push(page.setBypassCSP(true));
-        preparations.push(page.setViewport({ width: 1024, height: 1024 }));
+
+        // Set viewport based on options or default
+        const viewport = {
+            width: options?.viewportWidth || 1024,
+            height: options?.viewportHeight || 1024
+        };
+        preparations.push(page.setViewport(viewport));
+
         preparations.push(page.exposeFunction('reportSnapshot', (snapshot: PageSnapshot) => {
             if (snapshot.href === 'about:blank') {
                 return;
@@ -718,6 +728,16 @@ export class PuppeteerControl extends AsyncService {
             page = await this.getNextPage(1); // Higher priority for scraping
             const sn = this.snMap.get(page) ?? -1;
             this.logger.info(`Page ${sn}: Scraping ${url}`);
+
+            // Configure viewport based on options
+            if (options.viewportWidth || options.viewportHeight) {
+                const viewport = {
+                    width: options.viewportWidth || 1024,
+                    height: options.viewportHeight || 1024
+                };
+                await page.setViewport(viewport);
+                this.logger.info(`Page ${sn}: Set viewport to ${viewport.width}x${viewport.height}`);
+            }
 
             if (options.proxyUrl && (page as any).useProxy) {
                 await (page as any).useProxy(options.proxyUrl);

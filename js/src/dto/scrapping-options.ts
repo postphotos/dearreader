@@ -188,6 +188,26 @@ export class CrawlerOptions extends AutoCastable implements AutoCastableMetaClas
     })
     timeout?: number | null;
 
+    @Prop({
+        type: Number,
+        nullable: true,
+    })
+    viewportWidth?: number | null;
+
+    @Prop({
+        type: Number,
+        nullable: true,
+    })
+    viewportHeight?: number | null;
+
+    @Prop({
+        default: false,
+    })
+    fullPage?: boolean;
+
+    @Prop()
+    pdfAction?: string;
+
     static override from<T extends CrawlerOptions>(this: Constructor<T>, input: any, ...args: any[]): T {
         const instance = super.from(input, ...args) as T;
         const req = args[0] as Request | undefined;
@@ -267,6 +287,28 @@ export class CrawlerOptions extends AutoCastable implements AutoCastableMetaClas
 
             if (instance.withIframe) {
                 instance.timeout ??= null;
+            }
+
+            // Viewport options
+            let viewportWidth = parseInt(getHeader('x-viewport-width') || '');
+            if (!isNaN(viewportWidth) && viewportWidth > 0) {
+                instance.viewportWidth = viewportWidth;
+            }
+
+            let viewportHeight = parseInt(getHeader('x-viewport-height') || '');
+            if (!isNaN(viewportHeight) && viewportHeight > 0) {
+                instance.viewportHeight = viewportHeight;
+            }
+
+            const fullPage = getHeader('x-full-page');
+            if (fullPage !== undefined) {
+                instance.fullPage = fullPage.toLowerCase() === 'true';
+            }
+
+            // PDF action
+            const pdfAction = getHeader('x-pdf-action');
+            if (pdfAction) {
+                instance.pdfAction = pdfAction;
             }
 
             const cookies: CookieParam[] = [];
