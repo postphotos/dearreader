@@ -50,7 +50,7 @@
 | 🔥 CRITICAL | Remove Firebase client code | Pending | Dependencies cleaned | Clean js/functions/src/shared/lib/firestore.js and other Firebase references |
 | HIGH | Complete setup.sh merge | ✅ COMPLETED | 2025-09-07 4:28 PM | ✅ FULLY INTEGRATED setup.sh into run.sh cmd_setup() with proper error handling and logging |
 | HIGH | Test consolidated run.sh | Pending | Merges complete | Test setup, dev, test, run commands with --verbose/--force |
-| HIGH | Optimize Docker local-only | Pending | None | Remove Firebase emulator from docker-compose.yml |
+| HIGH | Optimize Docker local-only | ✅ COMPLETED | None | Removed Firebase emulator ports, updated service names, fixed paths for flattened js/ structure |
 | MEDIUM | Validate Python dependencies | Pending | None | Audit py/requirements.txt for local-only functionality |
 | MEDIUM | Test local crawler ops | Pending | Firebase removed | Test crawling, queueing, storage mechanisms |
 | MEDIUM | Update documentation | Pending | All updates complete | Remove Firebase examples, update commands |
@@ -111,6 +111,7 @@
 - [x] **2025-09-07 4:28 PM**: ✅ COMPREHENSIVE DOCS TASK - Create /docs/ with feature documentation, known issues, literacy/reading references
 - [x] **2025-09-07 4:28 PM**: 🔄 WSL ENVIRONMENT - Using Windows Subsystem for Linux for command execution
 - [x] **2025-09-07 4:32 PM**: ✅ COMPLETED - Created /docs/ directory structure with comprehensive README.md
+- [x] **2025-09-07 4:32 PM**: ✅ COMPLETED Docker optimization - Removed Firebase emulator ports (5001,9099,8080,9229), updated js-functions to js-server, fixed production Dockerfile paths, updated port mappings
 - [x] **2025-09-07 4:32 PM**: 🔄 CRITICAL REQUIREMENT - All commands MUST be executed in WSL/Linux environment
 - [x] **2025-09-07 4:32 PM**: ▶️ READY - Proceed with WSL-based testing of consolidated scripts
 
@@ -259,7 +260,7 @@ This file will be updated with each major task completion and any blockers/quest
 - [ ] Test consolidated run.sh functionality – end‑to‑end testing pending
 - [ ] Test consolidated run.sh functionality with --help in WSL
 - [ ] Test consolidated run.sh dev command - identify Docker buildx missing
-- [ ] Optimize Docker for local‑only operation – prune unused services
+- [x] Optimize Docker for local‑only operation – prune unused services
 - [ ] Update README.md with local‑only examples – added one‑command setup
 - [ ] Create /docs/ folder with accurate md files – docs/setup.md, docs/api.md, docs/literacy.md, docs/troubleshooting.md
 - [ ] Install JavaScript dependencies locally via npm
