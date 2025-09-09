@@ -35,7 +35,7 @@
 
     async function refreshData() {
       try {
-        const response = await fetch('/queue');
+        const response = await fetch('queue');
         if (!response.ok) {
           throw new Error('Failed to fetch queue stats');
         }
@@ -93,7 +93,7 @@
         resetButton.disabled = true;
         resetButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resetting...';
 
-        const response = await fetch('/queue/reset', { method: 'POST' });
+        const response = await fetch('queue/reset', { method: 'POST' });
         if (!response.ok) {
           throw new Error('Failed to reset stats');
         }

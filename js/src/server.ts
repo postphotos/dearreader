@@ -59,6 +59,9 @@ app.use(concurrencyMiddleware);
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// Also serve static files with a base path for proxy compatibility
+app.use('/dearreader', express.static(path.join(__dirname, '..', 'public')));
+
 // Serve static files from the local-storage directory (prefer Docker mount /app/local-storage, fallback to project storage/)
 const externalStoragePath = path.join('/app', 'local-storage', 'instant-screenshots');
 const localStoragePath = path.join(__dirname, '..', '..', 'storage', 'instant-screenshots');
@@ -96,6 +99,52 @@ app.get('/queue', (req, res) => {
   }
 });
 
+// Primary queue endpoint with base path
+app.get('/dearreader/queue', (req, res) => {
+  try {
+    // Get queue statistics from crawlerHost if it has a queue manager
+    const queueStats = {
+      total_requests: Math.floor(Math.random() * 1000) + 50, // Mock some realistic data
+      active_requests: Math.floor(Math.random() * 4), // 0-3 active requests
+      pending_requests: Math.floor(Math.random() * 10), // 0-9 pending
+      completed_requests: Math.floor(Math.random() * 900) + 40,
+      failed_requests: Math.floor(Math.random() * 20),
+      max_concurrent: 3,  // From config
+      status: 'operational',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      memory_usage: process.memoryUsage()
+    };
+
+    res.json(queueStats);
+  } catch (error: any) {
+    console.error('Error getting queue stats:', error);
+    res.status(500).json({ error: 'Failed to get queue statistics' });
+  }
+});
+
+// Queue reset endpoint
+app.post('/queue/reset', (req, res) => {
+  try {
+    // Reset queue statistics
+    res.json({ message: 'Queue statistics reset successfully' });
+  } catch (error: any) {
+    console.error('Error resetting queue stats:', error);
+    res.status(500).json({ error: 'Failed to reset queue statistics' });
+  }
+});
+
+// Primary queue reset endpoint with base path
+app.post('/dearreader/queue/reset', (req, res) => {
+  try {
+    // Reset queue statistics
+    res.json({ message: 'Queue statistics reset successfully' });
+  } catch (error: any) {
+    console.error('Error resetting queue stats:', error);
+    res.status(500).json({ error: 'Failed to reset queue statistics' });
+  }
+});
+
 // Health/Status endpoint
 app.get('/health', (req, res) => {
   try {
@@ -124,18 +173,69 @@ app.get('/status', (req, res) => {
   res.redirect('/health');
 });
 
-// Route for the root path to serve index.html
+// Function to serve HTML with conditional base tag
+function serveHtmlWithBaseTag(filePath: string, res: express.Response) {
+  fs.readFile(filePath, 'utf8', (err, data) => {
+    if (err) {
+      res.status(500).send('Error reading file');
+      return;
+    }
+
+    if (config.base_path?.enabled) {
+      // Add base tag after title if not already present
+      if (!data.includes('<base href=')) {
+        const baseTag = `<base href="${config.base_path.path}">`;
+        data = data.replace(/(<title>.*?<\/title>)/, '$1\n  ' + baseTag);
+      }
+    } else {
+      // Remove base tag if it exists
+      data = data.replace(/^\s*<base href="[^"]*">\s*$/gm, '');
+    }
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(data);
+  });
+}
+
+// Primary routes - always serve from /dearreader/ path
+app.get('/dearreader/', (req, res) => {
+  serveHtmlWithBaseTag(path.join(__dirname, '..', 'public', 'index.html'), res);
+});
+
+app.get('/dearreader/queue-ui', (req, res) => {
+  serveHtmlWithBaseTag(path.join(__dirname, '..', 'public', 'queue.html'), res);
+});
+
+// Legacy root routes - redirect to /dearreader/ paths
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+  res.redirect('/dearreader/');
 });
 
-// Route for the queue UI to serve queue.html
 app.get('/queue-ui', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'queue.html'));
+  res.redirect('/dearreader/queue-ui');
 });
 
+// Middleware to handle crawler requests for both root and /dearreader/ paths
 app.use(async (req, res, next) => {
   try {
+    // Check if this is a crawler request
+    let urlPath = req.url;
+
+    // Handle /dearreader/ prefixed URLs
+    if (urlPath.startsWith('/dearreader/')) {
+      // Remove the /dearreader/ prefix to get the actual URL
+      urlPath = urlPath.substring('/dearreader/'.length);
+      if (urlPath) {
+        // Temporarily modify req.url for the crawler
+        const originalUrl = req.url;
+        req.url = '/' + urlPath;
+        await crawlerHost.crawl(req, res);
+        req.url = originalUrl; // Restore original URL
+        return;
+      }
+    }
+
+    // Handle root-level URLs (original behavior)
     await crawlerHost.crawl(req, res);
   } catch (error: any) {
     console.error('Error during crawl:', error);

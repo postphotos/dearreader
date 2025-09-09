@@ -4,6 +4,14 @@
 # Default URL for the application
 url: http://localhost:3001/
 
+# Base path configuration for proxy deployments
+base_path:
+  # Enable base path mode (adds <base href="/dearreader/"> to HTML)
+  # Set to false for direct localhost access, true for proxy deployments
+  enabled: true
+  # Base path to use - this is the prefix for all static assets and API calls
+  path: "/dearreader/"
+
 # Robots.txt compliance settings
 robots:
   # Set to false to disable robots.txt compliance checking

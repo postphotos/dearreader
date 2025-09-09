@@ -151,7 +151,7 @@
         </div>
 
         <div class="links">
-          <a href="/queue-ui" class="link-btn">
+          <a href="queue-ui" class="link-btn">
             <i class="fas fa-tasks"></i>
             Queue Monitor
           </a>
@@ -159,7 +159,7 @@
             <i class="fab fa-github"></i>
             View Source
           </a>
-          <a href="/api-docs" class="link-btn">
+          <a href="api-docs" class="link-btn">
             <i class="fas fa-book"></i>
             API Docs
           </a>
@@ -210,7 +210,7 @@
     // Check API status on page load
     async function checkAPIStatus() {
       try {
-        const response = await fetch('/queue');
+        const response = await fetch('queue');
         const data = await response.json();
 
         const statusHeader = document.getElementById('apiStatusHeader');

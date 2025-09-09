@@ -15,8 +15,14 @@ export interface ConcurrencyConfig {
   max_queue_length_per_client?: number;
 }
 
+export interface BasePathConfig {
+  enabled?: boolean;
+  path?: string;
+}
+
 export interface AppConfig {
   url?: string;
+  base_path?: BasePathConfig;
   openai?: OpenAIConfig;
   concurrency?: ConcurrencyConfig;
   [k: string]: any;
@@ -36,6 +42,10 @@ const yamlCfg = loadYamlConfig();
 
 const config: AppConfig = {
   url: yamlCfg.url || process.env.READER_BASE_URL || 'http://localhost:3001/',
+  base_path: {
+    enabled: yamlCfg.base_path?.enabled ?? false,
+    path: yamlCfg.base_path?.path || '/dearreader/',
+  },
   openai: {
     api_key: process.env.OPENAI_API_KEY || (yamlCfg.openai && yamlCfg.openai.api_key) || '',
     base_url: process.env.OPENAI_BASE_URL || (yamlCfg.openai && yamlCfg.openai.base_url) || 'https://api.openai.com/v1',
