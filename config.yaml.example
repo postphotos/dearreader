@@ -1,0 +1,153 @@
+# DearReader Configuration
+# Place this file in the root directory of your project
+
+# Default URL for the application
+url: http://localhost:3001/
+
+# Base path configuration for proxy deployments
+base_path:
+  # Enable base path mode (adds <base href="/dearreader/"> to HTML)
+  # Set to false for direct localhost access, true for proxy deployments
+  enabled: true
+  # Base path to use - this is the prefix for all static assets and API calls
+  path: "/dearreader/"
+
+# Robots.txt compliance settings
+robots:
+  # Set to false to disable robots.txt compliance checking
+  respect_robots_txt: true
+
+# PDF parsing settings
+pdf:
+  # Enable PDF parsing (experimental feature)
+  enable_parsing: true
+  # Maximum PDF file size to process (in MB)
+  max_file_size_mb: 50
+  # Timeout for PDF processing (in seconds)
+  processing_timeout_seconds: 30
+  # Enable OCR for scanned PDFs (requires additional dependencies)
+  enable_ocr: false
+  # Extract metadata from PDFs
+  extract_metadata: true
+  # Maximum number of pages to process
+  max_pages: 100
+
+# Domain/TLD settings
+domain:
+  # Allow all TLDs (useful for development or local crawling)
+  # Set to true to allow .localhost, .dev, .local, etc.
+  allow_all_tlds: true
+
+# Storage settings
+storage:
+  # Local directory for screenshots and temporary files
+  # This aligns to the Docker volume mount path at /app/local-storage
+  # Default: local_directory: "./storage"
+  local_directory: "./storage"
+  # Maximum age for stored files in days
+  max_file_age_days: 7
+
+# Development settings
+development:
+  # Enable debug logging
+  debug: false
+  # Enable CORS for development
+  cors_enabled: true
+
+# Performance settings
+performance:
+  # Maximum concurrent pages in browser
+  max_concurrent_pages: 10
+  # Page idle timeout in milliseconds
+  page_idle_timeout: 60000
+  # Health check interval in milliseconds
+  health_check_interval: 30000
+  # Request timeout for external resources (ms)
+  request_timeout: 10000
+  # Maximum requests per page
+  max_requests_per_page: 1000
+  # Maximum requests per second
+  max_rps: 60
+  # Maximum unique domains per page
+  max_domains_per_page: 200
+
+# Queue settings
+queue:
+  # Maximum concurrent jobs
+  max_concurrent: 3
+  # Maximum retry attempts
+  max_retries: 3
+  # Delay between retries in milliseconds
+  retry_delay: 5000
+  # Job timeout in milliseconds
+  job_timeout: 60000
+  # Maximum connections (same as max_concurrent)
+  max_connections: 3
+
+# Browser/Puppeteer settings
+browser:
+  # Viewport dimensions
+  viewport_width: 1024
+  viewport_height: 1024
+  # Enable stealth mode
+  stealth_mode: true
+  # Browser timeout for navigation
+  navigation_timeout: 30000
+  # Wait for network idle
+  wait_for_network_idle: true
+
+# Cache settings
+cache:
+  # Robots.txt cache timeout in milliseconds
+  robots_cache_timeout: 86400000  # 24 hours
+  # Enable response caching
+  enable_response_cache: false
+  # Cache size limit (number of entries)
+  cache_size_limit: 1000
+
+# Content processing settings
+content:
+  # Enable readability parsing
+  enable_readability: true
+  # Remove CSS selectors (comma-separated)
+  remove_selectors: ""
+  # Target specific selectors
+  target_selectors: ""
+  # Extract images
+  extract_images: true
+  # Extract links
+  extract_links: true
+  # Maximum content length
+  max_content_length: 1000000  # 1MB
+
+# Environment / external API / concurrency settings
+environment:
+  # Max worker threads / processes the application should spawn (for CPU-bound tasks)
+  max_workers: 4
+  # Use a single-process in development
+  single_process_dev: true
+
+openai:
+  # OpenAI API key (read from environment in runtime; placeholder here for documentation)
+  api_key: ""
+  # Base URL override (useful for proxies or OpenAI-compatible endpoints)
+  base_url: "https://api.openai.com/v1"
+  # Request timeout in milliseconds
+  request_timeout_ms: 30000
+  # Max retry attempts for transient OpenAI errors
+  max_retries: 2
+
+concurrency:
+  # API-level concurrency limit for incoming requests (global)
+  max_api_concurrency: 50
+  # Default per-client concurrency (when using quotas/keys)
+  default_client_concurrency: 5
+  # Allow queuing beyond concurrency limits up to this value per client
+  max_queue_length_per_client: 20
+
+proxy:
+  # Optional HTTP proxy to route headless browser traffic through
+  http_proxy: ""
+  https_proxy: ""
+  # Optional socks proxy
+  socks_proxy: ""
