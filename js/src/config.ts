@@ -168,11 +168,29 @@ function loadAIProviders(): AIProvidersConfig {
     });
   }
 
-  // If no providers defined in YAML, provide some defaults
+  // If no providers defined in YAML, provide some defaults with free OpenRouter models
   if (Object.keys(providers).length === 0) {
-    providers['openai-gpt-3.5-turbo'] = mergeProviderConfig(undefined, 'OPENAI');
-    providers['openrouter-gpt-4'] = mergeProviderConfig(undefined, 'OPENROUTER');
-    providers['gemini-pro'] = mergeProviderConfig(undefined, 'GEMINI');
+    // Free OpenRouter models - no API key required
+    providers['deepseek/deepseek-r1:free'] = mergeProviderConfig({
+      base_url: 'https://openrouter.ai/api/v1',
+      model: 'deepseek/deepseek-r1:free'
+    });
+    providers['meta-llama/llama-3.3-70b-instruct:free'] = mergeProviderConfig({
+      base_url: 'https://openrouter.ai/api/v1',
+      model: 'meta-llama/llama-3.3-70b-instruct:free'
+    });
+    providers['qwen/qwen-2.5-72b-instruct:free'] = mergeProviderConfig({
+      base_url: 'https://openrouter.ai/api/v1',
+      model: 'qwen/qwen-2.5-72b-instruct:free'
+    });
+    providers['google/gemma-3-27b-it:free'] = mergeProviderConfig({
+      base_url: 'https://openrouter.ai/api/v1',
+      model: 'google/gemma-3-27b-it:free'
+    });
+    providers['mistralai/mistral-small-3.1-24b-instruct:free'] = mergeProviderConfig({
+      base_url: 'https://openrouter.ai/api/v1',
+      model: 'mistralai/mistral-small-3.1-24b-instruct:free'
+    });
   }
 
   return providers;
