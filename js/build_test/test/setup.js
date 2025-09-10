@@ -26,6 +26,21 @@ if (typeof globalThis.DOMMatrix === 'undefined') {
     }
     globalThis.DOMMatrix = DOMMatrixPolyfill;
 }
+// Polyfill for Promise.withResolvers (Node.js 18+)
+if (typeof globalThis.Promise.withResolvers === 'undefined') {
+    globalThis.Promise.withResolvers = function () {
+        let resolve;
+        let reject;
+        const promise = new Promise((res, rej) => {
+            resolve = res;
+            reject = rej;
+        });
+        return { promise, resolve: resolve, reject: reject };
+    };
+}
+// Configure pdfjs-dist for testing
+import * as pdfjsLib from 'pdfjs-dist';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs-dist/build/pdf.worker.mjs';
 import 'reflect-metadata';
 import * as fs from 'fs';
 import puppeteerControl from '../src/services/puppeteer.js';

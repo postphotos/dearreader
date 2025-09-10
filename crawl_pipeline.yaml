@@ -21,104 +21,336 @@
 # ============================================================================
 
 # ============================================================================
-# LLM PROVIDER DEFINITIONS
+# RATE LIMITING CONFIGURATION
 # ============================================================================
-# All AI provider configurations, models, prompts, and settings
-# API keys are loaded from .env file, but can be overridden here
 
-llm_providers:
-  # OpenAI Provider - Multiple models with RPM limits
-  openai-gpt-3.5-turbo:
-    api_key: "${OPENAI_API_KEY}"
-    base_url: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
-    model: "gpt-3.5-turbo"
-    temperature: 0.2
-    max_tokens: 2048
-    rpm_limit: 3500  # OpenAI Tier 1 limit
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
+rate_limiting:
+  # Enable rate limiting
+  enabled: true
+  # Log file for tracking API usage per key
+  usage_log_path: "./logs/api_usage.log"
+  # Reset usage counters daily at midnight
+  daily_reset_hour: 0
+  # Warning threshold (percentage of limit)
+  warning_threshold: 80
+  # Strict enforcement (block requests when limit exceeded)
+  strict_enforcement: true
 
-  openai-gpt-4:
-    api_key: "${OPENAI_API_KEY}"
-    base_url: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
-    model: "gpt-4"
-    temperature: 0.1
-    max_tokens: 4096
-    rpm_limit: 200  # GPT-4 rate limit
-    parsing_prompt: "Analyze and extract key information from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 60000
-    max_retries: 3
+  # Provider-specific rate limits
+  providers:
+    openrefine-free:
+      rpm_limit: 18  # 90% of 20
+      rpd_limit: 900  # 90% of 1000
+    openrefine-premium:
+      rpm_limit: 180
+      rpd_limit: 9000
 
-  # OpenRouter Provider - Multiple models
-  openrouter-gpt-4:
-    api_key: "${OPENROUTER_API_KEY}"
-    base_url: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
-    model: "openai/gpt-4"
-    temperature: 0.2
-    max_tokens: 4096
-    rpm_limit: 100  # OpenRouter limit
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
+# ============================================================================
+# PIPELINE ROUTING CONFIGURATION
+# ============================================================================
 
-  openrouter-claude:
-    api_key: "${OPENROUTER_API_KEY}"
-    base_url: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
-    model: "anthropic/claude-3-haiku"
-    temperature: 0.3
-    max_tokens: 4096
-    rpm_limit: 100  # OpenRouter limit
-    parsing_prompt: "Analyze this content and provide insights:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
+pipeline_routing:
+  # Default pipeline for regular URLs (no AI processing)
+  default: "html_default"
 
-  # Google Gemini Provider
-  gemini-pro:
-    api_key: "${GEMINI_API_KEY}"
-    base_url: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1}"
-    model: "gemini-pro"
-    temperature: 0.2
-    max_tokens: 2048
-    rpm_limit: 60  # Gemini rate limit
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
+  # Pipeline-specific URL routing
+  routes:
+    # AI-enhanced processing routes
+    "/test_1/": "html_enhanced"
+    "/pdf_pipeline/": "pdf_enhanced"
+    "/ai_processing/": "html_enhanced"
 
-  gemini-pro-vision:
-    api_key: "${GEMINI_API_KEY}"
-    base_url: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1}"
-    model: "gemini-pro-vision"
-    temperature: 0.2
-    max_tokens: 2048
-    rpm_limit: 60  # Gemini rate limit
-    parsing_prompt: "Analyze this image and text content:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
+  # Pipeline definitions
+  pipelines:
+  # HTML Content Pipeline (NO LLM - default for regular requests)
+  html_default:
+    name: "HTML Content Processing Pipeline (No AI)"
+    description: "Default pipeline for processing HTML web content without AI processing - broad and unopinionated"
+    content_type: "html"
+    ai_required: false  # Explicitly disable AI for this pipeline
+    stages:
+      - name: "universal_crawl"
+        type: "crawl"
+        description: "Universal web page crawling with broad content detection"
+        config:
+          format: "html"
+          include_metadata: true
+          include_links: true
+          include_images: false
+          timeout_ms: 45000
+          # Broad content selectors that work across different site structures
+          wait_for_selector: "main, article, .content, .post, .entry, #content, #main, body"
+          # Fallback selectors if primary ones don't exist
+          fallback_selectors: [
+            "[role='main']",
+            ".article-content",
+            ".post-content",
+            ".entry-content",
+            ".blog-post",
+            ".news-article",
+            ".page-content",
+            "article",
+            ".article",
+            ".content-wrapper",
+            ".main-content",
+            "body"
+          ]
+          # User agent to avoid bot detection
+          user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+          # Accept various content types
+          accept_content_types: ["text/html", "text/plain", "application/xhtml+xml"]
+          # Follow redirects
+          follow_redirects: true
+          max_redirects: 5
+
+      - name: "universal_text_extraction"
+        type: "text_extract"
+        description: "Extract readable text from any web page structure"
+        config:
+          preserve_formatting: true
+          remove_scripts: true
+          remove_styles: true
+          remove_navigation: true
+          remove_ads: true
+          remove_comments: true
+          # Extract from multiple content areas
+          content_selectors: [
+            "main",
+            "article",
+            ".content",
+            ".post",
+            ".entry",
+            "#content",
+            "#main",
+            ".article-content",
+            ".post-content",
+            ".entry-content",
+            ".blog-post",
+            ".news-article",
+            ".page-content",
+            "[role='main']",
+            ".main-content",
+            ".content-wrapper"
+          ]
+          # Preserve important structural elements
+          preserve_headers: true
+          preserve_lists: true
+          preserve_tables: true
+          preserve_links: true
+          preserve_images: false
+          # Clean up common web artifacts
+          remove_common_artifacts: true
+          # Handle different encodings
+          encoding_detection: true
+          # Extract metadata from page
+          extract_title: true
+          extract_description: true
+          extract_keywords: true
+          extract_author: true
+          extract_date: true
+
+      - name: "universal_content_filtering"
+        type: "content_filter"
+        description: "Filter and clean extracted content for better readability"
+        config:
+          # Remove very short content (likely navigation/ads)
+          min_content_length: 100
+          # Remove duplicate content
+          remove_duplicates: true
+          # Language detection and filtering
+          language_filter: "auto"  # Keep content in detected language
+          # Quality filtering
+          quality_threshold: 0.3  # Basic quality check
+          # Content type detection
+          detect_content_type: true
+          # Boilerplate removal
+          remove_boilerplate: true
+
+      - name: "universal_json_formatting"
+        type: "json_format"
+        description: "Format result as comprehensive JSON with all extracted data"
+        config:
+          include_url: true
+          include_timestamp: true
+          include_request_metadata: true
+          include_response_metadata: true
+          include_content_metadata: true
+          include_extracted_metadata: true
+          include_processing_stats: true
+          # Structure the output
+          output_structure: "comprehensive"
+          # Include raw content for debugging
+          include_raw_content: false
+          # Include extracted text
+          include_cleaned_text: true
+          # Include detected language
+          include_language: true
+          # Include content quality score
+          include_quality_score: true
+          # Include processing warnings/errors
+          include_warnings: true    # Enhanced HTML Pipeline (with additional LLM processing)
+    html_enhanced:
+      name: "Enhanced HTML Processing Pipeline"
+      description: "Extended pipeline with categorization and business info extraction"
+      content_type: "html"
+      extends: "html_default"
+      stages:
+        - name: "auto_crawl"
+          type: "crawl"
+          description: "Automatically crawl and extract HTML content"
+          config:
+            format: "html"
+            include_metadata: true
+            include_links: true
+            include_images: false
+            timeout_ms: 30000
+            wait_for_selector: "main, article, .content, body"
+
+        - name: "convert_to_markdown"
+          type: "llm_process"
+          description: "Convert HTML to clean Markdown"
+          llm_provider: "fast_processing"
+          prompt: "html_to_markdown"
+
+        - name: "categorize_content"
+          type: "llm_process"
+          description: "Categorize content by type and topic"
+          llm_provider: "primary_text"
+          prompt: "content_categorization"
+          config:
+            input_field: "markdown_content"
+            output_field: "categorization"
+
+        - name: "extract_business_info"
+          type: "llm_process"
+          description: "Extract business-related information"
+          llm_provider: "primary_text"
+          prompt: "business_info_extraction"
+          config:
+            input_field: "markdown_content"
+            output_field: "business_info"
+            conditional: "content_contains_business_keywords"
+
+        - name: "extract_metadata"
+          type: "llm_process"
+          description: "Extract metadata from content"
+          llm_provider: "primary_text"
+          prompt: "extract_metadata"
+
+        - name: "format_as_json"
+          type: "llm_process"
+          description: "Format final result as JSON"
+          llm_provider: "fast_processing"
+          prompt: "json_formatting"
+
+    # PDF Content Pipeline
+    pdf_default:
+      name: "PDF Content Processing Pipeline"
+      description: "Default pipeline for processing PDF documents"
+      content_type: "pdf"
+      stages:
+        - name: "auto_crawl"
+          type: "crawl"
+          description: "Download PDF file"
+          config:
+            format: "binary"
+            include_metadata: true
+            timeout_ms: 60000
+            max_file_size_mb: 50
+
+        - name: "extract_text"
+          type: "pdf_extract"
+          description: "Extract text from PDF using pdf-lib"
+          config:
+            enable_ocr_fallback: false
+            extract_tables: false
+            preserve_formatting: true
+            max_pages: 100
+
+        - name: "quality_check"
+          type: "llm_process"
+          description: "Check if extracted content makes sense"
+          llm_provider: "primary_text"
+          prompt: "pdf_quality_check"
+          config:
+            input_field: "extracted_text"
+            output_field: "quality_assessment"
+            quality_threshold: 7.0
+
+        - name: "ocr_extraction"
+          type: "llm_process"
+          description: "Re-extract with OCR if quality is poor"
+          llm_provider: "primary_vision"
+          prompt: "pdf_ocr_extraction"
+          config:
+            input_field: "extracted_text"
+            output_field: "ocr_text"
+            conditional: "quality_score < 7.0"
+            combine_with_original: true
+
+        - name: "format_as_json"
+          type: "llm_process"
+          description: "Format final result as JSON"
+          llm_provider: "fast_processing"
+          prompt: "json_formatting"
+          config:
+            combine_fields: ["final_text", "metadata", "quality_assessment", "processing_method"]
+
+    # PDF Enhanced Pipeline (with additional processing)
+    pdf_enhanced:
+      name: "Enhanced PDF Processing Pipeline"
+      description: "Extended PDF pipeline with advanced OCR and analysis"
+      content_type: "pdf"
+      extends: "pdf_default"
+      stages:
+        - name: "auto_crawl"
+          type: "crawl"
+          description: "Download PDF file"
+          config:
+            format: "binary"
+            include_metadata: true
+            timeout_ms: 60000
+            max_file_size_mb: 50
+
+        - name: "extract_text"
+          type: "pdf_extract"
+          description: "Extract text from PDF using pdf-lib"
+          config:
+            enable_ocr_fallback: true
+            extract_tables: true
+            preserve_formatting: true
+            max_pages: 100
+
+        - name: "quality_check"
+          type: "llm_process"
+          description: "Check if extracted content makes sense"
+          llm_provider: "primary_text"
+          prompt: "pdf_quality_check"
+
+        - name: "ocr_extraction"
+          type: "llm_process"
+          description: "Advanced OCR extraction with vision model"
+          llm_provider: "primary_vision"
+          prompt: "pdf_ocr_extraction"
+          config:
+            use_advanced_ocr: true
+            handle_multiple_columns: true
+            preserve_layout: true
+
+        - name: "content_analysis"
+          type: "llm_process"
+          description: "Analyze PDF content structure and type"
+          llm_provider: "primary_text"
+          prompt: "content_categorization"
+          config:
+            input_field: "final_text"
+            output_field: "content_analysis"
+
+        - name: "format_as_json"
+          type: "llm_process"
+          description: "Format final result as JSON"
+          llm_provider: "fast_processing"
+          prompt: "json_formatting"
 
 # ============================================================================
 # TASK-SPECIFIC AI MODEL ASSIGNMENTS
@@ -127,40 +359,63 @@ llm_providers:
 
 ai_tasks:
   # PDF processing tasks - Use local model for speed, cloud for accuracy
-  parse_pdf: "openai-gpt-3.5-turbo"           # Primary: Local model for fast PDF parsing
-  parse_pdf_backup: "openrouter-gpt-4"         # Backup: Cloud model for complex PDFs
+  parse_pdf: "openrouter-small" # want fast PDF parsing
+  parse_pdf_backup: "openrouter-big" # Backup: Cloud model for complex PDFs
 
   # Content validation - Use more capable models
-  validate_format: "openrouter-gpt-4"          # Primary: GPT-4 for reliable validation
-  validate_format_backup: "openai-gpt-4"       # Backup: OpenAI GPT-4
+  validate_format: "openrouter-small" # want reliable validation
+  validate_format_backup: "openrouter-big" # Backup: Cloud model for reliable validation
 
   # Web crawling and content editing
-  edit_crawl: "openrouter-claude"              # Primary: Claude for content enhancement
-  edit_crawl_backup: "gemini-pro"              # Backup: Gemini for editing
+  edit_crawl: "openrouter-small"
+  edit_crawl_backup: "openrouter-big"
 
   # General purpose tasks - Use cost-effective models
-  general_chat: "openai-gpt-3.5-turbo"         # Primary: Fast, cheap model
-  general_chat_backup: "openrouter-gpt-4"      # Backup: More capable model
+  general_chat: "openrouter-small"
+  general_chat_backup: "openrouter-big"
 
   # Code analysis - Use specialized models
-  code_analysis: "openrouter-gpt-4"            # Primary: GPT-4 for technical analysis
-  code_analysis_backup: "openai-gpt-4"         # Backup: OpenAI GPT-4
+  code_analysis: "openrouter-small"
+  code_analysis_backup: "openrouter-big"
 
   # OCR and document processing
-  ocr_processing: "gemini-pro-vision"          # Primary: Vision model for OCR
-  ocr_processing_backup: "openrouter-claude"   # Backup: Claude for text analysis
+  ocr_processing: "primary_vision" # Use vision model for OCR
+  ocr_processing_backup: "openrouter-big"   # Backup: Claude for text analysis
 
   # Sentiment analysis
-  sentiment_analysis: "openrouter-claude"      # Primary: Claude for nuanced analysis
-  sentiment_analysis_backup: "gemini-pro"      # Backup: Gemini
+  sentiment_analysis: "openrouter-small" # We want nuanced analysis
+  sentiment_analysis_backup: "openrouter-big"
 
   # Content classification
-  content_classification: "openai-gpt-3.5-turbo" # Primary: Fast classification
-  content_classification_backup: "openrouter-gpt-4" # Backup: More accurate
+  content_classification: "openrouter-small" # We want nuanced analysis
+  content_classification_backup: "openrouter-big" # Backup: More accurate
 
-  # Default fallbacks
-  default: "openai-gpt-3.5-turbo"               # Default to fast, local model
-  default_backup: "openrouter-gpt-4"           # Default backup to capable cloud model
+  # HTML processing tasks
+  html_to_markdown: "fast_processing"
+  content_categorization: "primary_text"
+  business_info_extraction: "primary_text"
+  extract_metadata: "openrouter-small"
+
+  # JSON processing tasks
+  json_formatting: "fast_processing"
+  json_validation: "openrouter-small"
+
+  # Default fallbacks (by priority)
+  default: "openrouter-small"
+  default_backup: "openrefine-free"
+  default_fallback: "fast_processing"
+
+  # High-quality processing (when quality matters most)
+  high_quality: "openai-gpt-4-turbo"
+  high_quality_backup: "openrouter-big"
+
+  # Fast processing (when speed matters most)
+  fast: "fast_processing"
+  fast_backup: "openrouter-small"
+
+  # Vision processing (for images/OCR)
+  vision: "primary_vision"
+  vision_backup: "gemini-pro"
 
 # Prompt Definitions
 prompts:
@@ -306,947 +561,227 @@ prompts:
 
       Ensure the JSON is valid and well-structured.
 
-# Default Processing Pipelines
-pipelines:
-  # HTML Content Pipeline
-  html_default:
-    name: "HTML Content Processing Pipeline"
-    description: "Default pipeline for processing HTML web content"
-    content_type: "html"
-    stages:
-      - name: "auto_crawl"
-        type: "crawl"
-        description: "Automatically crawl and extract HTML content"
-        config:
-          format: "html"
-          include_metadata: true
-          include_links: false
-          include_images: false
-          timeout_ms: 30000
-          wait_for_selector: "main, article, .content, body"
-
-      - name: "convert_to_markdown"
-        type: "llm_process"
-        description: "Convert HTML to clean Markdown"
-        llm_provider: "fast_processing"
-        prompt: "html_to_markdown"
-        config:
-          input_field: "content"
-          output_field: "markdown_content"
-          preserve_links: true
-          clean_formatting: true
-
-      - name: "extract_metadata"
-        type: "llm_process"
-        description: "Extract metadata from content"
-        llm_provider: "primary_text"
-        prompt: "extract_metadata"
-        config:
-          input_field: "markdown_content"
-          output_field: "metadata"
-          extract_fields: ["title", "author", "date", "description", "keywords", "category"]
-
-      - name: "format_as_json"
-        type: "llm_process"
-        description: "Format final result as JSON"
-        llm_provider: "fast_processing"
-        prompt: "json_formatting"
-        config:
-          combine_fields: ["markdown_content", "metadata", "url", "crawl_timestamp"]
-          output_format: "structured_json"
-
-  # Enhanced HTML Pipeline (with additional LLM processing)
-  html_enhanced:
-    name: "Enhanced HTML Processing Pipeline"
-    description: "Extended pipeline with categorization and business info extraction"
-    content_type: "html"
-    extends: "html_default"
-    stages:
-      - name: "auto_crawl"
-        type: "crawl"
-        description: "Automatically crawl and extract HTML content"
-        config:
-          format: "html"
-          include_metadata: true
-          include_links: true
-          include_images: false
-          timeout_ms: 30000
-          wait_for_selector: "main, article, .content, body"
-
-      - name: "convert_to_markdown"
-        type: "llm_process"
-        description: "Convert HTML to clean Markdown"
-        llm_provider: "fast_processing"
-        prompt: "html_to_markdown"
-
-      - name: "categorize_content"
-        type: "llm_process"
-        description: "Categorize content by type and topic"
-        llm_provider: "primary_text"
-        prompt: "content_categorization"
-        config:
-          input_field: "markdown_content"
-          output_field: "categorization"
-
-      - name: "extract_business_info"
-        type: "llm_process"
-        description: "Extract business-related information"
-        llm_provider: "primary_text"
-        prompt: "business_info_extraction"
-        config:
-          input_field: "markdown_content"
-          output_field: "business_info"
-          conditional: "content_contains_business_keywords"
-
-      - name: "extract_metadata"
-        type: "llm_process"
-        description: "Extract metadata from content"
-        llm_provider: "primary_text"
-        prompt: "extract_metadata"
-
-      - name: "format_as_json"
-        type: "llm_process"
-        description: "Format final result as JSON"
-        llm_provider: "fast_processing"
-        prompt: "json_formatting"
-
-  # PDF Content Pipeline
-  pdf_default:
-    name: "PDF Content Processing Pipeline"
-    description: "Default pipeline for processing PDF documents"
-    content_type: "pdf"
-    stages:
-      - name: "auto_crawl"
-        type: "crawl"
-        description: "Download PDF file"
-        config:
-          format: "binary"
-          include_metadata: true
-          timeout_ms: 60000
-          max_file_size_mb: 50
-
-      - name: "extract_text"
-        type: "pdf_extract"
-        description: "Extract text from PDF using pdf-lib"
-        config:
-          enable_ocr_fallback: false
-          extract_tables: false
-          preserve_formatting: true
-          max_pages: 100
-
-      - name: "quality_check"
-        type: "llm_process"
-        description: "Check if extracted content makes sense"
-        llm_provider: "primary_text"
-        prompt: "pdf_quality_check"
-        config:
-          input_field: "extracted_text"
-          output_field: "quality_assessment"
-          quality_threshold: 7.0
-
-      - name: "ocr_extraction"
-        type: "llm_process"
-        description: "Re-extract with OCR if quality is poor"
-        llm_provider: "primary_vision"
-        prompt: "pdf_ocr_extraction"
-        config:
-          input_field: "extracted_text"
-          output_field: "ocr_text"
-          conditional: "quality_score < 7.0"
-          combine_with_original: true
-
-      - name: "format_as_json"
-        type: "llm_process"
-        description: "Format final result as JSON"
-        llm_provider: "fast_processing"
-        prompt: "json_formatting"
-        config:
-          combine_fields: ["final_text", "metadata", "quality_assessment", "processing_method"]
-
-  # PDF Enhanced Pipeline (with additional processing)
-  pdf_enhanced:
-    name: "Enhanced PDF Processing Pipeline"
-    description: "Extended PDF pipeline with advanced OCR and analysis"
-    content_type: "pdf"
-    extends: "pdf_default"
-    stages:
-      - name: "auto_crawl"
-        type: "crawl"
-        description: "Download PDF file"
-        config:
-          format: "binary"
-          include_metadata: true
-          timeout_ms: 60000
-          max_file_size_mb: 50
-
-      - name: "extract_text"
-        type: "pdf_extract"
-        description: "Extract text from PDF using pdf-lib"
-        config:
-          enable_ocr_fallback: true
-          extract_tables: true
-          preserve_formatting: true
-          max_pages: 100
-
-      - name: "quality_check"
-        type: "llm_process"
-        description: "Check if extracted content makes sense"
-        llm_provider: "primary_text"
-        prompt: "pdf_quality_check"
-
-      - name: "ocr_extraction"
-        type: "llm_process"
-        description: "Advanced OCR extraction with vision model"
-        llm_provider: "primary_vision"
-        prompt: "pdf_ocr_extraction"
-        config:
-          use_advanced_ocr: true
-          handle_multiple_columns: true
-          preserve_layout: true
-
-      - name: "content_analysis"
-        type: "llm_process"
-        description: "Analyze PDF content structure and type"
-        llm_provider: "primary_text"
-        prompt: "content_categorization"
-        config:
-          input_field: "final_text"
-          output_field: "content_analysis"
-
-      - name: "format_as_json"
-        type: "llm_process"
-        description: "Format final result as JSON"
-        llm_provider: "fast_processing"
-        prompt: "json_formatting"
-
-crawl_pipeline:
-  name: "AI-Enhanced Content Pipeline"
-  version: "1.0"
-  description: "Complete pipeline for crawling, validating, and enhancing web content with AI"
-
-  # Input sources - where to get URLs from
-  sources:
-    - type: "url_list"
-      name: "featured_articles"
-      urls:
-        - "https://example.com/article1"
-        - "https://example.com/article2"
-        - "https://example.com/article3"
-      priority: "high"
-      max_concurrent: 3
-
-# Programmatic Pipeline Steps
-# These allow you to execute custom code during pipeline processing
-programmatic_steps:
-  database_update:
-    name: "Update Database Row"
-    description: "Update a database row with processed content"
-    type: "javascript"
-    code: |
-      // Example: Update a database row
-      const db = require('./database');
-      const result = await db.updateContent({
-        url: context.url,
-        title: context.metadata?.title,
-        content: context.markdown_content,
-        processed_at: new Date().toISOString()
-      });
-      return { success: true, updated_rows: result.rowCount };
-
-  webhook_notification:
-    name: "Send Webhook Notification"
-    description: "Send webhook notification with processing results"
-    type: "javascript"
-    code: |
-      // Example: Send webhook notification
-      const axios = require('axios');
-      const webhookUrl = process.env.WEBHOOK_URL;
-      if (webhookUrl) {
-        await axios.post(webhookUrl, {
-          event: 'content_processed',
-          url: context.url,
-          title: context.metadata?.title,
-          processing_time_ms: context.processing_time,
-          success: context.success
-        });
-      }
-      return { success: true };
-
-  file_system_save:
-    name: "Save to File System"
-    description: "Save processed content to local file system"
-    type: "javascript"
-    code: |
-      // Example: Save to file system
-      const fs = require('fs').promises;
-      const path = require('path');
-
-      const outputDir = './processed_content';
-      await fs.mkdir(outputDir, { recursive: true });
-
-      const filename = `${Date.now()}_${context.url.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
-      const filepath = path.join(outputDir, filename);
-
-      await fs.writeFile(filepath, JSON.stringify(context, null, 2));
-      return { success: true, filepath };
-
-  log_processing:
-    name: "Log Processing Results"
-    description: "Log processing results to external service"
-    type: "javascript"
-    code: |
-      // Example: Log to external service
-      const logger = require('./logger');
-      await logger.info('Content processed', {
-        url: context.url,
-        title: context.metadata?.title,
-        processing_time: context.processing_time,
-        content_length: context.content?.length,
-        success: context.success
-      });
-      return { success: true };
-
-# Default Processing Pipelines
-# These define the processing steps for different content types
-pipelines:
-  # HTML Content Pipeline
-  html_default:
-    name: "HTML Content Processing Pipeline"
-    description: "Default pipeline for processing HTML web content"
-    content_type: "html"
-    stages:
-      - name: "crawl_content"
-        type: "crawl"
-        description: "Crawl and extract HTML content from URL"
-        config:
-          format: "html"
-          include_metadata: true
-          include_links: false
-          include_images: false
-          timeout_ms: 30000
-          wait_for_selector: "main, article, .content, body"
-
-      - name: "convert_to_markdown"
-        type: "llm_process"
-        description: "Convert HTML to clean Markdown"
-        llm_provider: "fast_processing"
-        prompt: "html_to_markdown"
-        config:
-          input_field: "content"
-          output_field: "markdown_content"
-          preserve_links: true
-          clean_formatting: true
-
-      - name: "extract_metadata"
-        type: "llm_process"
-        description: "Extract metadata from content"
-        llm_provider: "primary_text"
-        prompt: "extract_metadata"
-        config:
-          input_field: "markdown_content"
-          output_field: "metadata"
-          extract_fields: ["title", "author", "date", "description", "keywords", "category"]
-
-      - name: "format_as_json"
-        type: "llm_process"
-        description: "Format final result as JSON"
-        llm_provider: "fast_processing"
-        prompt: "json_formatting"
-        config:
-          combine_fields: ["markdown_content", "metadata", "url", "crawl_timestamp"]
-          output_format: "structured_json"
-
-      - name: "save_to_database"
-        type: "programmatic"
-        description: "Save results to database"
-        step: "database_update"
-        config:
-          table: "processed_content"
-          on_error: "continue"  # Continue processing even if DB update fails
-
-  # Enhanced HTML Pipeline (with additional LLM processing)
-  html_enhanced:
-    name: "Enhanced HTML Processing Pipeline"
-    description: "Extended pipeline with categorization and business info extraction"
-    content_type: "html"
-    extends: "html_default"
-    stages:
-      - name: "crawl_content"
-        type: "crawl"
-        description: "Crawl and extract HTML content from URL"
-        config:
-          format: "html"
-          include_metadata: true
-          include_links: true
-          include_images: false
-          timeout_ms: 30000
-          wait_for_selector: "main, article, .content, body"
-
-      - name: "convert_to_markdown"
-        type: "llm_process"
-        description: "Convert HTML to clean Markdown"
-        llm_provider: "fast_processing"
-        prompt: "html_to_markdown"
-
-      - name: "categorize_content"
-        type: "llm_process"
-        description: "Categorize content by type and topic"
-        llm_provider: "primary_text"
-        prompt: "content_categorization"
-        config:
-          input_field: "markdown_content"
-          output_field: "categorization"
-
-      - name: "extract_business_info"
-        type: "llm_process"
-        description: "Extract business-related information"
-        llm_provider: "primary_text"
-        prompt: "business_info_extraction"
-        config:
-          input_field: "markdown_content"
-          output_field: "business_info"
-          conditional: "content_contains_business_keywords"
-
-      - name: "extract_metadata"
-        type: "llm_process"
-        description: "Extract metadata from content"
-        llm_provider: "primary_text"
-        prompt: "extract_metadata"
-
-      - name: "format_as_json"
-        type: "llm_process"
-        description: "Format final result as JSON"
-        llm_provider: "fast_processing"
-        prompt: "json_formatting"
-
-      - name: "notify_webhook"
-        type: "programmatic"
-        description: "Send webhook notification"
-        step: "webhook_notification"
-        config:
-          on_error: "continue"
-
-      - name: "save_to_filesystem"
-        type: "programmatic"
-        description: "Save to local file system"
-        step: "file_system_save"
-        config:
-          output_directory: "./processed_content"
-          on_error: "continue"
-
-  # PDF Content Pipeline
-  pdf_default:
-    name: "PDF Content Processing Pipeline"
-    description: "Default pipeline for processing PDF documents"
-    content_type: "pdf"
-    stages:
-      - name: "download_pdf"
-        type: "crawl"
-        description: "Download PDF file from URL"
-        config:
-          format: "binary"
-          include_metadata: true
-          timeout_ms: 60000
-          max_file_size_mb: 50
-
-      - name: "extract_text"
-        type: "pdf_extract"
-        description: "Extract text from PDF using pdf-lib"
-        config:
-          enable_ocr_fallback: false
-          extract_tables: false
-          preserve_formatting: true
-          max_pages: 100
-
-      - name: "quality_check"
-        type: "llm_process"
-        description: "Check if extracted content makes sense"
-        llm_provider: "primary_text"
-        prompt: "pdf_quality_check"
-        config:
-          input_field: "extracted_text"
-          output_field: "quality_assessment"
-          quality_threshold: 7.0
-
-      - name: "ocr_extraction"
-        type: "llm_process"
-        description: "Re-extract with OCR if quality is poor"
-        llm_provider: "primary_vision"
-        prompt: "pdf_ocr_extraction"
-        config:
-          input_field: "extracted_text"
-          output_field: "ocr_text"
-          conditional: "quality_score < 7.0"
-          combine_with_original: true
-
-      - name: "format_as_json"
-        type: "llm_process"
-        description: "Format final result as JSON"
-        llm_provider: "fast_processing"
-        prompt: "json_formatting"
-        config:
-          combine_fields: ["final_text", "metadata", "quality_assessment", "processing_method"]
-
-      - name: "log_processing"
-        type: "programmatic"
-        description: "Log processing results"
-        step: "log_processing"
-        config:
-          on_error: "continue"
-
-  # PDF Enhanced Pipeline (with additional processing)
-  pdf_enhanced:
-    name: "Enhanced PDF Processing Pipeline"
-    description: "Extended PDF pipeline with advanced OCR and analysis"
-    content_type: "pdf"
-    extends: "pdf_default"
-    stages:
-      - name: "download_pdf"
-        type: "crawl"
-        description: "Download PDF file from URL"
-        config:
-          format: "binary"
-          include_metadata: true
-          timeout_ms: 60000
-          max_file_size_mb: 50
-
-      - name: "extract_text"
-        type: "pdf_extract"
-        description: "Extract text from PDF using pdf-lib"
-        config:
-          enable_ocr_fallback: true
-          extract_tables: true
-          preserve_formatting: true
-          max_pages: 100
-
-      - name: "quality_check"
-        type: "llm_process"
-        description: "Check if extracted content makes sense"
-        llm_provider: "primary_text"
-        prompt: "pdf_quality_check"
-
-      - name: "ocr_extraction"
-        type: "llm_process"
-        description: "Advanced OCR extraction with vision model"
-        llm_provider: "primary_vision"
-        prompt: "pdf_ocr_extraction"
-        config:
-          use_advanced_ocr: true
-          handle_multiple_columns: true
-          preserve_layout: true
-
-      - name: "content_analysis"
-        type: "llm_process"
-        description: "Analyze PDF content structure and type"
-        llm_provider: "primary_text"
-        prompt: "content_categorization"
-        config:
-          input_field: "final_text"
-          output_field: "content_analysis"
-
-      - name: "format_as_json"
-        type: "llm_process"
-        description: "Format final result as JSON"
-        llm_provider: "fast_processing"
-        prompt: "json_formatting"
-
-      - name: "save_to_database"
-        type: "programmatic"
-        description: "Save enhanced results to database"
-        step: "database_update"
-        config:
-          table: "processed_pdfs"
-          include_analysis: true
-          on_error: "continue"
-
 # ============================================================================
-# SERVICE CONFIGURATION
+# PIPELINE TESTING CONFIGURATION
 # ============================================================================
+# Test definitions for pipeline stages and features
+# These tests validate pipeline functionality without making external requests
 
-# Service Configuration
-service:
-  name: "DearReader"
-  version: "2.0"
-  description: "AI-powered content processing service for single URLs"
+pipeline_tests:
+  # Test configuration for each pipeline stage type
+  stage_tests:
+    crawl:
+      name: "Crawl Stage Tests"
+      description: "Test web crawling functionality"
+      tests:
+        - name: "basic_html_crawl"
+          description: "Test basic HTML page crawling"
+          test_url: "http://httpbin.org/html"
+          expected_content_type: "text/html"
+          expected_selectors: ["h1", "p"]
+          timeout_ms: 10000
+          validate_response: true
 
-  # What DearReader DOES provide:
-  features:
-    - "CLI interface for crawling single URLs"
-    - "REST API for crawling single URLs"
-    - "AI-powered content extraction and processing"
-    - "Configurable processing pipelines"
-    - "Programmatic pipeline steps (database updates, webhooks, etc.)"
-    - "Multiple LLM provider support"
-    - "Custom prompt templates"
-    - "Content type detection (HTML, PDF, etc.)"
-    - "Error handling and retry logic"
-    - "Processing metrics and logging"
+        - name: "json_response_crawl"
+          description: "Test JSON response handling"
+          test_url: "http://httpbin.org/json"
+          expected_content_type: "application/json"
+          validate_json: true
+          timeout_ms: 5000
 
-  # What DearReader does NOT provide:
-  limitations:
-    - "Queue management or batch processing"
-    - "XML/sitemap parsing or URL discovery"
-    - "Multiple URL crawling in a single request"
-    - "Built-in scheduling or automation"
-    - "Distributed processing"
-    - "Load balancing"
-    - "URL validation or normalization"
-    - "Robots.txt compliance checking"
-    - "Rate limiting across multiple requests"
+        - name: "redirect_handling"
+          description: "Test redirect following"
+          test_url: "http://httpbin.org/redirect/2"
+          expected_final_url: "http://httpbin.org/get"
+          validate_redirects: true
+          timeout_ms: 15000
 
-# API Configuration
-api:
-  base_url: "http://localhost:3000"
-  endpoints:
-    # Crawl a single URL and return JSON
-    - path: "/json/{url}"
-      method: "GET"
-      description: "Crawl URL and return processed content as JSON"
-      example: "GET /json/https://example.com/article"
+    text_extract:
+      name: "Text Extraction Tests"
+      description: "Test text extraction from HTML"
+      tests:
+        - name: "basic_text_extraction"
+          description: "Extract text from simple HTML"
+          test_html: |
+            <html><body>
+              <h1>Test Title</h1>
+              <p>This is a test paragraph with <a href="#test">some links</a>.</p>
+              <ul><li>Item 1</li><li>Item 2</li></ul>
+            </body></html>
+          expected_text_contains: ["Test Title", "test paragraph", "some links"]
+          validate_formatting: true
 
-    # Crawl with custom pipeline
-    - path: "/crawl"
-      method: "POST"
-      description: "Crawl URL with custom configuration"
-      body:
-        url: "https://example.com"
-        pipeline: "html_enhanced"
-        options:
-          timeout_ms: 30000
-          include_images: false
+        - name: "complex_html_extraction"
+          description: "Extract text from complex HTML with scripts and styles"
+          test_html: |
+            <html><head><style>body{color:red;}</style></head><body>
+              <script>console.log('test');</script>
+              <nav>Navigation</nav>
+              <article><h1>Main Article</h1><p>Content here</p></article>
+              <footer>Footer content</footer>
+            </body></html>
+          expected_text_contains: ["Main Article", "Content here"]
+          expected_text_excludes: ["Navigation", "Footer content", "console.log"]
+          validate_cleaning: true
 
-    # Health check
-    - path: "/health"
-      method: "GET"
-      description: "Service health check"
+    content_filter:
+      name: "Content Filtering Tests"
+      description: "Test content filtering and cleaning"
+      tests:
+        - name: "duplicate_removal"
+          description: "Remove duplicate content"
+          test_content: "This is duplicate text. This is duplicate text. Unique content here."
+          expected_content: "This is duplicate text. Unique content here."
+          validate_deduplication: true
 
-# CLI Configuration
-cli:
-  commands:
-    - name: "crawl"
-      description: "Crawl a single URL"
-      usage: "dearreader crawl <url> [options]"
-      examples:
-        - "dearreader crawl https://example.com"
-        - "dearreader crawl https://example.com --pipeline html_enhanced"
-        - "dearreader crawl https://example.com --output results.json"
+        - name: "quality_filtering"
+          description: "Filter low-quality content"
+          test_content: "Short text"
+          min_length: 20
+          expected_filtered: true
 
-    - name: "config"
-      description: "Show current configuration"
-      usage: "dearreader config"
+        - name: "language_detection"
+          description: "Detect and filter by language"
+          test_content: "This is English content. Ceci est du contenu français."
+          expected_language: "en"
+          validate_language: true
 
-    - name: "health"
-      description: "Check service health"
-      usage: "dearreader health"
+    json_format:
+      name: "JSON Formatting Tests"
+      description: "Test JSON output formatting"
+      tests:
+        - name: "basic_json_formatting"
+          description: "Format basic content as JSON"
+          test_data:
+            title: "Test Title"
+            content: "Test content"
+            url: "https://example.com"
+          expected_fields: ["title", "content", "url", "timestamp"]
+          validate_json_structure: true
 
-# Error Handling Configuration
-error_handling:
-  max_retries: 3
-  retry_delay_ms: 5000
-  exponential_backoff: true
-  max_backoff_ms: 60000
+        - name: "comprehensive_json_formatting"
+          description: "Format comprehensive data as JSON"
+          test_data:
+            title: "Test Article"
+            content: "Article content"
+            metadata:
+              author: "Test Author"
+              date: "2024-01-01"
+            processing_stats:
+              duration_ms: 1500
+              stage_count: 3
+          expected_nested_fields: ["metadata.author", "processing_stats.duration_ms"]
+          validate_comprehensive: true
 
-  fallback_providers:
-    - provider: "fast_processing"
-      when: "primary_provider_failed"
-    - provider: "fallback"
-      when: "all_providers_failed"
+    pdf_extract:
+      name: "PDF Extraction Tests"
+      description: "Test PDF text extraction"
+      tests:
+        - name: "basic_pdf_extraction"
+          description: "Extract text from simple PDF"
+          test_pdf_content: |
+            %PDF-1.4
+            1 0 obj
+            << /Type /Catalog /Pages 2 0 R >>
+            endobj
+            2 0 obj
+            << /Type /Pages /Kids [3 0 R] /Count 1 >>
+            endobj
+            3 0 obj
+            << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>
+            endobj
+            4 0 obj
+            << /Length 68 >>
+            stream
+            BT
+            /F1 12 Tf
+            72 720 Td
+            (Hello World!) Tj
+            ET
+            endstream
+            endobj
+            xref
+            0 5
+            0000000000 65535 f
+            0000000009 00000 n
+            0000000058 00000 n
+            0000000115 00000 n
+            0000000200 00000 n
+            trailer
+            << /Size 5 /Root 1 0 R >>
+            startxref
+            284
+            %%EOF
+          expected_text_contains: ["Hello World"]
+          validate_pdf_parsing: true
 
-# Performance Configuration
-performance:
-  max_concurrent_requests: 5
-  rate_limiting:
-    requests_per_minute: 60
-    burst_limit: 10
+        - name: "empty_pdf_handling"
+          description: "Handle empty or invalid PDFs"
+          test_pdf_content: ""
+          expected_error: "Failed to extract text from PDF"
+          validate_error_handling: true
 
-  # Provider-specific limits
-  provider_limits:
-    openai-gpt-3.5-turbo: 50
-    openai-gpt-4: 20
-    openrouter-gpt-4: 30
-    openrouter-claude: 25
-    gemini-pro: 20
-    gemini-pro-vision: 15
+  # Test configuration for complete pipelines
+  pipeline_tests:
+    html_default:
+      name: "HTML Default Pipeline Tests"
+      description: "Test the complete HTML default pipeline"
+      test_url: "http://httpbin.org/html"
+      expected_output_format: "json"
+      expected_fields: ["title", "content", "links", "metadata"]
+      validate_no_llm: true
+      timeout_ms: 30000
 
-  # Stage-specific timeouts
-  stage_timeouts:
-    crawl: 30000
-    llm_process: 45000
-    pdf_extract: 120000
-    programmatic: 30000
+    html_enhanced:
+      name: "HTML Enhanced Pipeline Tests"
+      description: "Test the complete HTML enhanced pipeline"
+      test_url: "http://httpbin.org/html"
+      expected_output_format: "json"
+      expected_fields: ["title", "content", "categorization", "markdown_content"]
+      validate_llm_processing: false  # Set to false to avoid actual LLM calls
+      timeout_ms: 45000
 
-# Monitoring Configuration
-monitoring:
-  enable_metrics: true
-  log_level: "info"
-  metrics_interval_ms: 30000
+    pdf_default:
+      name: "PDF Default Pipeline Tests"
+      description: "Test the complete PDF default pipeline"
+      test_pdf_url: "http://httpbin.org/pdf-sample.pdf"
+      expected_output_format: "json"
+      expected_fields: ["extracted_text", "metadata", "quality_assessment"]
+      validate_pdf_processing: true
+      timeout_ms: 60000
 
-  alert_on:
-    - condition: "llm_task_failure_rate > 10%"
-      severity: "warning"
-      message: "High LLM task failure rate detected"
-    - condition: "processing_time > 300000"
-      severity: "error"
-      message: "Processing time exceeding threshold"
-    - condition: "memory_usage > 80%"
-      severity: "critical"
-      message: "High memory usage detected"
+  # Test configuration for AI tasks (mocked, no real API calls)
+  ai_task_tests:
+    parse_pdf:
+      name: "PDF Parsing Task Tests"
+      description: "Test PDF parsing AI task"
+      test_content: "Sample PDF content for testing"
+      expected_provider: "openrouter-small"
+      validate_task_routing: true
+      mock_response: "Parsed PDF content result"
 
-# ============================================================================
-# USAGE EXAMPLES
-# ============================================================================
+    validate_format:
+      name: "Format Validation Task Tests"
+      description: "Test format validation AI task"
+      test_content: "Content to validate"
+      expected_provider: "openrouter-small"
+      validate_task_routing: true
+      mock_response: "Format validation result"
 
-# CLI Usage Examples:
-#
-# Basic crawling:
-# dearreader crawl "https://example.com/article"
-#
-# With custom pipeline:
-# dearreader crawl "https://example.com" --pipeline html_enhanced
-#
-# Save to file:
-# dearreader crawl "https://example.com" --output article.json
-#
-# API Usage Examples:
-#
-# Basic JSON response:
-# GET http://localhost:3000/json/https://example.com/article
-#
-# Custom pipeline via API:
-# POST http://localhost:3000/crawl
-# {
-#   "url": "https://example.com",
-#   "pipeline": "pdf_enhanced",
-#   "options": {
-#     "timeout_ms": 60000,
-#     "include_metadata": true
-#   }
-# }
-#
-# Programmatic Usage:
-# const dearreader = require('dearreader');
-# const result = await dearreader.crawl('https://example.com', {
-#   pipeline: 'html_default'
-# });
+    content_categorization:
+      name: "Content Categorization Task Tests"
+      description: "Test content categorization AI task"
+      test_content: "Sample article content"
+      expected_provider: "primary_text"
+      validate_task_routing: true
+      mock_response: '{"category": "article", "topics": ["test"]}'
 
-# Legacy Processing Stages (for backward compatibility)
-crawl_pipeline:
-  name: "AI-Enhanced Content Pipeline"
-  version: "2.0"
-  description: "Complete pipeline for crawling, validating, and enhancing web content with AI"
-
-  # Input sources - where to get URLs from
-  sources:
-    - type: "url_list"
-      name: "featured_articles"
-      urls:
-        - "https://example.com/article1"
-        - "https://example.com/article2"
-        - "https://example.com/article3"
-      priority: "high"
-      max_concurrent: 3
-
-  # Processing stages - what to do with each URL
-  stages:
-    # Stage 1: Basic crawling (no AI required)
-    - name: "crawl"
-      type: "crawl_only"
-      description: "Extract basic content and metadata"
-      config:
-        format: "json"
-        include_metadata: true
-        include_links: true
-        include_images: true
-        timeout_ms: 30000
-        wait_for_selector: "main, article, .content"
-      when: "always"
-      retry_on_failure: true
-      max_retries: 2
-
-    # Stage 2: Content validation (AI-powered)
-    - name: "validate"
-      type: "llm_process"
-      description: "Validate content structure and completeness"
-      llm_provider: "primary_text"
-      prompt: "extract_metadata"
-      config:
-        required_fields: ["title", "content", "author", "date"]
-        fallback_on_error: true
-        timeout_ms: 45000
-      when: "content_extracted"
-      depends_on: ["crawl"]
-
-    # Stage 3: Content enhancement (AI-powered)
-    - name: "enhance"
-      type: "llm_process"
-      description: "Improve readability and structure"
-      llm_provider: "creative_enhancement"
-      prompt: "html_to_markdown"
-      config:
-        preserve_metadata: true
-        max_tokens: 2048
-        temperature: 0.3
-      when: "validation_passed"
-      depends_on: ["validate"]
-
-    # Stage 4: PDF processing (specialized AI)
-    - name: "pdf_extract"
-      type: "llm_process"
-      description: "Extract and process PDF content"
-      llm_provider: "primary_vision"
-      prompt: "pdf_ocr_extraction"
-      config:
-        enable_ocr: true
-        extract_tables: true
-        preserve_formatting: false
-        max_pages: 50
-        language: "en"
-      when: "content_type == 'pdf'"
-      depends_on: ["crawl"]
-
-    # Stage 5: Content classification (AI-powered)
-    - name: "classify"
-      type: "llm_process"
-      description: "Categorize and tag content"
-      llm_provider: "primary_text"
-      prompt: "content_categorization"
-      config:
-        output_format: "structured"
-      when: "validation_passed"
-      depends_on: ["validate"]
-
-    # Stage 6: Quality assurance (AI-powered)
-    - name: "qa_check"
-      type: "llm_process"
-      description: "Final quality check and reporting"
-      llm_provider: "primary_text"
-      prompt: "json_formatting"
-      config:
-        check_criteria: ["completeness", "accuracy", "readability", "seo", "engagement"]
-        generate_report: true
-        output_format: "detailed"
-      when: "always"
-      depends_on: ["enhance", "classify"]
-
-  # Output destinations - where to save results
-  outputs:
-    - type: "json_file"
-      name: "structured_output"
-      path: "./output/processed_content.json"
-      format: "structured"
-      include_metadata: true
-      include_processing_history: true
-
-    - type: "markdown_files"
-      name: "markdown_articles"
-      path: "./output/articles/"
-      naming: "title_slug"
-      include_frontmatter: true
-      frontmatter_fields: ["title", "author", "date", "category", "tags", "quality_score"]
-
-    - type: "database"
-      name: "postgresql_storage"
-      connection: "postgresql://localhost:5432/content_db"
-      table: "processed_articles"
-      create_table_if_not_exists: true
-      fields_mapping:
-        title: "title"
-        content: "content_markdown"
-        author: "author_name"
-        date: "published_date"
-        category: "main_category"
-        tags: "tags_array"
-
-    - type: "vector_store"
-      name: "embeddings_store"
-      type: "pinecone"
-      index: "content-embeddings"
-      api_key: "${PINECONE_API_KEY}"
-      environment: "${PINECONE_ENVIRONMENT}"
-      metadata_fields: ["title", "author", "category", "tags", "quality_score"]
-
-  # Error handling and recovery
-  error_handling:
-    max_retries: 3
-    retry_delay_ms: 5000
-    exponential_backoff: true
-    max_backoff_ms: 60000
-
-    fallback_tasks:
-      - task: "general_chat"
-        when: "ai_task_failed"
-        description: "Use simple model as fallback for failed AI tasks"
-
-    circuit_breaker:
-      failure_threshold: 5
-      recovery_timeout_ms: 60000
-      fallback_provider: "openai-gpt-3.5-turbo"
-      monitoring_window_ms: 300000
-
-  # Performance tuning
-  performance:
-    max_concurrent_requests: 5
-    rate_limiting:
-      requests_per_minute: 60
-      burst_limit: 10
-
-    # Provider-specific limits
-    provider_limits:
-      openai-gpt-3.5-turbo: 50
-      openai-gpt-4: 20
-      openrouter-gpt-4: 30
-      openrouter-claude: 25
-      gemini-pro: 20
-      gemini-pro-vision: 15
-
-    # Stage-specific timeouts
-    stage_timeouts:
-      crawl: 30000
-      validate: 45000
-      enhance: 60000
-      pdf_extract: 120000
-      classify: 30000
-      qa_check: 45000
-
-  # Monitoring and logging
-  monitoring:
-    enable_metrics: true
-    log_level: "info"
-    metrics_interval_ms: 30000
-
-    alert_on:
-      - condition: "ai_task_failure_rate > 10%"
-        severity: "warning"
-        message: "High AI task failure rate detected"
-      - condition: "processing_time > 300000"
-        severity: "error"
-        message: "Processing time exceeding threshold"
-      - condition: "memory_usage > 80%"
-        severity: "critical"
-        message: "High memory usage detected"
-
-    # External monitoring integration
-    external_monitoring:
-      enabled: false
-      endpoint: "https://monitoring.example.com/webhook"
-      api_key: "${MONITORING_API_KEY}"
-
-  # Quality thresholds
-  quality:
-    min_content_length: 100
-    max_content_length: 50000
-    required_metadata_fields: ["title", "content"]
-    content_quality_threshold: 7.0
-
-    # Automatic filtering
-    filters:
-      - type: "content_length"
-        min_length: 100
-        action: "skip"
-      - type: "quality_score"
-        min_score: 5.0
-        action: "flag"
-      - type: "duplicate_detection"
-        enabled: true
-        similarity_threshold: 0.85
-        action: "skip"
+  # Global test settings
+  test_settings:
+    enable_mock_responses: true
+    skip_external_requests: true
+    max_test_duration_ms: 120000
+    enable_parallel_testing: false
+    log_test_results: true
+    fail_fast: false
+    retry_failed_tests: 2

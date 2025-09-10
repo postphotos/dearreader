@@ -78,7 +78,7 @@ USAGE:
 COMMANDS:
     setup           🏗️  Set up development environment
     dev             🚀  Start development environment
-    test            🧪  Run tests (js, python, or all)
+    test            🧪  Run tests (js, python, e2e, or all) - defaults to all
     run             ▶️   Start services (dev/prod)
     stop            🛑  Stop all services
     status          📊  Show system status
@@ -94,7 +94,10 @@ OPTIONS:
 EXAMPLES:
     ./dearreader setup              # First-time setup
     ./dearreader dev                # Start development
-    ./dearreader test all           # Run all tests
+    ./dearreader test               # Run all tests (default)
+    ./dearreader test e2e           # Run end-to-end tests only
+    ./dearreader test js            # Run JavaScript tests only
+    ./dearreader test python        # Run Python tests only
     ./dearreader run prod           # Start production
     ./dearreader status             # Check system status
     ./dearreader api test           # Test API endpoints
@@ -240,6 +243,44 @@ cmd_setup() {
         log_success "Tesseract OCR is already installed"
     fi
 
+    # Install Chromium for Puppeteer (needed for web scraping)
+    log_subheader "Installing Chromium Browser"
+    if ! command -v chromium-browser >/dev/null 2>&1 && ! command -v chromium >/dev/null 2>&1 && ! command -v google-chrome >/dev/null 2>&1; then
+        log_info "Installing Chromium browser for web scraping functionality..."
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            # Linux (Ubuntu/Debian)
+            if command -v apt-get >/dev/null 2>&1; then
+                run_cmd "sudo apt-get update && sudo apt-get install -y chromium-browser" "Installing Chromium Browser (Ubuntu/Debian)"
+            elif command -v yum >/dev/null 2>&1; then
+                run_cmd "sudo yum install -y chromium" "Installing Chromium Browser (CentOS/RHEL)"
+            elif command -v dnf >/dev/null 2>&1; then
+                run_cmd "sudo dnf install -y chromium" "Installing Chromium Browser (Fedora)"
+            elif command -v pacman >/dev/null 2>&1; then
+                run_cmd "sudo pacman -S --noconfirm chromium" "Installing Chromium Browser (Arch Linux)"
+            else
+                log_warn "Could not determine package manager. Installing Chromium with npm fallback..."
+                run_cmd "cd js && npm run gcp-build" "Installing Chromium via npm (fallback)"
+            fi
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            if command -v brew >/dev/null 2>&1; then
+                run_cmd "brew install --cask chromium" "Installing Chromium Browser (macOS)"
+            else
+                log_warn "Homebrew not found. Installing Chromium with npm fallback..."
+                run_cmd "cd js && npm run gcp-build" "Installing Chromium via npm (fallback)"
+            fi
+        elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+            # Windows - use npm fallback
+            log_info "Installing Chromium for Windows via npm..."
+            run_cmd "cd js && npm run gcp-build" "Installing Chromium via npm (Windows)"
+        else
+            log_warn "Unsupported OS for automatic Chromium installation. Installing with npm fallback..."
+            run_cmd "cd js && npm run gcp-build" "Installing Chromium via npm (fallback)"
+        fi
+    else
+        log_success "Chromium browser is already installed"
+    fi
+
     # Check for uv (Python package manager)
     if ! command -v uv >/dev/null 2>&1; then
         log_warn "uv not found. Installing uv for faster Python package management..."
@@ -324,13 +365,13 @@ cmd_dev() {
     run_cmd "docker-compose down --remove-orphans" "Cleaning up existing containers"
 
     # Run all tests first
-    echo -e "\n${YELLOW}Running all tests before starting dev environment...${NC}"
-    if cmd_test "all"; then
-        log_success "All tests passed! Starting development environment..."
+    echo -e "\n${YELLOW}Running end-to-end tests before starting dev environment...${NC}"
+    if cmd_test "e2e"; then
+        log_success "End-to-end tests passed! Starting development environment..."
     else
-        log_error "Some tests failed. Check the output above for details."
+        log_error "End-to-end tests failed. Check the output above for details."
         echo -e "\n${YELLOW}You can run tests manually with:${NC}"
-        echo -e "  ${WHITE}./dearreader test all${NC}"
+        echo -e "  ${WHITE}./dearreader test e2e${NC}"
         if [ "$FORCE" != true ]; then
             log_error "Exiting due to test failures. Use --force to continue anyway."
             exit 1
@@ -374,6 +415,15 @@ cmd_test() {
                 run_cmd "python py/app.py tests --verbose" "Running Python tests (using python)" true
             fi
             ;;
+        e2e)
+            log_subheader "Running End-to-End Tests"
+            if run_cmd "./scripts/e2e-test.sh" "Running end-to-end tests" true; then
+                log_success "End-to-end tests passed"
+            else
+                log_error "End-to-end tests failed"
+                [ "$FORCE" != true ] && exit 1
+            fi
+            ;;
         all)
             log_subheader "Running JavaScript Tests"
             if run_cmd "docker-compose --profile dev run --rm js-test" "Running JavaScript tests" true; then
@@ -402,11 +452,22 @@ cmd_test() {
                 log_warn "Neither uv nor python found, skipping Python tests"
             fi
 
+            log_subheader "Running End-to-End Tests"
+            if run_cmd "./scripts/e2e-test.sh" "Running end-to-end tests" true; then
+                log_success "End-to-end tests passed"
+            else
+                log_error "End-to-end tests failed"
+                [ "$FORCE" != true ] && exit 1
+            fi
+
             log_success "All tests completed!"
+            ;;
+        pipeline)
+            cmd_test_pipeline
             ;;
         *)
             log_error "Unknown test type: $test_type"
-            echo "Available: js, python, all"
+            echo "Available: js, python, e2e, pipeline, all"
             exit 1
             ;;
     esac

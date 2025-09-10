@@ -109,6 +109,15 @@ dearreader crawl "https://example.com" --output article.json
 # Get JSON result via API
 curl "http://localhost:3000/json/https://example.com/article"
 
+# Pipeline-specific routing (NEW)
+curl "http://localhost:3000/task/html_enhanced/https://example.com/article"
+
+# List available pipelines (NEW)
+curl "http://localhost:3000/tasks"
+
+# Rate limiting stats (NEW)
+curl "http://localhost:3000/rate-limit/stats"
+
 # Post with custom options
 curl -X POST http://localhost:3000/crawl \
   -H "Content-Type: application/json" \
@@ -175,6 +184,28 @@ llm_providers:
     rpm_limit: 3500  # Requests per minute limit
     parsing_prompt: "Extract structured data from the following text:"
 
+# Rate limiting configuration (NEW)
+rate_limiting:
+  enabled: true
+  providers:
+    openrefine:
+      rpm_limit: 18  # 90% of free tier (20 RPM)
+      rpd_limit: 900  # 90% of free tier (1000 RPD)
+    openrouter:
+      rpm_limit: 100
+      rpd_limit: 5000
+
+# Pipeline routing configuration (NEW)
+pipeline_routing:
+  enabled: true
+  routes:
+    - pattern: "/task/{pipeline}/{url}"
+      pipelines:
+        html_default: "html_default"
+        html_enhanced: "html_enhanced"
+        pdf_default: "pdf_default"
+  default_pipeline: "html_default"
+
 ai_tasks:
   parse_pdf: "openai-gpt-3.5-turbo"
   validate_format: "openrouter-gpt-4"
@@ -213,9 +244,146 @@ ai_enabled: false  # Disable AI processing globally
 - Real-time configuration updates
 - Error handling for invalid configurations
 
+## New Features
+
+### Pipeline-Specific URL Routing
+DearReader now supports pipeline-specific URL routing using the `/task/{pipeline}/{url}` format:
+
+```bash
+# Process with basic HTML pipeline (no AI)
+curl "http://localhost:3001/task/html_default/https://example.com"
+
+# Process with enhanced AI pipeline
+curl "http://localhost:3001/task/html_enhanced/https://example.com"
+
+# Process PDF with dedicated pipeline
+curl "http://localhost:3001/task/pdf_default/https://example.com/document.pdf"
+```
+
+**Benefits:**
+- Clean, RESTful URL structure
+- Automatic pipeline selection
+- Built-in rate limiting and usage tracking
+- 404 handling for unsupported URLs
+
+### Rate Limiting & Usage Tracking
+Built-in rate limiting with per-API-key usage tracking:
+
+```yaml
+# crawl_pipeline.yaml
+rate_limiting:
+  enabled: true
+  providers:
+    openrefine:
+      rpm_limit: 18  # 90% of free tier (20 RPM)
+      rpd_limit: 900  # 90% of free tier (1000 RPD)
+```
+
+**Features:**
+- Automatic usage tracking per API key
+- Daily reset of usage counters
+- Local file logging for audit trails
+- Configurable limits per provider
+- Real-time statistics via `/rate-limit/stats`
+
+### AI Processing Control
+- **Default behavior**: AI processing is disabled for regular requests
+- **Pipeline control**: Use `html_enhanced` for AI processing, `html_default` for non-AI
+- **PDF processing**: Disabled by default, requires specific pipeline access
+- **Override options**: Available via API parameters or configuration
+
+### Available Pipelines
+- `html_default`: Basic HTML processing without AI (default)
+- `html_enhanced`: Enhanced HTML processing with AI analysis
+- `pdf_default`: PDF processing with OCR and AI analysis (requires specific access)
+
+List all available pipelines via the `/tasks` endpoint.
+
 ## API Reference
 
 ### Endpoints
+
+#### `GET /task/{pipeline}/{url}` (NEW)
+Pipeline-specific URL routing with automatic processing.
+
+**Parameters:**
+- `pipeline` (path, required): Pipeline name (`html_default`, `html_enhanced`, `pdf_default`)
+- `url` (path, required): URL-encoded target URL to process
+
+**Features:**
+- Automatic pipeline selection based on URL pattern
+- Rate limiting per API key with usage tracking
+- AI processing disabled by default (use `html_enhanced` for AI)
+- PDF processing requires specific pipeline access
+- Returns 404 for unsupported URLs or invalid pipelines
+
+**Examples:**
+```bash
+# HTML processing without AI (default)
+curl "http://localhost:3001/task/html_default/https://example.com/article"
+
+# HTML processing with AI enhancement
+curl "http://localhost:3001/task/html_enhanced/https://example.com/article"
+
+# PDF processing (requires specific pipeline)
+curl "http://localhost:3001/task/pdf_default/https://example.com/document.pdf"
+```
+
+#### `GET /tasks` (NEW)
+List all available processing pipelines.
+
+**Response:**
+```json
+{
+  "pipelines": [
+    {
+      "name": "html_default",
+      "description": "Basic HTML processing without AI",
+      "content_types": ["html"],
+      "ai_enabled": false
+    },
+    {
+      "name": "html_enhanced",
+      "description": "Enhanced HTML processing with AI analysis",
+      "content_types": ["html"],
+      "ai_enabled": true
+    },
+    {
+      "name": "pdf_default",
+      "description": "PDF processing with OCR and AI analysis",
+      "content_types": ["pdf"],
+      "ai_enabled": true
+    }
+  ]
+}
+```
+
+#### `GET /rate-limit/stats` (NEW)
+View current rate limiting statistics and usage tracking.
+
+**Response:**
+```json
+{
+  "providers": {
+    "openrefine": {
+      "rpm_limit": 18,
+      "rpd_limit": 900,
+      "current_usage": {
+        "rpm": 5,
+        "rpd": 120,
+        "last_reset": "2024-01-15T00:00:00.000Z"
+      },
+      "api_keys": {
+        "key_abc123": {
+          "rpm": 3,
+          "rpd": 45,
+          "last_used": "2024-01-15T10:30:00.000Z"
+        }
+      }
+    }
+  }
+}
+```
 
 #### `GET /api/crawl`
 Crawl a URL and return processed content.
@@ -505,16 +673,28 @@ npm run dev               # Development mode with hot reload
 
 ### Basic HTML Processing
 ```bash
+# Using new pipeline routing
+curl "http://localhost:3001/task/html_default/https://techcrunch.com/article"
+
+# Traditional API format
 dearreader crawl "https://techcrunch.com/article" --pipeline html_default
 ```
 
 ### Enhanced HTML with Business Info
 ```bash
+# Using new pipeline routing
+curl "http://localhost:3001/task/html_enhanced/https://yelp.com/business/example"
+
+# Traditional API format
 dearreader crawl "https://yelp.com/business/example" --pipeline html_enhanced
 ```
 
 ### PDF Processing
 ```bash
+# Using new pipeline routing
+curl "http://localhost:3001/task/pdf_default/https://example.com/document.pdf"
+
+# Traditional API format
 dearreader crawl "https://example.com/document.pdf" --pipeline pdf_default
 ```
 
@@ -529,6 +709,16 @@ curl -X POST http://localhost:3000/crawl \
       "timeout_ms": 45000
     }
   }'
+```
+
+### List Available Pipelines
+```bash
+curl "http://localhost:3001/tasks"
+```
+
+### Check Rate Limiting Stats
+```bash
+curl "http://localhost:3001/rate-limit/stats"
 ```
 
 ## Contributing

@@ -10,6 +10,7 @@ import { FirebaseStorageBucketControl } from './shared/index.js';
 import { AsyncContext } from './shared/index.js';
 import { ResponseCacheService } from './services/cache.js';
 import { HealthCheckService } from './services/health-check.js';
+import { RateLimitService } from './services/rate-limit.js';
 import { config as appConfig } from './shared/config-manager.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -34,10 +35,12 @@ container.registerSingleton(AsyncContext);
 container.registerSingleton(ResponseCacheService);
 container.registerSingleton(HealthCheckService);
 container.registerSingleton(CrawlerHost);
+container.registerSingleton(RateLimitService);
 
 const crawlerHost = container.resolve(CrawlerHost);
 const healthCheckService = container.resolve(HealthCheckService);
 const cacheService = container.resolve(ResponseCacheService);
+const rateLimitService = container.resolve(RateLimitService);
 
 // Wait for Puppeteer service to initialize
 console.log('Initializing CrawlerHost');
@@ -199,6 +202,57 @@ app.get('/status', (req, res) => {
   res.redirect('/health');
 });
 
+// Tasks listing endpoint
+app.get('/tasks', (req, res) => {
+  try {
+    const pipelineRouting = config.pipeline_routing || {};
+    const routes = pipelineRouting.routes || {};
+    const pipelines = pipelineRouting.pipelines || {};
+
+    const availableTasks = {
+      default_pipeline: pipelineRouting.default || 'html_default',
+      available_routes: Object.keys(routes).map(route => ({
+        path: route,
+        pipeline: routes[route],
+        description: pipelines[routes[route]]?.description || 'No description available'
+      })),
+      available_pipelines: Object.keys(pipelines).map(pipelineName => ({
+        name: pipelineName,
+        description: pipelines[pipelineName]?.description || 'No description available',
+        ai_required: pipelines[pipelineName]?.ai_required || false,
+        content_type: pipelines[pipelineName]?.content_type || 'html'
+      })),
+      usage_examples: [
+        'GET /json/https://example.com/article (default processing)',
+        'GET /task/html_enhanced/https://example.com/article (AI-enhanced)',
+        'GET /task/pdf_enhanced/https://example.com/document.pdf (PDF with AI)',
+        'GET /tasks (this listing)'
+      ]
+    };
+
+    res.json(availableTasks);
+  } catch (error: any) {
+    console.error('Error getting tasks listing:', error);
+    res.status(500).json({ error: 'Failed to get tasks listing' });
+  }
+});
+
+// Rate limiting statistics endpoint
+app.get('/rate-limit/stats', (req, res) => {
+  try {
+    const apiKey = req.query.api_key as string;
+    if (!apiKey) {
+      return res.status(400).json({ error: 'api_key query parameter required' });
+    }
+
+    const stats = rateLimitService.getUsageStats(apiKey);
+    res.json(stats);
+  } catch (error: any) {
+    console.error('Error getting rate limit stats:', error);
+    res.status(500).json({ error: 'Failed to get rate limit statistics' });
+  }
+});
+
 // Function to serve HTML with conditional base tag
 function serveHtmlWithBaseTag(filePath: string, res: express.Response) {
   fs.readFile(filePath, 'utf8', (err, data) => {
@@ -241,28 +295,167 @@ app.get('/queue-ui', (req, res) => {
   res.redirect('/dearreader/queue-ui');
 });
 
-// Middleware to handle crawler requests for both root and /dearreader/ paths
+// Enhanced middleware to handle crawler requests with pipeline routing and rate limiting
 app.use(errorHandler.wrapAsync(async (req, res, next) => {
-  // Check if this is a crawler request
-  let urlPath = req.url;
+  const urlPath = req.url;
 
-  // Handle /dearreader/ prefixed URLs
+  // Handle /dearreader/ prefixed URLs (legacy support)
   if (urlPath.startsWith('/dearreader/')) {
-    // Remove the /dearreader/ prefix to get the actual URL
-    urlPath = urlPath.substring('/dearreader/'.length);
-    if (urlPath) {
-      // Temporarily modify req.url for the crawler
+    const actualPath = urlPath.substring('/dearreader/'.length);
+    if (actualPath) {
       const originalUrl = req.url;
-      req.url = '/' + urlPath;
-      await crawlerHost.crawl(req, res);
-      req.url = originalUrl; // Restore original URL
+      req.url = '/' + actualPath;
+      await handleCrawlerRequest(req, res, next);
+      req.url = originalUrl;
       return;
     }
   }
 
-  // Handle root-level URLs (original behavior)
-  await crawlerHost.crawl(req, res);
+  // Handle new /task/{pipeline}/{url} format
+  if (urlPath.startsWith('/task/')) {
+    await handleTaskRequest(req, res, next);
+    return;
+  }
+
+  // Handle root-level URLs (default processing)
+  await handleCrawlerRequest(req, res, next);
 }));
+
+// Function to handle task-based requests with pipeline routing
+async function handleTaskRequest(req: express.Request, res: express.Response, next: express.NextFunction) {
+  try {
+    const urlPath = req.url;
+    const taskMatch = urlPath.match(/^\/task\/([^\/]+)\/(.+)$/);
+
+    if (!taskMatch) {
+      return res.status(400).json({
+        error: 'Invalid task format',
+        expected: '/task/{pipeline}/{url}',
+        example: '/task/html_enhanced/https://example.com/article'
+      });
+    }
+
+    const [, requestedPipeline, targetUrl] = taskMatch;
+    const pipelineRouting = config.pipeline_routing || {};
+    const routes = pipelineRouting.routes || {};
+    const pipelines = pipelineRouting.pipelines || {};
+
+    // Validate pipeline exists
+    if (!pipelines[requestedPipeline]) {
+      return res.status(404).json({
+        error: 'Pipeline not found',
+        requested_pipeline: requestedPipeline,
+        available_pipelines: Object.keys(pipelines)
+      });
+    }
+
+    // Check if pipeline requires AI and if AI is enabled
+    const pipelineConfig = pipelines[requestedPipeline];
+    if (pipelineConfig.ai_required && !config.ai_enabled) {
+      return res.status(403).json({
+        error: 'AI processing is disabled',
+        pipeline: requestedPipeline,
+        requires_ai: true
+      });
+    }
+
+    // Rate limiting check for AI pipelines
+    if (pipelineConfig.ai_required && config.rate_limiting?.enabled) {
+      const apiKey = req.headers['x-api-key'] as string ||
+                     req.query.api_key as string ||
+                     process.env.OPENROUTER_API_KEY; // Fallback to env
+
+      if (apiKey) {
+        // Find the provider for this pipeline's tasks
+        const provider = findProviderForPipeline(requestedPipeline);
+        if (provider) {
+          const rateLimitCheck = await rateLimitService.checkRateLimit(apiKey, provider);
+          if (!rateLimitCheck.allowed) {
+            return res.status(429).json({
+              error: 'Rate limit exceeded',
+              reason: rateLimitCheck.reason,
+              usage: rateLimitCheck.usage,
+              retry_after: 'Wait for rate limit reset or use different API key'
+            });
+          }
+        }
+      }
+    }
+
+    // Temporarily modify req.url to the target URL for crawling
+    const originalUrl = req.url;
+    req.url = '/' + targetUrl;
+
+    // Add pipeline context to request
+    (req as any).pipeline = requestedPipeline;
+    (req as any).pipelineConfig = pipelineConfig;
+
+    await crawlerHost.crawl(req, res);
+
+    // Record successful request for rate limiting
+    if (pipelineConfig.ai_required && config.rate_limiting?.enabled) {
+      const apiKey = req.headers['x-api-key'] as string ||
+                     req.query.api_key as string ||
+                     process.env.OPENROUTER_API_KEY;
+      if (apiKey) {
+        const provider = findProviderForPipeline(requestedPipeline);
+        if (provider) {
+          await rateLimitService.recordRequest(apiKey, provider);
+        }
+      }
+    }
+
+    req.url = originalUrl;
+
+  } catch (error: any) {
+    console.error('Error handling task request:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error processing task request' });
+    }
+  }
+}
+
+// Function to handle regular crawler requests
+async function handleCrawlerRequest(req: express.Request, res: express.Response, next: express.NextFunction) {
+  try {
+    const urlPath = req.url;
+
+    // For regular requests, use default pipeline
+    const pipelineRouting = config.pipeline_routing || {};
+    const defaultPipeline = pipelineRouting.default || 'html_default';
+    const pipelines = pipelineRouting.pipelines || {};
+
+    // Add default pipeline context
+    (req as any).pipeline = defaultPipeline;
+    (req as any).pipelineConfig = pipelines[defaultPipeline] || {};
+
+    await crawlerHost.crawl(req, res);
+  } catch (error: any) {
+    console.error('Error handling crawler request:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error processing request' });
+    }
+  }
+}
+
+// Helper function to find provider for a pipeline
+function findProviderForPipeline(pipelineName: string): string | null {
+  const pipelines = config.pipeline_routing?.pipelines || {};
+  const pipeline = pipelines[pipelineName];
+
+  if (!pipeline || !pipeline.stages) {
+    return null;
+  }
+
+  // Find the first LLM processing stage and get its provider
+  for (const stage of pipeline.stages) {
+    if (stage.type === 'llm_process' && stage.llm_provider) {
+      return stage.llm_provider;
+    }
+  }
+
+  return null;
+}
 
 // Add global error handling middleware
 app.use(errorHandler.expressErrorHandler());

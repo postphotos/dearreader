@@ -20,3 +20,4 @@ screenshots/
 # scripts/legacy/dev.sh
 # scripts/legacy/run.sh
 config.yaml
+crawl_pipeline.yaml

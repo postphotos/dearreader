@@ -1,18 +1,57 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
+import dotenv from 'dotenv';
+// Load environment variables from .env file
+dotenv.config();
 function loadYamlConfig() {
     try {
-        // Look for config.yaml in the project root
-        // When running from js/ directory, go up one level to reach project root
-        const cfgPath = path.resolve(process.cwd(), '../config.yaml');
+        // Determine the project root directory
+        const projectRoot = process.cwd().endsWith('/js') ? path.resolve(process.cwd(), '..') : process.cwd();
+        // Load main config.yaml
+        const cfgPath = path.resolve(projectRoot, 'config.yaml');
         const raw = fs.readFileSync(cfgPath, 'utf8');
-        return yaml.load(raw) || {};
+        const mainConfig = yaml.load(raw);
+        // Load crawl_pipeline.yaml if it exists
+        let pipelineConfig = {};
+        try {
+            const pipelinePath = path.resolve(projectRoot, 'crawl_pipeline.yaml');
+            const pipelineRaw = fs.readFileSync(pipelinePath, 'utf8');
+            pipelineConfig = yaml.load(pipelineRaw) || {};
+        }
+        catch (err) {
+            // crawl_pipeline.yaml is optional
+            console.log('crawl_pipeline.yaml not found, using config.yaml only');
+        }
+        // Merge configs (main config takes precedence)
+        const merged = { ...pipelineConfig, ...mainConfig };
+        return substituteEnvVars(merged) || {};
     }
     catch (err) {
-        console.error('Failed to load config.yaml:', err instanceof Error ? err.message : String(err));
+        console.error('Failed to load config files:', err instanceof Error ? err.message : String(err));
         return {};
     }
+}
+// Substitute environment variables in config values
+function substituteEnvVars(obj) {
+    if (typeof obj === 'string') {
+        // Handle ${VAR} and ${VAR:-default} syntax
+        return obj.replace(/\$\{([^}]+)\}/g, (match, varExpr) => {
+            const [varName, defaultValue] = varExpr.split(':-');
+            return process.env[varName] || defaultValue || match;
+        });
+    }
+    else if (Array.isArray(obj)) {
+        return obj.map(substituteEnvVars);
+    }
+    else if (obj && typeof obj === 'object') {
+        const result = {};
+        for (const [key, value] of Object.entries(obj)) {
+            result[key] = substituteEnvVars(value);
+        }
+        return result;
+    }
+    return obj;
 }
 const yamlCfg = loadYamlConfig();
 // Helper function to merge YAML config with environment variables
