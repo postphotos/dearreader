@@ -145,6 +145,15 @@ content:
   exclude_url_patterns: ".*\\.xml$, .*/search\\.php.*, .*/api/.*, .*/wp-admin/.*"
 ```
 
+**Examples:**
+```bash
+# Exclude multiple file types
+exclude_file_types: ".pdf, .xml, .jpg, .png, .gif, .css, .js"
+
+# Exclude specific URL patterns
+exclude_url_patterns: ".*\\.xml$, .*/api/.*, .*/admin/.*, .*/search\\?q=.*"
+```
+
 ### Additional Headers for Bypass
 Configure custom headers to bypass restrictions:
 

@@ -3,7 +3,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { Logger } from './logger.js';
+import { fileURLToPath } from 'url';
 const logger = new Logger('ConfigManager');
+// ES module equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const configSchema = Joi.object({
     url: Joi.string().uri().default('http://localhost:3001'),
     base_path: Joi.object({
@@ -66,12 +70,55 @@ const configSchema = Joi.object({
         target_selectors: Joi.string().default(''),
         extract_images: Joi.boolean().default(true),
         extract_links: Joi.boolean().default(true),
-        max_content_length: Joi.number().min(1000).default(1000000)
+        max_content_length: Joi.number().min(1000).default(1000000),
+        exclude_file_types: Joi.string().default('.xml, .rss, .atom, .json, .css, .js'),
+        exclude_url_patterns: Joi.string().default('')
+    }).default(),
+    environment: Joi.object({
+        max_workers: Joi.number().min(1).default(4),
+        single_process_dev: Joi.boolean().default(true)
+    }).default(),
+    ai_enabled: Joi.boolean().default(true),
+    ai_providers: Joi.object().pattern(Joi.string(), Joi.object({
+        api_key: Joi.string().default(''),
+        base_url: Joi.string().uri().default(''),
+        model: Joi.string().default(''),
+        temperature: Joi.number().min(0).max(2).default(0.2),
+        parsing_prompt: Joi.string().default(''),
+        prompt_options: Joi.object({
+            max_tokens: Joi.number().min(1).default(2048),
+            top_p: Joi.number().min(0).max(1).default(1.0),
+            frequency_penalty: Joi.number().min(-2).max(2).default(0.0),
+            presence_penalty: Joi.number().min(-2).max(2).default(0.0)
+        }).default(),
+        request_timeout_ms: Joi.number().min(1000).default(30000),
+        max_retries: Joi.number().min(0).default(2)
+    })).default({}),
+    ai_tasks: Joi.object().pattern(Joi.string(), Joi.string()).default({}),
+    concurrency: Joi.object({
+        max_api_concurrency: Joi.number().min(1).default(50),
+        default_client_concurrency: Joi.number().min(1).default(5),
+        max_queue_length_per_client: Joi.number().min(1).default(20)
+    }).default(),
+    proxy: Joi.object({
+        http_proxy: Joi.string().default(''),
+        https_proxy: Joi.string().default(''),
+        socks_proxy: Joi.string().default('')
+    }).default(),
+    headers: Joi.object({
+        custom_headers: Joi.object().pattern(Joi.string(), Joi.string()).default({}),
+        cors_bypass_headers: Joi.object().pattern(Joi.string(), Joi.string()).default({}),
+        robots_bypass_headers: Joi.object().pattern(Joi.string(), Joi.string()).default({})
     }).default()
 });
 export class ConfigManager {
     constructor() {
+        this.watcher = null;
+        this.onConfigChangeCallbacks = [];
+        // Look for config in project root (parent of js directory)
+        this.configPath = path.resolve(__dirname, '..', '..', '..', 'config.yaml');
         this.config = this.loadAndValidateConfig();
+        this.setupFileWatcher();
     }
     static getInstance() {
         if (!ConfigManager.instance) {
@@ -82,18 +129,19 @@ export class ConfigManager {
     getConfig() {
         return this.config;
     }
+    getConfigPath() {
+        return this.configPath;
+    }
     loadAndValidateConfig() {
         try {
-            // Load from file
-            const configPath = path.join(process.cwd(), 'config.yaml');
             let rawConfig = {};
-            if (fs.existsSync(configPath)) {
-                const configContent = fs.readFileSync(configPath, 'utf8');
+            if (fs.existsSync(this.configPath)) {
+                const configContent = fs.readFileSync(this.configPath, 'utf8');
                 rawConfig = yaml.load(configContent) || {};
-                logger.info('Loaded configuration from config.yaml');
+                logger.info(`Loaded configuration from ${this.configPath}`);
             }
             else {
-                logger.warn('No config.yaml found, using defaults');
+                logger.warn(`No config.yaml found at ${this.configPath}, using defaults`);
             }
             // Apply environment variable overrides
             this.applyEnvironmentOverrides(rawConfig);
@@ -112,6 +160,57 @@ export class ConfigManager {
         catch (error) {
             logger.error('Failed to load configuration:', error);
             throw error;
+        }
+    }
+    setupFileWatcher() {
+        try {
+            // Watch the config file for changes
+            this.watcher = fs.watch(this.configPath, { persistent: false }, (eventType) => {
+                if (eventType === 'change') {
+                    logger.info('Config file changed, reloading...');
+                    try {
+                        const newConfig = this.loadAndValidateConfig();
+                        this.config = newConfig;
+                        // Notify all registered callbacks
+                        this.onConfigChangeCallbacks.forEach(callback => {
+                            try {
+                                callback(newConfig);
+                            }
+                            catch (error) {
+                                logger.error('Error in config change callback:', error);
+                            }
+                        });
+                        logger.info('Configuration hot-reloaded successfully');
+                    }
+                    catch (error) {
+                        logger.error('Failed to reload configuration:', error);
+                    }
+                }
+            });
+            logger.info('Config file watcher started');
+        }
+        catch (error) {
+            logger.warn('Failed to setup config file watcher:', error);
+        }
+    }
+    onConfigChange(callback) {
+        this.onConfigChangeCallbacks.push(callback);
+    }
+    reload() {
+        try {
+            this.config = this.loadAndValidateConfig();
+            logger.info('Configuration reloaded successfully');
+        }
+        catch (error) {
+            logger.error('Failed to reload configuration:', error);
+            throw error;
+        }
+    }
+    destroy() {
+        if (this.watcher) {
+            this.watcher.close();
+            this.watcher = null;
+            logger.info('Config file watcher stopped');
         }
     }
     applyEnvironmentOverrides(config) {
@@ -153,16 +252,6 @@ export class ConfigManager {
             current = current[key];
         }
         current[keys[keys.length - 1]] = value;
-    }
-    reload() {
-        try {
-            this.config = this.loadAndValidateConfig();
-            logger.info('Configuration reloaded successfully');
-        }
-        catch (error) {
-            logger.error('Failed to reload configuration:', error);
-            throw error;
-        }
     }
 }
 // Export singleton instance

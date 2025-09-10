@@ -96,6 +96,23 @@ let CrawlerOptions = class CrawlerOptions extends AutoCastable {
             instance.proxyUrl ??= proxyUrl;
             if (instance.cacheTolerance)
                 instance.cacheTolerance = instance.cacheTolerance * 1000;
+            // Handle new AI and filtering parameters from query
+            if (input.ai_enabled !== undefined)
+                instance.aiEnabled = Boolean(input.ai_enabled);
+            if (input.format)
+                instance.format = String(input.format);
+            if (input.api_key)
+                instance.apiKey = String(input.api_key);
+            if (input.model)
+                instance.model = String(input.model);
+            if (input.prompt)
+                instance.prompt = String(input.prompt);
+            if (input.exclude_file_types)
+                instance.excludeFileTypes = String(input.exclude_file_types);
+            if (input.exclude_url_patterns)
+                instance.excludeUrlPatterns = String(input.exclude_url_patterns);
+            if (input.custom_headers)
+                instance.customHeaders = String(input.custom_headers);
         }
         return instance;
     }
@@ -184,6 +201,38 @@ __decorate([
     Prop(),
     __metadata("design:type", String)
 ], CrawlerOptions.prototype, "pdfAction", void 0);
+__decorate([
+    Prop({ default: null }),
+    __metadata("design:type", Boolean)
+], CrawlerOptions.prototype, "aiEnabled", void 0);
+__decorate([
+    Prop(),
+    __metadata("design:type", String)
+], CrawlerOptions.prototype, "format", void 0);
+__decorate([
+    Prop(),
+    __metadata("design:type", String)
+], CrawlerOptions.prototype, "apiKey", void 0);
+__decorate([
+    Prop(),
+    __metadata("design:type", String)
+], CrawlerOptions.prototype, "model", void 0);
+__decorate([
+    Prop(),
+    __metadata("design:type", String)
+], CrawlerOptions.prototype, "prompt", void 0);
+__decorate([
+    Prop(),
+    __metadata("design:type", String)
+], CrawlerOptions.prototype, "excludeFileTypes", void 0);
+__decorate([
+    Prop(),
+    __metadata("design:type", String)
+], CrawlerOptions.prototype, "excludeUrlPatterns", void 0);
+__decorate([
+    Prop(),
+    __metadata("design:type", String)
+], CrawlerOptions.prototype, "customHeaders", void 0);
 CrawlerOptions = __decorate([
     Also({
         openapi: {

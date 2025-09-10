@@ -238,8 +238,23 @@ app.use(errorHandler.wrapAsync(async (req, res, next) => {
 }));
 // Add global error handling middleware
 app.use(errorHandler.expressErrorHandler());
-app.listen(port, () => {
+const server = app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
+});
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully...');
+    server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+    });
+});
+process.on('SIGINT', () => {
+    console.log('SIGINT received, shutting down gracefully...');
+    server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+    });
 });
 export default app;
 //# sourceMappingURL=server.js.map

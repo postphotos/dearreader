@@ -48,7 +48,7 @@ export class HealthCheckService {
     ];
 
     const results = await Promise.allSettled(checkPromises);
-    
+
     // Process results
     checks.memory = this.processResult(results[0], 'memory');
     checks.storage = this.processResult(results[1], 'storage');
@@ -84,7 +84,7 @@ export class HealthCheckService {
    */
   private async checkMemoryUsage(): Promise<HealthCheck> {
     const start = Date.now();
-    
+
     try {
       const memUsage = process.memoryUsage();
       const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
@@ -125,7 +125,7 @@ export class HealthCheckService {
    */
   private async checkStorageHealth(): Promise<HealthCheck> {
     const start = Date.now();
-    
+
     try {
       const storageDir = config.storage.local_directory;
       const testFile = path.join(storageDir, 'health-check-test.tmp');
@@ -165,10 +165,10 @@ export class HealthCheckService {
    */
   private async checkCacheHealth(): Promise<HealthCheck> {
     const start = Date.now();
-    
+
     try {
       const cacheStats = this.cacheService.getStats();
-      
+
       return {
         status: 'pass',
         timestamp: new Date().toISOString(),
@@ -194,14 +194,14 @@ export class HealthCheckService {
 
   private async checkConfigHealth(): Promise<HealthCheck> {
     const start = Date.now();
-    
+
     try {
       // Use the same path resolution as ConfigManager (ES module equivalent)
       const __filename = fileURLToPath(import.meta.url);
       const __dirname = path.dirname(__filename);
       const configPath = path.resolve(__dirname, '..', '..', '..', 'config.yaml');
       let configExists = false;
-      
+
       try {
         await fs.access(configPath);
         configExists = true;
@@ -231,7 +231,7 @@ export class HealthCheckService {
 
   private async checkSystemResources(): Promise<HealthCheck> {
     const start = Date.now();
-    
+
     try {
       return {
         status: 'pass',
@@ -269,7 +269,7 @@ export class HealthCheckService {
 
   private determineOverallStatus(checks: Record<string, HealthCheck>): 'healthy' | 'unhealthy' | 'degraded' {
     const statuses = Object.values(checks).map(check => check.status);
-    
+
     if (statuses.includes('fail')) {
       return 'unhealthy';
     } else if (statuses.includes('warn')) {
