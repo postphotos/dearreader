@@ -2,6 +2,7 @@ import { expect } from 'chai';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import config from '../src/config.js';
 
 describe('Configuration System', () => {
   let tempDir: string;
@@ -44,10 +45,10 @@ PINECONE_API_KEY=test-pinecone-key`;
     rpm_limit: 100`);
 
       // Test that config loads with environment variables
-      const testConfig = require('../src/config');
+      const testConfig = config;
 
-      expect(testConfig.ai_providers['openai-gpt-3.5-turbo'].api_key).to.equal('test-openai-key');
-      expect(testConfig.ai_providers['openrouter-gpt-4'].api_key).to.equal('test-openrouter-key');
+      expect(testConfig.ai_providers?.['openai-gpt-3.5-turbo']?.api_key).to.equal('test-openai-key');
+      expect(testConfig.ai_providers?.['openrouter-gpt-4']?.api_key).to.equal('test-openrouter-key');
     });
 
     it('should handle missing .env file gracefully', () => {
@@ -55,7 +56,7 @@ PINECONE_API_KEY=test-pinecone-key`;
       fs.writeFileSync('config.yaml', 'ai_enabled: false\n');
       fs.writeFileSync('crawl_pipeline.yaml', 'llm_providers: {}');
 
-      const testConfig = require('../src/config');
+      const testConfig = config;
 
       expect(testConfig.ai_enabled).to.equal(false);
       expect(Object.keys(testConfig.ai_providers || {})).to.have.lengthOf(0);
@@ -71,12 +72,12 @@ performance:
 concurrency:
   max_api_concurrency: 25`);
 
-      const testConfig = require('../src/config');
+      const testConfig = config;
 
       expect(testConfig.ai_enabled).to.equal(true);
       expect(testConfig.performance.max_concurrent_pages).to.equal(5);
       expect(testConfig.performance.max_rps).to.equal(30);
-      expect(testConfig.concurrency.max_api_concurrency).to.equal(25);
+      expect(testConfig.concurrency?.max_api_concurrency).to.equal(25);
     });
 
     it('should load crawl_pipeline.yaml AI configurations', () => {
@@ -91,14 +92,14 @@ concurrency:
 ai_tasks:
   test_task: "test-provider"`);
 
-      const testConfig = require('../src/config');
+      const testConfig = config;
 
-      expect(testConfig.ai_providers['test-provider']).to.be.an('object');
-      expect(testConfig.ai_providers['test-provider'].api_key).to.equal('test-key');
-      expect(testConfig.ai_providers['test-provider'].model).to.equal('test-model');
-      expect(testConfig.ai_providers['test-provider'].temperature).to.equal(0.5);
-      expect(testConfig.ai_providers['test-provider'].rpm_limit).to.equal(100);
-      expect(testConfig.ai_tasks.test_task).to.equal('test-provider');
+      expect(testConfig.ai_providers?.['test-provider']).to.be.an('object');
+      expect(testConfig.ai_providers?.['test-provider']?.api_key).to.equal('test-key');
+      expect(testConfig.ai_providers?.['test-provider']?.model).to.equal('test-model');
+      expect(testConfig.ai_providers?.['test-provider']?.temperature).to.equal(0.5);
+      expect((testConfig.ai_providers?.['test-provider'] as any)?.rpm_limit).to.equal(100);
+      expect(testConfig.ai_tasks?.test_task).to.equal('test-provider');
     });
 
     it('should merge config.yaml and crawl_pipeline.yaml correctly', () => {
@@ -112,14 +113,14 @@ performance:
 performance:
   max_rps: 50`);
 
-      const testConfig = require('../src/config');
+      const testConfig = config;
 
       // config.yaml should take precedence for conflicting keys
       expect(testConfig.ai_enabled).to.equal(true);
       expect(testConfig.performance.max_concurrent_pages).to.equal(10);
       // crawl_pipeline.yaml values should be merged in
       expect(testConfig.performance.max_rps).to.equal(50);
-      expect(testConfig.ai_providers['merged-provider'].api_key).to.equal('merged-key');
+      expect(testConfig.ai_providers?.['merged-provider']?.api_key).to.equal('merged-key');
     });
   });
 
@@ -137,11 +138,11 @@ performance:
     api_key: "test-key"
     rpm_limit: 60`);
 
-      const testConfig = require('../src/config');
+      const testConfig = config;
 
-      expect(testConfig.ai_providers['openai-gpt-3.5-turbo'].rpm_limit).to.equal(3500);
-      expect(testConfig.ai_providers['openai-gpt-4'].rpm_limit).to.equal(200);
-      expect(testConfig.ai_providers['gemini-pro'].rpm_limit).to.equal(60);
+      expect((testConfig.ai_providers?.['openai-gpt-3.5-turbo'] as any)?.rpm_limit).to.equal(3500);
+      expect((testConfig.ai_providers?.['openai-gpt-4'] as any)?.rpm_limit).to.equal(200);
+      expect((testConfig.ai_providers?.['gemini-pro'] as any)?.rpm_limit).to.equal(60);
     });
   });
 
@@ -158,10 +159,10 @@ performance:
     base_url: "\${TEST_BASE_URL}"
     model: "test-model"`);
 
-      const testConfig = require('../src/config');
+      const testConfig = config;
 
-      expect(testConfig.ai_providers['test-provider'].api_key).to.equal('substituted-key');
-      expect(testConfig.ai_providers['test-provider'].base_url).to.equal('https://test.example.com');
+      expect(testConfig.ai_providers?.['test-provider']?.api_key).to.equal('substituted-key');
+      expect((testConfig.ai_providers?.['test-provider'] as any)?.base_url).to.equal('https://test.example.com');
 
       // Clean up
       delete process.env.TEST_API_KEY;
@@ -175,10 +176,10 @@ performance:
     api_key: "\${MISSING_VAR:-default-key}"
     base_url: "\${MISSING_URL:-https://default.example.com}"`);
 
-      const testConfig = require('../src/config');
+      const testConfig = config;
 
-      expect(testConfig.ai_providers['test-provider'].api_key).to.equal('default-key');
-      expect(testConfig.ai_providers['test-provider'].base_url).to.equal('https://default.example.com');
+      expect(testConfig.ai_providers?.['test-provider']?.api_key).to.equal('default-key');
+      expect((testConfig.ai_providers?.['test-provider'] as any)?.base_url).to.equal('https://default.example.com');
     });
   });
 });

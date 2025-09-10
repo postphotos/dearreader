@@ -40,15 +40,4 @@ if (typeof globalThis.Promise.withResolvers === 'undefined') {
   };
 }
 
-class OutputServerEventStream {
-  write(data) {
-    console.log("OutputServerEventStream write:", data);
-  }
-  end() {
-    console.log("OutputServerEventStream ended");
-  }
-}
-export {
-  OutputServerEventStream
-};
-//# sourceMappingURL=output-stream.js.map
+//# sourceMappingURL=types.d.js.map

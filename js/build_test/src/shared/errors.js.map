@@ -1,1 +1,7 @@
-{"version":3,"file":"errors.js","sourceRoot":"","sources":["../../../src/shared/errors.ts"],"names":[],"mappings":"AAAA,MAAM,OAAO,uBAAwB,SAAQ,KAAK;IAChD,YAAY,OAAe;QACzB,KAAK,CAAC,OAAO,CAAC,CAAC;QACf,IAAI,CAAC,IAAI,GAAG,yBAAyB,CAAC;IACxC,CAAC;CACF;AAED,MAAM,OAAO,mBAAoB,SAAQ,KAAK;IAC5C,YAAY,EAAE,OAAO,EAAuB;QAC1C,KAAK,CAAC,OAAO,CAAC,CAAC;QACf,IAAI,CAAC,IAAI,GAAG,qBAAqB,CAAC;IACpC,CAAC;CACF"}
+{
+  "version": 3,
+  "sources": ["../../../src/shared/errors.ts"],
+  "sourcesContent": ["export class SecurityCompromiseError extends Error {\n  constructor(message: string) {\n    super(message);\n    this.name = 'SecurityCompromiseError';\n  }\n}\n\nexport class ServiceCrashedError extends Error {\n  constructor({ message }: { message: string }) {\n    super(message);\n    this.name = 'ServiceCrashedError';\n  }\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAO,MAAM,gCAAgC,MAAM;AAAA,EACjD,YAAY,SAAiB;AAC3B,UAAM,OAAO;AACb,SAAK,OAAO;AAAA,EACd;AACF;AAEO,MAAM,4BAA4B,MAAM;AAAA,EAC7C,YAAY,EAAE,QAAQ,GAAwB;AAC5C,UAAM,OAAO;AACb,SAAK,OAAO;AAAA,EACd;AACF;",
+  "names": []
+}

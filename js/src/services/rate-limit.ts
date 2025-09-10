@@ -16,6 +16,20 @@ export interface UsageRecord {
   requests_today: number;
   requests_this_minute: number;
   last_request_time: number;
+  // Sliding window data
+  request_timestamps: number[]; // Timestamps of recent requests
+}
+
+export interface RateLimitResult {
+  allowed: boolean;
+  reason?: string;
+  usage?: UsageRecord;
+  headers?: {
+    'X-RateLimit-Limit': string;
+    'X-RateLimit-Remaining': string;
+    'X-RateLimit-Reset': string;
+    'X-RateLimit-Window'?: string;
+  };
 }
 
 @singleton()
@@ -24,6 +38,7 @@ export class RateLimitService {
   private logPath: string;
   private logger: Logger;
   private rateLimitConfig: any;
+  private slidingWindowSize: number = 60 * 1000; // 1 minute sliding window
 
   constructor() {
     this.logger = new Logger('RateLimit');
@@ -41,6 +56,9 @@ export class RateLimitService {
 
     // Set up daily reset
     this.scheduleDailyReset();
+
+    // Set up periodic cleanup
+    this.scheduleCleanup();
   }
 
   private loadRateLimitConfig(): void {
@@ -70,7 +88,7 @@ export class RateLimitService {
   /**
    * Check if a request is allowed for the given API key and provider
    */
-  async checkRateLimit(apiKey: string, provider: string): Promise<{ allowed: boolean; reason?: string; usage?: UsageRecord }> {
+  async checkRateLimit(apiKey: string, provider: string): Promise<RateLimitResult> {
     const key = `${apiKey}:${provider}`;
     const now = Date.now();
     const today = new Date().toDateString();
@@ -85,7 +103,8 @@ export class RateLimitService {
         timestamp: now,
         requests_today: 0,
         requests_this_minute: 0,
-        last_request_time: now
+        last_request_time: now,
+        request_timestamps: []
       };
       this.usageRecords.set(key, record);
     }
@@ -111,13 +130,23 @@ export class RateLimitService {
     if (record.requests_today >= limits.rpd_limit) {
       const reason = `Daily limit exceeded: ${record.requests_today}/${limits.rpd_limit} requests`;
       this.logger.warn(`Rate limit exceeded for ${key}: ${reason}`);
-      return { allowed: false, reason, usage: record };
+      return {
+        allowed: false,
+        reason,
+        usage: record,
+        headers: this.generateRateLimitHeaders(record, limits, provider)
+      };
     }
 
     if (record.requests_this_minute >= limits.rpm_limit) {
       const reason = `Minute limit exceeded: ${record.requests_this_minute}/${limits.rpm_limit} requests`;
       this.logger.warn(`Rate limit exceeded for ${key}: ${reason}`);
-      return { allowed: false, reason, usage: record };
+      return {
+        allowed: false,
+        reason,
+        usage: record,
+        headers: this.generateRateLimitHeaders(record, limits, provider)
+      };
     }
 
     // Check warning threshold
@@ -133,7 +162,11 @@ export class RateLimitService {
       this.logger.warn(`High minute usage for ${key}: ${record.requests_this_minute}/${limits.rpm_limit} (${minuteUsagePercent.toFixed(1)}%)`);
     }
 
-    return { allowed: true, usage: record };
+    return {
+      allowed: true,
+      usage: record,
+      headers: this.generateRateLimitHeaders(record, limits, provider)
+    };
   }
 
   /**
@@ -152,7 +185,8 @@ export class RateLimitService {
         timestamp: now,
         requests_today: 0,
         requests_this_minute: 0,
-        last_request_time: now
+        last_request_time: now,
+        request_timestamps: []
       };
     }
 
@@ -160,6 +194,13 @@ export class RateLimitService {
     record.requests_today++;
     record.requests_this_minute++;
     record.last_request_time = now;
+
+    // Add timestamp for sliding window
+    record.request_timestamps.push(now);
+
+    // Keep only timestamps within the sliding window
+    const windowStart = now - this.slidingWindowSize;
+    record.request_timestamps = record.request_timestamps.filter(ts => ts > windowStart);
 
     this.usageRecords.set(key, record);
 
@@ -286,6 +327,36 @@ export class RateLimitService {
     }
 
     this.logger.info('Daily usage counters reset');
+  }
+
+  /**
+   * Generate rate limit headers for response
+   */
+  private generateRateLimitHeaders(record: UsageRecord, limits: RateLimitConfig, provider: string): RateLimitResult['headers'] {
+    const now = Date.now();
+    const resetTime = new Date();
+    resetTime.setHours(23, 59, 59, 999); // End of today
+    const resetTimestamp = Math.floor(resetTime.getTime() / 1000);
+
+    // Calculate remaining requests
+    const remainingDaily = Math.max(0, limits.rpd_limit - record.requests_today);
+    const remainingMinute = Math.max(0, limits.rpm_limit - record.requests_this_minute);
+
+    return {
+      'X-RateLimit-Limit': `${limits.rpm_limit}`,
+      'X-RateLimit-Remaining': `${Math.min(remainingDaily, remainingMinute)}`,
+      'X-RateLimit-Reset': `${resetTimestamp}`,
+      'X-RateLimit-Window': '60' // 60 second window
+    };
+  }
+
+  /**
+   * Schedule periodic cleanup of old records
+   */
+  private scheduleCleanup(): void {
+    setInterval(() => {
+      this.cleanupOldRecords();
+    }, 60 * 60 * 1000); // Run cleanup every hour
   }
 
   /**

@@ -1,4 +1,7 @@
-// Lightweight DOMMatrix polyfill for pdfjs in Node test environment
+// Import polyfills first - this must be the very first import
+import './polyfills.js';
+
+// Polyfill for DOMMatrix (needed for pdfjs-dist) - MUST be first
 if (typeof globalThis.DOMMatrix === 'undefined') {
     class DOMMatrixPolyfill {
         constructor(init) {
@@ -46,6 +49,7 @@ import 'reflect-metadata';
 import * as fs from 'fs';
 import puppeteerControl from '../build_test/src/services/puppeteer.js';
 import { after, before } from 'mocha';
+
 // Aggressive pre-test cleanup
 before(async () => {
     // Kill any existing ESBuild or test processes before starting
@@ -60,10 +64,12 @@ before(async () => {
         // Ignore cleanup errors
     }
 });
+
 // Global test setup
 // This file runs before all tests and sets up the testing environment
 // Configure Puppeteer for Chromium with better WSL support
 process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
+
 // Try multiple Chromium paths for different environments
 const chromiumPaths = [
     '/usr/bin/chromium-browser', // WSL/Debian/Ubuntu
@@ -72,6 +78,7 @@ const chromiumPaths = [
     '/usr/bin/google-chrome-stable', // Chrome stable
     process.env.PUPPETEER_EXECUTABLE_PATH // Environment override
 ].filter(Boolean);
+
 // Find the first available Chromium executable
 let chromiumFound = false;
 for (const path of chromiumPaths) {
@@ -87,6 +94,7 @@ for (const path of chromiumPaths) {
         // Continue to next path
     }
 }
+
 if (!chromiumFound) {
     console.warn('⚠️  Chromium not found. Tests will use mock implementation.');
     console.warn('   To install Chromium:');
@@ -95,6 +103,7 @@ if (!chromiumFound) {
     // Set environment variable to indicate mock should be used
     process.env.USE_PUPPETEER_MOCK = 'true';
 }
+
 // Additional Puppeteer options for headless environments
 process.env.PUPPETEER_ARGS = [
     '--no-sandbox',
@@ -105,8 +114,10 @@ process.env.PUPPETEER_ARGS = [
     '--no-zygote',
     '--disable-gpu'
 ].join(' ');
+
 // Set headless mode for testing
 process.env.PUPPETEER_HEADLESS = 'true';
+
 // Enhanced monitoring for test environments
 if (process.env.NODE_ENV === 'test' || process.env.CI === 'true') {
     let processMonitor;
@@ -126,6 +137,7 @@ if (process.env.NODE_ENV === 'test' || process.env.CI === 'true') {
         }
     });
 }
+
 // You can add other global test setup here if needed
 // Global after hook to close puppeteer
 after(async () => {
@@ -143,4 +155,3 @@ after(async () => {
         }, 100);
     }
 });
-//# sourceMappingURL=setup.js.map

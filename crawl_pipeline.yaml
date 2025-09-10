@@ -21,6 +21,106 @@
 # ============================================================================
 
 # ============================================================================
+# AI PROVIDER CONFIGURATIONS
+# ============================================================================
+# Configuration for AI providers and models
+
+ai_providers:
+  # OpenRouter providers (cost-effective)
+  openrouter-small:
+    provider: "openrouter"
+    api_key: "${OPENROUTER_API_KEY}"
+    base_url: "https://openrouter.ai/api/v1"
+    model: "microsoft/wizardlm-2-8x22b"
+    temperature: 0.2
+    rpm_limit: 100
+    max_tokens: 4096
+    request_timeout_ms: 30000
+    max_retries: 2
+
+  openrouter-big:
+    provider: "openrouter"
+    api_key: "${OPENROUTER_API_KEY}"
+    base_url: "https://openrouter.ai/api/v1"
+    model: "anthropic/claude-3-haiku"
+    temperature: 0.2
+    rpm_limit: 50
+    max_tokens: 8192
+    request_timeout_ms: 45000
+    max_retries: 3
+
+  # Primary text processing (balanced performance/cost)
+  primary_text:
+    provider: "openrouter"
+    api_key: "${OPENROUTER_API_KEY}"
+    base_url: "https://openrouter.ai/api/v1"
+    model: "anthropic/claude-3-sonnet"
+    temperature: 0.1
+    rpm_limit: 30
+    max_tokens: 16384
+    request_timeout_ms: 60000
+    max_retries: 3
+
+  # Fast processing (speed optimized)
+  fast_processing:
+    provider: "openai"
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    model: "gpt-3.5-turbo"
+    temperature: 0.2
+    rpm_limit: 3500
+    max_tokens: 4096
+    request_timeout_ms: 30000
+    max_retries: 2
+
+  # Primary vision processing (for OCR/images)
+  primary_vision:
+    provider: "gemini"
+    api_key: "${GEMINI_API_KEY}"
+    base_url: "https://generativelanguage.googleapis.com/v1"
+    model: "gemini-pro-vision"
+    temperature: 0.1
+    rpm_limit: 60
+    max_tokens: 8192
+    request_timeout_ms: 45000
+    max_retries: 3
+
+  # OpenRefine providers (for compatibility)
+  openrefine-free:
+    provider: "openrouter"
+    api_key: "${OPENROUTER_API_KEY}"
+    base_url: "https://openrouter.ai/api/v1"
+    model: "microsoft/wizardlm-2-8x22b"
+    temperature: 0.2
+    rpm_limit: 18
+    max_tokens: 4096
+    request_timeout_ms: 30000
+    max_retries: 2
+
+  openrefine-premium:
+    provider: "openrouter"
+    api_key: "${OPENROUTER_API_KEY}"
+    base_url: "https://openrouter.ai/api/v1"
+    model: "anthropic/claude-3-haiku"
+    temperature: 0.2
+    rpm_limit: 180
+    max_tokens: 8192
+    request_timeout_ms: 45000
+    max_retries: 3
+
+  # High-quality processing (when quality matters most)
+  openai-gpt-4-turbo:
+    provider: "openai"
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    model: "gpt-4-turbo-preview"
+    temperature: 0.1
+    rpm_limit: 500
+    max_tokens: 16384
+    request_timeout_ms: 60000
+    max_retries: 3
+
+# ============================================================================
 # RATE LIMITING CONFIGURATION
 # ============================================================================
 
@@ -95,13 +195,34 @@ pipeline_routing:
             ".main-content",
             "body"
           ]
-          # User agent to avoid bot detection
-          user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+          # User agent rotation to avoid bot detection
+          user_agent_rotation: true
+          user_agents: [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/91.0.864.59"
+          ]
           # Accept various content types
           accept_content_types: ["text/html", "text/plain", "application/xhtml+xml"]
-          # Follow redirects
-          follow_redirects: true
-          max_redirects: 5
+          # Error handling and retries
+          retry_on_failure: true
+          max_retries: 3
+          retry_delay_ms: 1000
+          retry_backoff_multiplier: 2.0
+          timeout_ms: 45000
+          # Circuit breaker pattern
+          circuit_breaker_enabled: true
+          circuit_breaker_failure_threshold: 5
+          circuit_breaker_reset_timeout_ms: 60000
+          # Caching configuration
+          enable_caching: true
+          cache_ttl_seconds: 3600  # 1 hour default
+          cache_key_strategy: "url+options"  # Options: url_only, url+options, content_hash
+          cache_invalidation_strategy: "time_based"  # Options: time_based, manual, smart
+          cache_compression: true
+          cache_max_size_mb: 100
 
       - name: "universal_text_extraction"
         type: "text_extract"
@@ -149,22 +270,26 @@ pipeline_routing:
           extract_author: true
           extract_date: true
 
-      - name: "universal_content_filtering"
-        type: "content_filter"
-        description: "Filter and clean extracted content for better readability"
+      - name: "security_sanitization"
+        type: "security_sanitization"
+        description: "Sanitize content to prevent prompt injection and security issues"
         config:
-          # Remove very short content (likely navigation/ads)
-          min_content_length: 100
-          # Remove duplicate content
-          remove_duplicates: true
-          # Language detection and filtering
-          language_filter: "auto"  # Keep content in detected language
-          # Quality filtering
-          quality_threshold: 0.3  # Basic quality check
-          # Content type detection
-          detect_content_type: true
-          # Boilerplate removal
-          remove_boilerplate: true
+          remove_script_tags: true
+          remove_event_handlers: true
+          sanitize_urls: true
+          remove_suspicious_patterns: true
+          max_content_length: 100000
+          allowed_protocols: ["http", "https"]
+          block_patterns: [
+            "javascript:",
+            "data:",
+            "vbscript:",
+            "onload=",
+            "onerror=",
+            "onclick=",
+            "<script",
+            "</script>"
+          ]
 
       - name: "universal_json_formatting"
         type: "json_format"
@@ -417,12 +542,120 @@ ai_tasks:
   vision: "primary_vision"
   vision_backup: "gemini-pro"
 
+# ============================================================================
+# A/B TESTING CONFIGURATION
+# ============================================================================
+# Configuration for A/B testing different AI models for the same tasks
+
+ab_testing:
+  enabled: true
+  experiments:
+    # Test different models for content categorization
+    content_categorization_ab:
+      name: "Content Categorization A/B Test"
+      description: "Compare different models for content categorization accuracy and speed"
+      variants:
+        control: "openrouter-small"  # Baseline model
+        variant_a: "primary_text"    # Test model A
+        variant_b: "openrouter-big"  # Test model B
+      traffic_distribution: [50, 25, 25]  # 50% control, 25% A, 25% B
+      metrics:
+        - accuracy
+        - speed
+        - cost
+      duration_days: 30
+      min_samples_per_variant: 1000
+
+    # Test different models for HTML to Markdown conversion
+    html_to_markdown_ab:
+      name: "HTML to Markdown A/B Test"
+      description: "Compare different models for HTML to Markdown conversion quality"
+      variants:
+        control: "fast_processing"
+        variant_a: "openrouter-small"
+        variant_b: "primary_text"
+      traffic_distribution: [60, 20, 20]
+      metrics:
+        - quality_score
+        - processing_time
+        - cost
+      duration_days: 14
+      min_samples_per_variant: 500
+
+  # Global A/B testing settings
+  settings:
+    enable_logging: true
+    log_sample_rate: 0.1  # Log 10% of requests for analysis
+    enable_real_time_metrics: true
+    experiment_refresh_interval_hours: 24
+    allow_user_opt_out: true
+    respect_user_preferences: true
+
+# ============================================================================
+# ADVANCED PROMPTING TECHNIQUES
+# ============================================================================
+# Configuration for advanced prompting strategies
+
+advanced_prompting:
+  enabled: true
+  techniques:
+    # Chain of Thought prompting
+    chain_of_thought:
+      enabled: true
+      tasks: ["content_categorization", "business_info_extraction"]
+      template: |
+        Let's approach this step by step:
+
+        Step 1: Analyze the content structure and identify key elements
+        Step 2: Extract relevant information based on the task requirements
+        Step 3: Validate the extracted information for accuracy
+        Step 4: Format the final response
+
+        Content: {content}
+        Task: {task_description}
+
+        Now, let's work through each step:
+
+    # ReAct (Reasoning + Acting) prompting
+    react:
+      enabled: true
+      tasks: ["extract_metadata", "content_analysis"]
+      template: |
+        You need to reason about this content and take appropriate actions.
+
+        Observation: {content}
+        Task: {task_description}
+
+        Think step by step:
+        1. What information do I need to extract?
+        2. What patterns should I look for?
+        3. How should I validate my findings?
+        4. What format should the output be in?
+
+        Action: Analyze the content
+        Result: [Your analysis here]
+
+    # Few-shot learning with examples
+    few_shot:
+      enabled: true
+      tasks: ["sentiment_analysis", "content_classification"]
+      examples:
+        - input: "This product is amazing! I love it!"
+          output: '{"sentiment": "positive", "confidence": 0.95}'
+        - input: "This is terrible. Complete waste of money."
+          output: '{"sentiment": "negative", "confidence": 0.92}'
+        - input: "It's okay, nothing special."
+          output: '{"sentiment": "neutral", "confidence": 0.78}'
+
 # Prompt Definitions
 prompts:
   # HTML Processing Prompts
   html_to_markdown:
     name: "Convert HTML to Markdown"
     description: "Convert HTML content to clean, readable Markdown format"
+    version: "1.0.0"
+    created_at: "2024-01-15"
+    updated_at: "2024-01-15"
     template: |
       Convert the following HTML content to clean, readable Markdown format.
       Preserve all important information, links, and formatting.
@@ -785,3 +1018,141 @@ pipeline_tests:
     log_test_results: true
     fail_fast: false
     retry_failed_tests: 2
+
+# ============================================================================
+# PERFORMANCE TESTING CONFIGURATION
+# ============================================================================
+# Configuration for performance and load testing
+
+performance_testing:
+  enabled: true
+
+  # Load testing scenarios
+  scenarios:
+    basic_load_test:
+      name: "Basic Load Test"
+      description: "Test system performance under normal load"
+      duration_minutes: 10
+      concurrent_users: 10
+      ramp_up_seconds: 60
+      requests_per_minute: 100
+      target_endpoints:
+        - "/json/https://httpbin.org/html"
+        - "/json/https://httpbin.org/json"
+      expected_response_time_ms: 2000
+      expected_success_rate: 0.95
+
+    stress_test:
+      name: "Stress Test"
+      description: "Test system limits under high load"
+      duration_minutes: 5
+      concurrent_users: 50
+      ramp_up_seconds: 30
+      requests_per_minute: 500
+      target_endpoints:
+        - "/json/https://httpbin.org/html"
+        - "/task/html_enhanced/https://httpbin.org/html"
+      expected_response_time_ms: 5000
+      expected_success_rate: 0.90
+
+    spike_test:
+      name: "Spike Test"
+      description: "Test system response to sudden traffic spikes"
+      duration_minutes: 3
+      spike_users: 100
+      spike_duration_seconds: 30
+      baseline_users: 5
+      target_endpoints:
+        - "/json/https://httpbin.org/html"
+      expected_response_time_ms: 3000
+      expected_success_rate: 0.85
+
+  # Performance metrics to track
+  metrics:
+    response_time:
+      enabled: true
+      percentiles: [50, 95, 99]
+      thresholds:
+        p95_max_ms: 3000
+        p99_max_ms: 5000
+
+    throughput:
+      enabled: true
+      measure_rpm: true
+      measure_rps: true
+      thresholds:
+        min_rpm: 50
+        max_rpm: 1000
+
+    error_rate:
+      enabled: true
+      thresholds:
+        max_error_rate: 0.05  # 5% max error rate
+
+    resource_usage:
+      enabled: true
+      track_memory: true
+      track_cpu: true
+      thresholds:
+        max_memory_mb: 1024
+        max_cpu_percent: 80
+
+  # End-to-end testing configuration
+  e2e_testing:
+    enabled: true
+    test_scenarios:
+      html_processing_e2e:
+        name: "HTML Processing End-to-End"
+        description: "Complete HTML processing pipeline test"
+        steps:
+          - name: "crawl_html"
+            endpoint: "/json/https://httpbin.org/html"
+            expected_status: 200
+            validate_response: true
+          - name: "validate_content"
+            check_fields: ["title", "content", "links"]
+          - name: "check_performance"
+            max_response_time_ms: 3000
+
+      pdf_processing_e2e:
+        name: "PDF Processing End-to-End"
+        description: "Complete PDF processing pipeline test"
+        steps:
+          - name: "crawl_pdf"
+            endpoint: "/task/pdf_default/https://httpbin.org/pdf-sample.pdf"
+            expected_status: 200
+          - name: "validate_pdf_content"
+            check_fields: ["extracted_text", "metadata"]
+          - name: "check_quality"
+            validate_quality_score: true
+
+      ai_enhanced_e2e:
+        name: "AI Enhanced Processing End-to-End"
+        description: "AI-enhanced pipeline with real API calls"
+        steps:
+          - name: "enhanced_processing"
+            endpoint: "/task/html_enhanced/https://httpbin.org/html"
+            expected_status: 200
+            skip_without_api_key: true
+          - name: "validate_ai_output"
+            check_fields: ["categorization", "markdown_content"]
+          - name: "performance_check"
+            max_response_time_ms: 10000
+
+  # Test data management
+  test_data:
+    mock_responses: true
+    use_cached_responses: true
+    generate_real_traffic: false
+    data_retention_days: 30
+    anonymize_sensitive_data: true
+
+  # Reporting and alerting
+  reporting:
+    generate_reports: true
+    report_format: "json"
+    report_frequency: "daily"
+    alert_on_failures: true
+    alert_thresholds:
+      consecutive_failures: 3
+      performance_degradation_percent: 20

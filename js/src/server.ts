@@ -370,6 +370,14 @@ async function handleTaskRequest(req: express.Request, res: express.Response, ne
         const provider = findProviderForPipeline(requestedPipeline);
         if (provider) {
           const rateLimitCheck = await rateLimitService.checkRateLimit(apiKey, provider);
+
+          // Add rate limit headers to response
+          if (rateLimitCheck.headers) {
+            Object.entries(rateLimitCheck.headers).forEach(([key, value]) => {
+              res.setHeader(key, value);
+            });
+          }
+
           if (!rateLimitCheck.allowed) {
             return res.status(429).json({
               error: 'Rate limit exceeded',
@@ -428,6 +436,37 @@ async function handleCrawlerRequest(req: express.Request, res: express.Response,
     // Add default pipeline context
     (req as any).pipeline = defaultPipeline;
     (req as any).pipelineConfig = pipelines[defaultPipeline] || {};
+
+    // Check rate limiting for default pipeline if it requires AI
+    const pipelineConfig = pipelines[defaultPipeline];
+    if (pipelineConfig?.ai_required && config.rate_limiting?.enabled) {
+      const apiKey = req.headers['x-api-key'] as string ||
+                     req.query.api_key as string ||
+                     process.env.OPENROUTER_API_KEY;
+
+      if (apiKey) {
+        const provider = findProviderForPipeline(defaultPipeline);
+        if (provider) {
+          const rateLimitCheck = await rateLimitService.checkRateLimit(apiKey, provider);
+
+          // Add rate limit headers to response
+          if (rateLimitCheck.headers) {
+            Object.entries(rateLimitCheck.headers).forEach(([key, value]) => {
+              res.setHeader(key, value);
+            });
+          }
+
+          if (!rateLimitCheck.allowed) {
+            return res.status(429).json({
+              error: 'Rate limit exceeded',
+              reason: rateLimitCheck.reason,
+              usage: rateLimitCheck.usage,
+              retry_after: 'Wait for rate limit reset or use different API key'
+            });
+          }
+        }
+      }
+    }
 
     await crawlerHost.crawl(req, res);
   } catch (error: any) {

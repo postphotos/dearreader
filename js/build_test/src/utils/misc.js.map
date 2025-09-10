@@ -1,1 +1,7 @@
-{"version":3,"file":"misc.js","sourceRoot":"","sources":["../../../src/utils/misc.ts"],"names":[],"mappings":"AAAA,MAAM,UAAU,cAAc,CAAC,SAAiB;IAC5C,OAAO,SAAS,CAAC,CAAC,CAAC,SAAS,CAAC,OAAO,CAAC,YAAY,EAAE,IAAI,CAAC,CAAC,CAAC,CAAC,EAAE,CAAC;AAClE,CAAC"}
+{
+  "version": 3,
+  "sources": ["../../../src/utils/misc.ts"],
+  "sourcesContent": ["export function cleanAttribute(attribute: string) {\n    return attribute ? attribute.replace(/(\\n+\\s*)+/g, '\\n') : '';\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAO,SAAS,eAAe,WAAmB;AAC9C,SAAO,YAAY,UAAU,QAAQ,cAAc,IAAI,IAAI;AAC/D;",
+  "names": []
+}

@@ -1,1 +1,7 @@
-{"version":3,"file":"rpc-reflect.js","sourceRoot":"","sources":["../../../src/shared/rpc-reflect.ts"],"names":[],"mappings":"AAAA,MAAM,UAAU,UAAU;IACtB,OAAO,UAAU,MAAW,EAAE,WAA4B,EAAE,cAAsB;QAC9E,OAAO,CAAC,GAAG,CAAC,6CAA6C,cAAc,OAAO,MAAM,CAAC,WAAW,CAAC,EAAE,CAAC,CAAC;IACzG,CAAC,CAAC;AACN,CAAC"}
+{
+  "version": 3,
+  "sources": ["../../../src/shared/rpc-reflect.ts"],
+  "sourcesContent": ["export function RPCReflect() {\n    return function (target: any, propertyKey: string | symbol, parameterIndex: number) {\n        console.log(`RPCReflect decorator applied to parameter ${parameterIndex} of ${String(propertyKey)}`);\n    };\n}"],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAO,SAAS,aAAa;AACzB,SAAO,SAAU,QAAa,aAA8B,gBAAwB;AAChF,YAAQ,IAAI,6CAA6C,cAAc,OAAO,OAAO,WAAW,CAAC,EAAE;AAAA,EACvG;AACJ;",
+  "names": []
+}

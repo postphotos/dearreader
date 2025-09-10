@@ -33,9 +33,14 @@ if (typeof (globalThis as any).Promise.withResolvers === 'undefined') {
   };
 }
 
+// Import polyfills first before any other modules
+import './polyfills.js';
+
 // Configure pdfjs-dist for testing
 import * as pdfjsLib from 'pdfjs-dist';
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs-dist/build/pdf.worker.mjs';
+
+import 'reflect-metadata';
 
 import 'reflect-metadata';
 import * as fs from 'fs';
