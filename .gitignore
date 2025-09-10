@@ -19,3 +19,4 @@ screenshots/
 # scripts/legacy/setup.sh
 # scripts/legacy/dev.sh
 # scripts/legacy/run.sh
+config.yaml

@@ -1,0 +1,88 @@
+# DearReader AI-Enhanced Crawl Pipeline Configuration Template
+# Copy this file to crawl_pipeline.yaml and customize for your specific needs
+# This is a minimal template - see crawl_pipeline.yaml for a complete example
+
+crawl_pipeline:
+  name: "My Custom Content Pipeline"
+  version: "1.0"
+  description: "Customize this pipeline for your content processing needs"
+
+  # Input sources - define where to get URLs
+  sources:
+    - type: "url_list"
+      name: "my_articles"
+      urls:
+        - "https://example.com/article1"
+        - "https://example.com/article2"
+      priority: "high"
+
+    # Add more sources as needed:
+    # - type: "sitemap"
+    #   url: "https://example.com/sitemap.xml"
+    # - type: "pdf_batch"
+    #   pattern: "https://example.com/docs/*.pdf"
+
+  # Processing stages - define what to do with content
+  stages:
+    # Basic crawling (required)
+    - name: "crawl"
+      type: "crawl_only"
+      config:
+        format: "json"
+        include_metadata: true
+        timeout_ms: 30000
+      when: "always"
+
+    # Add AI processing stages as needed:
+    # - name: "validate"
+    #   type: "ai_process"
+    #   task: "validate_format"
+    #   when: "content_extracted"
+
+    # - name: "enhance"
+    #   type: "ai_process"
+    #   task: "edit_crawl"
+    #   when: "validation_passed"
+
+  # Output destinations - define where to save results
+  outputs:
+    - type: "json_file"
+      path: "./output/results.json"
+      format: "structured"
+
+    # Add more outputs as needed:
+    # - type: "markdown_files"
+    #   path: "./output/articles/"
+    # - type: "database"
+    #   connection: "postgresql://localhost:5432/my_db"
+
+  # Error handling (optional)
+  error_handling:
+    max_retries: 3
+    retry_delay_ms: 5000
+
+  # Performance tuning (optional)
+  performance:
+    max_concurrent_requests: 3
+    rate_limiting:
+      requests_per_minute: 30
+
+# Quick Start Examples:
+#
+# 1. Simple crawling only:
+#    Remove all AI stages, keep just the "crawl" stage
+#
+# 2. Content validation:
+#    Add validate_format task after crawl
+#
+# 3. Full AI processing:
+#    Add validate → enhance → classify → qa_check stages
+#
+# 4. PDF processing:
+#    Add pdf_extract stage with when: "content_type == 'pdf'"
+#
+# 5. Database storage:
+#    Configure database output with your connection string
+#
+# 6. Vector embeddings:
+#    Add vector_store output for RAG applications

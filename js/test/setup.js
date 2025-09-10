@@ -28,7 +28,7 @@ if (typeof globalThis.DOMMatrix === 'undefined') {
 }
 import 'reflect-metadata';
 import * as fs from 'fs';
-import puppeteerControl from '../src/services/puppeteer.js';
+import puppeteerControl from '../build/services/puppeteer.js';
 import { after, before } from 'mocha';
 // Aggressive pre-test cleanup
 before(async () => {

@@ -12,6 +12,7 @@ DearReader is a **local web crawler server** that converts web pages to LLM-frie
 - ⚡ **Queue-Based Processing**: Handle multiple scraping requests
 - 🐳 **Docker Containerized**: Easy deployment with Docker
 - 📊 **Performance Monitoring**: Built-in metrics and logging
+- 🤖 **Multi-Provider AI Integration**: Support for OpenAI, OpenRouter, and Gemini
 - 👨‍🔬 **Tested Implementation**: Comprehensive test suite
 
 ## 📚 Documentation Structure

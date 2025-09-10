@@ -29,6 +29,42 @@ dearreader/
 ```Python 3.11+
 - uv package installer
 
+### Installing Tesseract OCR
+
+Tesseract OCR is required for PDF text extraction and OCR functionality in the JavaScript tests.
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+```
+
+**CentOS/RHEL:**
+```bash
+sudo yum install -y tesseract
+```
+
+**Fedora:**
+```bash
+sudo dnf install -y tesseract
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S --noconfirm tesseract tesseract-data-eng
+```
+
+**macOS (with Homebrew):**
+```bash
+brew install tesseract tesseract-lang
+```
+
+**Windows:**
+Download from: https://github.com/UB-Mannheim/tesseract/wiki
+Add to PATH: `C:\Program Files\Tesseract-OCR`
+
+**Note:** The setup scripts will attempt to install Tesseract automatically on supported systems.
+
 ### 1. Clone Repository
 ```bash
 git clone https://github.com/postphotos/dearreader.git
@@ -152,6 +188,73 @@ npm install --prefix js/
 
 ## 🔧 Configuration
 
+### AI Provider Configuration
+
+DearReader supports multiple AI providers for text processing and parsing:
+
+```yaml
+# config.yaml
+ai_providers:
+  openai:
+    api_key: "your-openai-api-key"
+    base_url: "https://api.openai.com/v1"
+    model: "gpt-3.5-turbo"
+    temperature: 0.2
+    parsing_prompt: "Extract structured data from the following text:"
+    prompt_options:
+      max_tokens: 2048
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+    request_timeout_ms: 30000
+    max_retries: 2
+  openrouter:
+    api_key: "your-openrouter-api-key"
+    base_url: "https://openrouter.ai/api/v1"
+    model: "openrouter/gpt-4"
+    temperature: 0.2
+    parsing_prompt: "Extract structured data from the following text:"
+    prompt_options:
+      max_tokens: 2048
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+    request_timeout_ms: 30000
+    max_retries: 2
+  gemini:
+    api_key: "your-gemini-api-key"
+    base_url: "https://generativelanguage.googleapis.com/v1"
+    model: "gemini-pro"
+    temperature: 0.2
+    parsing_prompt: "Extract structured data from the following text:"
+    prompt_options:
+      max_tokens: 2048
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+    request_timeout_ms: 30000
+    max_retries: 2
+```
+
+### Environment Variables
+
+You can also configure AI providers using environment variables:
+
+```bash
+# OpenAI
+export OPENAI_API_KEY="your-openai-api-key"
+export OPENAI_MODEL="gpt-4"
+export OPENAI_TEMPERATURE="0.3"
+
+# OpenRouter
+export OPENROUTER_API_KEY="your-openrouter-api-key"
+export OPENROUTER_MODEL="openrouter/gpt-4"
+
+# Gemini
+export GEMINI_API_KEY="your-gemini-api-key"
+export GEMINI_MODEL="gemini-pro"
+```
+
 ### Environment Variables
 
 Create `.env` file in root directory:
@@ -160,6 +263,11 @@ Create `.env` file in root directory:
 # Server Configuration
 PORT=3001
 NODE_ENV=development
+
+# AI Providers (alternative to config.yaml)
+OPENAI_API_KEY=your_openai_key
+OPENROUTER_API_KEY=your_openrouter_key
+GEMINI_API_KEY=your_gemini_key
 
 # Database (optional)
 DATABASE_URL=postgresql://user:password@localhost:5432/reader

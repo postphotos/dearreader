@@ -70,14 +70,7 @@
                 "cwd": "${workspaceFolder}/webapp"
             },
             "isBackground": true,
-            "problemMatcher": {
-                "base": "$vite",
-                "background": {
-                    "activeOnStart": true,
-                    "beginsPattern": "vite",
-                    "endsPattern": "OK"
-                }
-            }
+            "problemMatcher": []
         },
         {
             "type": "npm",
@@ -92,14 +85,7 @@
                 }
             },
             "isBackground": true,
-            "problemMatcher": {
-                "base": "$vite",
-                "background": {
-                    "activeOnStart": true,
-                    "beginsPattern": "vite",
-                    "endsPattern": "OK"
-                }
-            }
+            "problemMatcher": []
         },
         {
             "type": "npm",

@@ -299,7 +299,7 @@ def step_docker(verbose: bool = False, clear_cache: bool = False) -> int:
         run_cmd(["docker", "builder", "prune", "-f"], timeout=60)
 
     print_info(f"Building Docker image '{DOCKER_IMAGE_NAME}'...")
-    build_cmd = ["docker", "build", "-t", DOCKER_IMAGE_NAME, "./docker"]
+    build_cmd = ["docker", "build", "-t", DOCKER_IMAGE_NAME, "-f", "docker/Dockerfile", "."]
     if clear_cache:
         build_cmd.insert(2, "--no-cache")
 

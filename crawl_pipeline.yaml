@@ -1,0 +1,1148 @@
+# DearReader AI-Enhanced Crawl Pipeline Configuration
+# ============================================================================
+#
+# DearReader is a focused content processing service that provides:
+# ✅ CLI and API interfaces for single URL crawling
+# ✅ AI-powered content extraction and processing
+# ✅ Configurable processing pipelines
+# ✅ Programmatic pipeline steps (database updates, etc.)
+#
+# DearReader does NOT provide:
+# ❌ Queue management or batch processing
+# ❌ XML/sitemap parsing
+# ❌ URL discovery or crawling multiple URLs
+# ❌ Built-in scheduling or automation
+#
+# Usage Examples:
+#   CLI: dearreader crawl "https://example.com/article"
+#   API: GET localhost:3000/json/https://example.com/article
+#   API: POST localhost:3000/crawl with JSON body {"url": "https://example.com"}
+#
+# ============================================================================
+
+# LLM Provider Definitions
+llm_providers:
+  # Primary providers for different use cases
+  primary_text:
+    provider: "openai-gpt-4"
+    model: "gpt-4"
+    temperature: 0.2
+    max_tokens: 2048
+    timeout_ms: 30000
+
+  primary_vision:
+    provider: "gemini-pro-vision"
+    model: "gemini-pro-vision"
+    temperature: 0.1
+    max_tokens: 4096
+    timeout_ms: 45000
+
+  fast_processing:
+    provider: "openai-gpt-3.5-turbo"
+    model: "gpt-3.5-turbo"
+    temperature: 0.3
+    max_tokens: 1024
+    timeout_ms: 20000
+
+  creative_enhancement:
+    provider: "openrouter-claude"
+    model: "anthropic/claude-3-haiku"
+    temperature: 0.7
+    max_tokens: 2048
+    timeout_ms: 35000
+
+  fallback:
+    provider: "openrouter-gpt-4"
+    model: "openai/gpt-4"
+    temperature: 0.2
+    max_tokens: 2048
+    timeout_ms: 30000
+
+# Prompt Definitions
+prompts:
+  # HTML Processing Prompts
+  html_to_markdown:
+    name: "Convert HTML to Markdown"
+    description: "Convert HTML content to clean, readable Markdown format"
+    template: |
+      Convert the following HTML content to clean, readable Markdown format.
+      Preserve all important information, links, and formatting.
+      Remove any navigation, ads, or irrelevant content.
+      Focus on the main article content.
+
+      HTML Content:
+      {content}
+
+      Instructions:
+      - Convert headers (h1, h2, etc.) to Markdown headers
+      - Convert links to Markdown format [text](url)
+      - Preserve code blocks and inline code
+      - Keep lists and formatting
+      - Remove scripts, styles, and navigation elements
+      - Ensure the output is clean and readable
+
+  extract_metadata:
+    name: "Extract Content Metadata"
+    description: "Extract key metadata from content"
+    template: |
+      Analyze the following content and extract key metadata.
+      Return the information in JSON format.
+
+      Content: {content}
+
+      Extract:
+      - title: Main title or headline
+      - author: Content author (if available)
+      - date: Publication date (if available)
+      - description: Brief summary or description
+      - keywords: Key topics or tags
+      - category: Content category or type
+      - language: Content language
+      - word_count: Approximate word count
+
+      Return as valid JSON object.
+
+  # PDF Processing Prompts
+  pdf_quality_check:
+    name: "PDF Content Quality Check"
+    description: "Check if extracted PDF content makes sense and is complete"
+    template: |
+      Analyze the following extracted PDF content and evaluate its quality.
+      Check if the content appears complete, readable, and properly formatted.
+
+      PDF Content:
+      {content}
+
+      Evaluate:
+      1. Is the content readable and properly formatted?
+      2. Does the text appear complete (no missing sections)?
+      3. Are there any obvious extraction errors or garbled text?
+      4. Is the content in the expected language?
+      5. Does the content structure make sense?
+
+      Provide a quality score (1-10) and brief explanation.
+      If quality is poor (< 7), recommend OCR processing.
+
+  pdf_ocr_extraction:
+    name: "PDF OCR Text Extraction"
+    description: "Extract text from PDF using OCR capabilities"
+    template: |
+      You have access to OCR capabilities for processing PDF content.
+      The following PDF content appears to have extraction issues.
+
+      Original Content:
+      {content}
+
+      Instructions:
+      - Use OCR to extract text from the PDF
+      - Focus on readable text content
+      - Preserve document structure where possible
+      - Handle multiple columns or complex layouts
+      - Return clean, readable text
+      - If OCR fails, return the original content
+
+  # Enhanced HTML Processing Prompts
+  content_categorization:
+    name: "Content Categorization"
+    description: "Categorize content by type and topic"
+    template: |
+      Analyze the following content and categorize it.
+
+      Content: {content}
+      Title: {title}
+
+      Determine:
+      1. Content Type: (article, blog, tutorial, news, documentation, etc.)
+      2. Main Category: (technology, business, health, education, etc.)
+      3. Sub-categories: (specific sub-topics)
+      4. Target Audience: (beginners, experts, general public, etc.)
+      5. Content Quality: (1-10 score)
+      6. Key Topics: (main subjects discussed)
+
+      Return as structured JSON.
+
+  business_info_extraction:
+    name: "Business Information Extraction"
+    description: "Extract business-related information"
+    template: |
+      Extract business information from the following content.
+
+      Content: {content}
+
+      Look for and extract:
+      - Business Name
+      - Address
+      - Phone Number
+      - Email
+      - Website
+      - Hours of Operation
+      - Services Offered
+      - Contact Information
+      - Location Details
+
+      Return as JSON object with found information.
+
+  # General Processing Prompts
+  json_formatting:
+    name: "Format as JSON"
+    description: "Format processed content as structured JSON"
+    template: |
+      Format the following processed content into a structured JSON object.
+
+      Content: {content}
+      Metadata: {metadata}
+      Additional Info: {additional_info}
+
+      Create a JSON structure with:
+      - Basic content information
+      - Extracted metadata
+      - Processing results
+      - Quality metrics
+      - Timestamps
+
+      Ensure the JSON is valid and well-structured.
+
+# Default Processing Pipelines
+pipelines:
+  # HTML Content Pipeline
+  html_default:
+    name: "HTML Content Processing Pipeline"
+    description: "Default pipeline for processing HTML web content"
+    content_type: "html"
+    stages:
+      - name: "auto_crawl"
+        type: "crawl"
+        description: "Automatically crawl and extract HTML content"
+        config:
+          format: "html"
+          include_metadata: true
+          include_links: false
+          include_images: false
+          timeout_ms: 30000
+          wait_for_selector: "main, article, .content, body"
+
+      - name: "convert_to_markdown"
+        type: "llm_process"
+        description: "Convert HTML to clean Markdown"
+        llm_provider: "fast_processing"
+        prompt: "html_to_markdown"
+        config:
+          input_field: "content"
+          output_field: "markdown_content"
+          preserve_links: true
+          clean_formatting: true
+
+      - name: "extract_metadata"
+        type: "llm_process"
+        description: "Extract metadata from content"
+        llm_provider: "primary_text"
+        prompt: "extract_metadata"
+        config:
+          input_field: "markdown_content"
+          output_field: "metadata"
+          extract_fields: ["title", "author", "date", "description", "keywords", "category"]
+
+      - name: "format_as_json"
+        type: "llm_process"
+        description: "Format final result as JSON"
+        llm_provider: "fast_processing"
+        prompt: "json_formatting"
+        config:
+          combine_fields: ["markdown_content", "metadata", "url", "crawl_timestamp"]
+          output_format: "structured_json"
+
+  # Enhanced HTML Pipeline (with additional LLM processing)
+  html_enhanced:
+    name: "Enhanced HTML Processing Pipeline"
+    description: "Extended pipeline with categorization and business info extraction"
+    content_type: "html"
+    extends: "html_default"
+    stages:
+      - name: "auto_crawl"
+        type: "crawl"
+        description: "Automatically crawl and extract HTML content"
+        config:
+          format: "html"
+          include_metadata: true
+          include_links: true
+          include_images: false
+          timeout_ms: 30000
+          wait_for_selector: "main, article, .content, body"
+
+      - name: "convert_to_markdown"
+        type: "llm_process"
+        description: "Convert HTML to clean Markdown"
+        llm_provider: "fast_processing"
+        prompt: "html_to_markdown"
+
+      - name: "categorize_content"
+        type: "llm_process"
+        description: "Categorize content by type and topic"
+        llm_provider: "primary_text"
+        prompt: "content_categorization"
+        config:
+          input_field: "markdown_content"
+          output_field: "categorization"
+
+      - name: "extract_business_info"
+        type: "llm_process"
+        description: "Extract business-related information"
+        llm_provider: "primary_text"
+        prompt: "business_info_extraction"
+        config:
+          input_field: "markdown_content"
+          output_field: "business_info"
+          conditional: "content_contains_business_keywords"
+
+      - name: "extract_metadata"
+        type: "llm_process"
+        description: "Extract metadata from content"
+        llm_provider: "primary_text"
+        prompt: "extract_metadata"
+
+      - name: "format_as_json"
+        type: "llm_process"
+        description: "Format final result as JSON"
+        llm_provider: "fast_processing"
+        prompt: "json_formatting"
+
+  # PDF Content Pipeline
+  pdf_default:
+    name: "PDF Content Processing Pipeline"
+    description: "Default pipeline for processing PDF documents"
+    content_type: "pdf"
+    stages:
+      - name: "auto_crawl"
+        type: "crawl"
+        description: "Download PDF file"
+        config:
+          format: "binary"
+          include_metadata: true
+          timeout_ms: 60000
+          max_file_size_mb: 50
+
+      - name: "extract_text"
+        type: "pdf_extract"
+        description: "Extract text from PDF using pdf-lib"
+        config:
+          enable_ocr_fallback: false
+          extract_tables: false
+          preserve_formatting: true
+          max_pages: 100
+
+      - name: "quality_check"
+        type: "llm_process"
+        description: "Check if extracted content makes sense"
+        llm_provider: "primary_text"
+        prompt: "pdf_quality_check"
+        config:
+          input_field: "extracted_text"
+          output_field: "quality_assessment"
+          quality_threshold: 7.0
+
+      - name: "ocr_extraction"
+        type: "llm_process"
+        description: "Re-extract with OCR if quality is poor"
+        llm_provider: "primary_vision"
+        prompt: "pdf_ocr_extraction"
+        config:
+          input_field: "extracted_text"
+          output_field: "ocr_text"
+          conditional: "quality_score < 7.0"
+          combine_with_original: true
+
+      - name: "format_as_json"
+        type: "llm_process"
+        description: "Format final result as JSON"
+        llm_provider: "fast_processing"
+        prompt: "json_formatting"
+        config:
+          combine_fields: ["final_text", "metadata", "quality_assessment", "processing_method"]
+
+  # PDF Enhanced Pipeline (with additional processing)
+  pdf_enhanced:
+    name: "Enhanced PDF Processing Pipeline"
+    description: "Extended PDF pipeline with advanced OCR and analysis"
+    content_type: "pdf"
+    extends: "pdf_default"
+    stages:
+      - name: "auto_crawl"
+        type: "crawl"
+        description: "Download PDF file"
+        config:
+          format: "binary"
+          include_metadata: true
+          timeout_ms: 60000
+          max_file_size_mb: 50
+
+      - name: "extract_text"
+        type: "pdf_extract"
+        description: "Extract text from PDF using pdf-lib"
+        config:
+          enable_ocr_fallback: true
+          extract_tables: true
+          preserve_formatting: true
+          max_pages: 100
+
+      - name: "quality_check"
+        type: "llm_process"
+        description: "Check if extracted content makes sense"
+        llm_provider: "primary_text"
+        prompt: "pdf_quality_check"
+
+      - name: "ocr_extraction"
+        type: "llm_process"
+        description: "Advanced OCR extraction with vision model"
+        llm_provider: "primary_vision"
+        prompt: "pdf_ocr_extraction"
+        config:
+          use_advanced_ocr: true
+          handle_multiple_columns: true
+          preserve_layout: true
+
+      - name: "content_analysis"
+        type: "llm_process"
+        description: "Analyze PDF content structure and type"
+        llm_provider: "primary_text"
+        prompt: "content_categorization"
+        config:
+          input_field: "final_text"
+          output_field: "content_analysis"
+
+      - name: "format_as_json"
+        type: "llm_process"
+        description: "Format final result as JSON"
+        llm_provider: "fast_processing"
+        prompt: "json_formatting"
+
+crawl_pipeline:
+  name: "AI-Enhanced Content Pipeline"
+  version: "1.0"
+  description: "Complete pipeline for crawling, validating, and enhancing web content with AI"
+
+  # Input sources - where to get URLs from
+  sources:
+    - type: "url_list"
+      name: "featured_articles"
+      urls:
+        - "https://example.com/article1"
+        - "https://example.com/article2"
+        - "https://example.com/article3"
+      priority: "high"
+      max_concurrent: 3
+
+# Programmatic Pipeline Steps
+# These allow you to execute custom code during pipeline processing
+programmatic_steps:
+  database_update:
+    name: "Update Database Row"
+    description: "Update a database row with processed content"
+    type: "javascript"
+    code: |
+      // Example: Update a database row
+      const db = require('./database');
+      const result = await db.updateContent({
+        url: context.url,
+        title: context.metadata?.title,
+        content: context.markdown_content,
+        processed_at: new Date().toISOString()
+      });
+      return { success: true, updated_rows: result.rowCount };
+
+  webhook_notification:
+    name: "Send Webhook Notification"
+    description: "Send webhook notification with processing results"
+    type: "javascript"
+    code: |
+      // Example: Send webhook notification
+      const axios = require('axios');
+      const webhookUrl = process.env.WEBHOOK_URL;
+      if (webhookUrl) {
+        await axios.post(webhookUrl, {
+          event: 'content_processed',
+          url: context.url,
+          title: context.metadata?.title,
+          processing_time_ms: context.processing_time,
+          success: context.success
+        });
+      }
+      return { success: true };
+
+  file_system_save:
+    name: "Save to File System"
+    description: "Save processed content to local file system"
+    type: "javascript"
+    code: |
+      // Example: Save to file system
+      const fs = require('fs').promises;
+      const path = require('path');
+
+      const outputDir = './processed_content';
+      await fs.mkdir(outputDir, { recursive: true });
+
+      const filename = `${Date.now()}_${context.url.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
+      const filepath = path.join(outputDir, filename);
+
+      await fs.writeFile(filepath, JSON.stringify(context, null, 2));
+      return { success: true, filepath };
+
+  log_processing:
+    name: "Log Processing Results"
+    description: "Log processing results to external service"
+    type: "javascript"
+    code: |
+      // Example: Log to external service
+      const logger = require('./logger');
+      await logger.info('Content processed', {
+        url: context.url,
+        title: context.metadata?.title,
+        processing_time: context.processing_time,
+        content_length: context.content?.length,
+        success: context.success
+      });
+      return { success: true };
+
+# Default Processing Pipelines
+# These define the processing steps for different content types
+pipelines:
+  # HTML Content Pipeline
+  html_default:
+    name: "HTML Content Processing Pipeline"
+    description: "Default pipeline for processing HTML web content"
+    content_type: "html"
+    stages:
+      - name: "crawl_content"
+        type: "crawl"
+        description: "Crawl and extract HTML content from URL"
+        config:
+          format: "html"
+          include_metadata: true
+          include_links: false
+          include_images: false
+          timeout_ms: 30000
+          wait_for_selector: "main, article, .content, body"
+
+      - name: "convert_to_markdown"
+        type: "llm_process"
+        description: "Convert HTML to clean Markdown"
+        llm_provider: "fast_processing"
+        prompt: "html_to_markdown"
+        config:
+          input_field: "content"
+          output_field: "markdown_content"
+          preserve_links: true
+          clean_formatting: true
+
+      - name: "extract_metadata"
+        type: "llm_process"
+        description: "Extract metadata from content"
+        llm_provider: "primary_text"
+        prompt: "extract_metadata"
+        config:
+          input_field: "markdown_content"
+          output_field: "metadata"
+          extract_fields: ["title", "author", "date", "description", "keywords", "category"]
+
+      - name: "format_as_json"
+        type: "llm_process"
+        description: "Format final result as JSON"
+        llm_provider: "fast_processing"
+        prompt: "json_formatting"
+        config:
+          combine_fields: ["markdown_content", "metadata", "url", "crawl_timestamp"]
+          output_format: "structured_json"
+
+      - name: "save_to_database"
+        type: "programmatic"
+        description: "Save results to database"
+        step: "database_update"
+        config:
+          table: "processed_content"
+          on_error: "continue"  # Continue processing even if DB update fails
+
+  # Enhanced HTML Pipeline (with additional LLM processing)
+  html_enhanced:
+    name: "Enhanced HTML Processing Pipeline"
+    description: "Extended pipeline with categorization and business info extraction"
+    content_type: "html"
+    extends: "html_default"
+    stages:
+      - name: "crawl_content"
+        type: "crawl"
+        description: "Crawl and extract HTML content from URL"
+        config:
+          format: "html"
+          include_metadata: true
+          include_links: true
+          include_images: false
+          timeout_ms: 30000
+          wait_for_selector: "main, article, .content, body"
+
+      - name: "convert_to_markdown"
+        type: "llm_process"
+        description: "Convert HTML to clean Markdown"
+        llm_provider: "fast_processing"
+        prompt: "html_to_markdown"
+
+      - name: "categorize_content"
+        type: "llm_process"
+        description: "Categorize content by type and topic"
+        llm_provider: "primary_text"
+        prompt: "content_categorization"
+        config:
+          input_field: "markdown_content"
+          output_field: "categorization"
+
+      - name: "extract_business_info"
+        type: "llm_process"
+        description: "Extract business-related information"
+        llm_provider: "primary_text"
+        prompt: "business_info_extraction"
+        config:
+          input_field: "markdown_content"
+          output_field: "business_info"
+          conditional: "content_contains_business_keywords"
+
+      - name: "extract_metadata"
+        type: "llm_process"
+        description: "Extract metadata from content"
+        llm_provider: "primary_text"
+        prompt: "extract_metadata"
+
+      - name: "format_as_json"
+        type: "llm_process"
+        description: "Format final result as JSON"
+        llm_provider: "fast_processing"
+        prompt: "json_formatting"
+
+      - name: "notify_webhook"
+        type: "programmatic"
+        description: "Send webhook notification"
+        step: "webhook_notification"
+        config:
+          on_error: "continue"
+
+      - name: "save_to_filesystem"
+        type: "programmatic"
+        description: "Save to local file system"
+        step: "file_system_save"
+        config:
+          output_directory: "./processed_content"
+          on_error: "continue"
+
+  # PDF Content Pipeline
+  pdf_default:
+    name: "PDF Content Processing Pipeline"
+    description: "Default pipeline for processing PDF documents"
+    content_type: "pdf"
+    stages:
+      - name: "download_pdf"
+        type: "crawl"
+        description: "Download PDF file from URL"
+        config:
+          format: "binary"
+          include_metadata: true
+          timeout_ms: 60000
+          max_file_size_mb: 50
+
+      - name: "extract_text"
+        type: "pdf_extract"
+        description: "Extract text from PDF using pdf-lib"
+        config:
+          enable_ocr_fallback: false
+          extract_tables: false
+          preserve_formatting: true
+          max_pages: 100
+
+      - name: "quality_check"
+        type: "llm_process"
+        description: "Check if extracted content makes sense"
+        llm_provider: "primary_text"
+        prompt: "pdf_quality_check"
+        config:
+          input_field: "extracted_text"
+          output_field: "quality_assessment"
+          quality_threshold: 7.0
+
+      - name: "ocr_extraction"
+        type: "llm_process"
+        description: "Re-extract with OCR if quality is poor"
+        llm_provider: "primary_vision"
+        prompt: "pdf_ocr_extraction"
+        config:
+          input_field: "extracted_text"
+          output_field: "ocr_text"
+          conditional: "quality_score < 7.0"
+          combine_with_original: true
+
+      - name: "format_as_json"
+        type: "llm_process"
+        description: "Format final result as JSON"
+        llm_provider: "fast_processing"
+        prompt: "json_formatting"
+        config:
+          combine_fields: ["final_text", "metadata", "quality_assessment", "processing_method"]
+
+      - name: "log_processing"
+        type: "programmatic"
+        description: "Log processing results"
+        step: "log_processing"
+        config:
+          on_error: "continue"
+
+  # PDF Enhanced Pipeline (with additional processing)
+  pdf_enhanced:
+    name: "Enhanced PDF Processing Pipeline"
+    description: "Extended PDF pipeline with advanced OCR and analysis"
+    content_type: "pdf"
+    extends: "pdf_default"
+    stages:
+      - name: "download_pdf"
+        type: "crawl"
+        description: "Download PDF file from URL"
+        config:
+          format: "binary"
+          include_metadata: true
+          timeout_ms: 60000
+          max_file_size_mb: 50
+
+      - name: "extract_text"
+        type: "pdf_extract"
+        description: "Extract text from PDF using pdf-lib"
+        config:
+          enable_ocr_fallback: true
+          extract_tables: true
+          preserve_formatting: true
+          max_pages: 100
+
+      - name: "quality_check"
+        type: "llm_process"
+        description: "Check if extracted content makes sense"
+        llm_provider: "primary_text"
+        prompt: "pdf_quality_check"
+
+      - name: "ocr_extraction"
+        type: "llm_process"
+        description: "Advanced OCR extraction with vision model"
+        llm_provider: "primary_vision"
+        prompt: "pdf_ocr_extraction"
+        config:
+          use_advanced_ocr: true
+          handle_multiple_columns: true
+          preserve_layout: true
+
+      - name: "content_analysis"
+        type: "llm_process"
+        description: "Analyze PDF content structure and type"
+        llm_provider: "primary_text"
+        prompt: "content_categorization"
+        config:
+          input_field: "final_text"
+          output_field: "content_analysis"
+
+      - name: "format_as_json"
+        type: "llm_process"
+        description: "Format final result as JSON"
+        llm_provider: "fast_processing"
+        prompt: "json_formatting"
+
+      - name: "save_to_database"
+        type: "programmatic"
+        description: "Save enhanced results to database"
+        step: "database_update"
+        config:
+          table: "processed_pdfs"
+          include_analysis: true
+          on_error: "continue"
+
+# ============================================================================
+# SERVICE CONFIGURATION
+# ============================================================================
+
+# Service Configuration
+service:
+  name: "DearReader"
+  version: "2.0"
+  description: "AI-powered content processing service for single URLs"
+
+  # What DearReader DOES provide:
+  features:
+    - "CLI interface for crawling single URLs"
+    - "REST API for crawling single URLs"
+    - "AI-powered content extraction and processing"
+    - "Configurable processing pipelines"
+    - "Programmatic pipeline steps (database updates, webhooks, etc.)"
+    - "Multiple LLM provider support"
+    - "Custom prompt templates"
+    - "Content type detection (HTML, PDF, etc.)"
+    - "Error handling and retry logic"
+    - "Processing metrics and logging"
+
+  # What DearReader does NOT provide:
+  limitations:
+    - "Queue management or batch processing"
+    - "XML/sitemap parsing or URL discovery"
+    - "Multiple URL crawling in a single request"
+    - "Built-in scheduling or automation"
+    - "Distributed processing"
+    - "Load balancing"
+    - "URL validation or normalization"
+    - "Robots.txt compliance checking"
+    - "Rate limiting across multiple requests"
+
+# API Configuration
+api:
+  base_url: "http://localhost:3000"
+  endpoints:
+    # Crawl a single URL and return JSON
+    - path: "/json/{url}"
+      method: "GET"
+      description: "Crawl URL and return processed content as JSON"
+      example: "GET /json/https://example.com/article"
+
+    # Crawl with custom pipeline
+    - path: "/crawl"
+      method: "POST"
+      description: "Crawl URL with custom configuration"
+      body:
+        url: "https://example.com"
+        pipeline: "html_enhanced"
+        options:
+          timeout_ms: 30000
+          include_images: false
+
+    # Health check
+    - path: "/health"
+      method: "GET"
+      description: "Service health check"
+
+# CLI Configuration
+cli:
+  commands:
+    - name: "crawl"
+      description: "Crawl a single URL"
+      usage: "dearreader crawl <url> [options]"
+      examples:
+        - "dearreader crawl https://example.com"
+        - "dearreader crawl https://example.com --pipeline html_enhanced"
+        - "dearreader crawl https://example.com --output results.json"
+
+    - name: "config"
+      description: "Show current configuration"
+      usage: "dearreader config"
+
+    - name: "health"
+      description: "Check service health"
+      usage: "dearreader health"
+
+# Error Handling Configuration
+error_handling:
+  max_retries: 3
+  retry_delay_ms: 5000
+  exponential_backoff: true
+  max_backoff_ms: 60000
+
+  fallback_providers:
+    - provider: "fast_processing"
+      when: "primary_provider_failed"
+    - provider: "fallback"
+      when: "all_providers_failed"
+
+# Performance Configuration
+performance:
+  max_concurrent_requests: 5
+  rate_limiting:
+    requests_per_minute: 60
+    burst_limit: 10
+
+  # Provider-specific limits
+  provider_limits:
+    openai-gpt-3.5-turbo: 50
+    openai-gpt-4: 20
+    openrouter-gpt-4: 30
+    openrouter-claude: 25
+    gemini-pro: 20
+    gemini-pro-vision: 15
+
+  # Stage-specific timeouts
+  stage_timeouts:
+    crawl: 30000
+    llm_process: 45000
+    pdf_extract: 120000
+    programmatic: 30000
+
+# Monitoring Configuration
+monitoring:
+  enable_metrics: true
+  log_level: "info"
+  metrics_interval_ms: 30000
+
+  alert_on:
+    - condition: "llm_task_failure_rate > 10%"
+      severity: "warning"
+      message: "High LLM task failure rate detected"
+    - condition: "processing_time > 300000"
+      severity: "error"
+      message: "Processing time exceeding threshold"
+    - condition: "memory_usage > 80%"
+      severity: "critical"
+      message: "High memory usage detected"
+
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+
+# CLI Usage Examples:
+#
+# Basic crawling:
+# dearreader crawl "https://example.com/article"
+#
+# With custom pipeline:
+# dearreader crawl "https://example.com" --pipeline html_enhanced
+#
+# Save to file:
+# dearreader crawl "https://example.com" --output article.json
+#
+# API Usage Examples:
+#
+# Basic JSON response:
+# GET http://localhost:3000/json/https://example.com/article
+#
+# Custom pipeline via API:
+# POST http://localhost:3000/crawl
+# {
+#   "url": "https://example.com",
+#   "pipeline": "pdf_enhanced",
+#   "options": {
+#     "timeout_ms": 60000,
+#     "include_metadata": true
+#   }
+# }
+#
+# Programmatic Usage:
+# const dearreader = require('dearreader');
+# const result = await dearreader.crawl('https://example.com', {
+#   pipeline: 'html_default'
+# });
+
+# Legacy Processing Stages (for backward compatibility)
+crawl_pipeline:
+  name: "AI-Enhanced Content Pipeline"
+  version: "2.0"
+  description: "Complete pipeline for crawling, validating, and enhancing web content with AI"
+
+  # Input sources - where to get URLs from
+  sources:
+    - type: "url_list"
+      name: "featured_articles"
+      urls:
+        - "https://example.com/article1"
+        - "https://example.com/article2"
+        - "https://example.com/article3"
+      priority: "high"
+      max_concurrent: 3
+
+  # Processing stages - what to do with each URL
+  stages:
+    # Stage 1: Basic crawling (no AI required)
+    - name: "crawl"
+      type: "crawl_only"
+      description: "Extract basic content and metadata"
+      config:
+        format: "json"
+        include_metadata: true
+        include_links: true
+        include_images: true
+        timeout_ms: 30000
+        wait_for_selector: "main, article, .content"
+      when: "always"
+      retry_on_failure: true
+      max_retries: 2
+
+    # Stage 2: Content validation (AI-powered)
+    - name: "validate"
+      type: "llm_process"
+      description: "Validate content structure and completeness"
+      llm_provider: "primary_text"
+      prompt: "extract_metadata"
+      config:
+        required_fields: ["title", "content", "author", "date"]
+        fallback_on_error: true
+        timeout_ms: 45000
+      when: "content_extracted"
+      depends_on: ["crawl"]
+
+    # Stage 3: Content enhancement (AI-powered)
+    - name: "enhance"
+      type: "llm_process"
+      description: "Improve readability and structure"
+      llm_provider: "creative_enhancement"
+      prompt: "html_to_markdown"
+      config:
+        preserve_metadata: true
+        max_tokens: 2048
+        temperature: 0.3
+      when: "validation_passed"
+      depends_on: ["validate"]
+
+    # Stage 4: PDF processing (specialized AI)
+    - name: "pdf_extract"
+      type: "llm_process"
+      description: "Extract and process PDF content"
+      llm_provider: "primary_vision"
+      prompt: "pdf_ocr_extraction"
+      config:
+        enable_ocr: true
+        extract_tables: true
+        preserve_formatting: false
+        max_pages: 50
+        language: "en"
+      when: "content_type == 'pdf'"
+      depends_on: ["crawl"]
+
+    # Stage 5: Content classification (AI-powered)
+    - name: "classify"
+      type: "llm_process"
+      description: "Categorize and tag content"
+      llm_provider: "primary_text"
+      prompt: "content_categorization"
+      config:
+        output_format: "structured"
+      when: "validation_passed"
+      depends_on: ["validate"]
+
+    # Stage 6: Quality assurance (AI-powered)
+    - name: "qa_check"
+      type: "llm_process"
+      description: "Final quality check and reporting"
+      llm_provider: "primary_text"
+      prompt: "json_formatting"
+      config:
+        check_criteria: ["completeness", "accuracy", "readability", "seo", "engagement"]
+        generate_report: true
+        output_format: "detailed"
+      when: "always"
+      depends_on: ["enhance", "classify"]
+
+  # Output destinations - where to save results
+  outputs:
+    - type: "json_file"
+      name: "structured_output"
+      path: "./output/processed_content.json"
+      format: "structured"
+      include_metadata: true
+      include_processing_history: true
+
+    - type: "markdown_files"
+      name: "markdown_articles"
+      path: "./output/articles/"
+      naming: "title_slug"
+      include_frontmatter: true
+      frontmatter_fields: ["title", "author", "date", "category", "tags", "quality_score"]
+
+    - type: "database"
+      name: "postgresql_storage"
+      connection: "postgresql://localhost:5432/content_db"
+      table: "processed_articles"
+      create_table_if_not_exists: true
+      fields_mapping:
+        title: "title"
+        content: "content_markdown"
+        author: "author_name"
+        date: "published_date"
+        category: "main_category"
+        tags: "tags_array"
+
+    - type: "vector_store"
+      name: "embeddings_store"
+      type: "pinecone"
+      index: "content-embeddings"
+      api_key: "${PINECONE_API_KEY}"
+      environment: "${PINECONE_ENVIRONMENT}"
+      metadata_fields: ["title", "author", "category", "tags", "quality_score"]
+
+  # Error handling and recovery
+  error_handling:
+    max_retries: 3
+    retry_delay_ms: 5000
+    exponential_backoff: true
+    max_backoff_ms: 60000
+
+    fallback_tasks:
+      - task: "general_chat"
+        when: "ai_task_failed"
+        description: "Use simple model as fallback for failed AI tasks"
+
+    circuit_breaker:
+      failure_threshold: 5
+      recovery_timeout_ms: 60000
+      fallback_provider: "openai-gpt-3.5-turbo"
+      monitoring_window_ms: 300000
+
+  # Performance tuning
+  performance:
+    max_concurrent_requests: 5
+    rate_limiting:
+      requests_per_minute: 60
+      burst_limit: 10
+
+    # Provider-specific limits
+    provider_limits:
+      openai-gpt-3.5-turbo: 50
+      openai-gpt-4: 20
+      openrouter-gpt-4: 30
+      openrouter-claude: 25
+      gemini-pro: 20
+      gemini-pro-vision: 15
+
+    # Stage-specific timeouts
+    stage_timeouts:
+      crawl: 30000
+      validate: 45000
+      enhance: 60000
+      pdf_extract: 120000
+      classify: 30000
+      qa_check: 45000
+
+  # Monitoring and logging
+  monitoring:
+    enable_metrics: true
+    log_level: "info"
+    metrics_interval_ms: 30000
+
+    alert_on:
+      - condition: "ai_task_failure_rate > 10%"
+        severity: "warning"
+        message: "High AI task failure rate detected"
+      - condition: "processing_time > 300000"
+        severity: "error"
+        message: "Processing time exceeding threshold"
+      - condition: "memory_usage > 80%"
+        severity: "critical"
+        message: "High memory usage detected"
+
+    # External monitoring integration
+    external_monitoring:
+      enabled: false
+      endpoint: "https://monitoring.example.com/webhook"
+      api_key: "${MONITORING_API_KEY}"
+
+  # Quality thresholds
+  quality:
+    min_content_length: 100
+    max_content_length: 50000
+    required_metadata_fields: ["title", "content"]
+    content_quality_threshold: 7.0
+
+    # Automatic filtering
+    filters:
+      - type: "content_length"
+        min_length: 100
+        action: "skip"
+      - type: "quality_score"
+        min_score: 5.0
+        action: "flag"
+      - type: "duplicate_detection"
+        enabled: true
+        similarity_threshold: 0.85
+        action: "skip"

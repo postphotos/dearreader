@@ -24,6 +24,11 @@ def make_mock_resp(status=200, text='', json_data=None, headers=None):
             if self.status_code >= 400:
                 raise requests.HTTPError(f"Status {self.status_code}")
         def json(self):
+            if self.text and not json_data:
+                try:
+                    return json.loads(self.text)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Invalid JSON: {e}") from e
             return json_data
     return Resp()
 
@@ -111,7 +116,7 @@ class TestReaderAPI:
         assert result == html_content
         mock_get.assert_called_once()
         call_args = mock_get.call_args
-        assert call_args[1]['headers']['Accept'] == 'text/html'
+        assert call_args[1]['headers']['X-Respond-With'] == 'html'
 
     @patch('requests.get')
     def test_request_with_params(self, mock_get):

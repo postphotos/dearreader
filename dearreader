@@ -198,6 +198,48 @@ cmd_setup() {
 
     log_success "Node.js environment ready"
 
+    # Check for Tesseract OCR (needed for PDF OCR functionality)
+    if ! command -v tesseract >/dev/null 2>&1; then
+        log_warn "Tesseract OCR not found. Installing Tesseract for PDF OCR functionality..."
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            # Linux (Ubuntu/Debian)
+            if command -v apt-get >/dev/null 2>&1; then
+                run_cmd "sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-eng" "Installing Tesseract OCR (Ubuntu/Debian)"
+            elif command -v yum >/dev/null 2>&1; then
+                run_cmd "sudo yum install -y tesseract" "Installing Tesseract OCR (CentOS/RHEL)"
+            elif command -v dnf >/dev/null 2>&1; then
+                run_cmd "sudo dnf install -y tesseract" "Installing Tesseract OCR (Fedora)"
+            elif command -v pacman >/dev/null 2>&1; then
+                run_cmd "sudo pacman -S --noconfirm tesseract tesseract-data-eng" "Installing Tesseract OCR (Arch Linux)"
+            else
+                log_warn "Could not determine package manager. Please install Tesseract OCR manually:"
+                log_warn "  Ubuntu/Debian: sudo apt-get install tesseract-ocr tesseract-ocr-eng"
+                log_warn "  CentOS/RHEL: sudo yum install tesseract"
+                log_warn "  Fedora: sudo dnf install tesseract"
+                log_warn "  Arch: sudo pacman -S tesseract tesseract-data-eng"
+                log_warn "  macOS: brew install tesseract tesseract-lang"
+                log_warn "  Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki"
+            fi
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            if command -v brew >/dev/null 2>&1; then
+                run_cmd "brew install tesseract tesseract-lang" "Installing Tesseract OCR (macOS)"
+            else
+                log_warn "Homebrew not found. Please install Tesseract OCR manually:"
+                log_warn "  brew install tesseract tesseract-lang"
+            fi
+        elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+            # Windows
+            log_warn "Tesseract OCR installation on Windows requires manual setup:"
+            log_warn "  Download from: https://github.com/UB-Mannheim/tesseract/wiki"
+            log_warn "  Add to PATH: C:\\Program Files\\Tesseract-OCR"
+        else
+            log_warn "Unsupported OS for automatic Tesseract installation. Please install manually."
+        fi
+    else
+        log_success "Tesseract OCR is already installed"
+    fi
+
     # Check for uv (Python package manager)
     if ! command -v uv >/dev/null 2>&1; then
         log_warn "uv not found. Installing uv for faster Python package management..."
@@ -280,6 +322,21 @@ cmd_dev() {
 
     # Clean up any existing containers
     run_cmd "docker-compose down --remove-orphans" "Cleaning up existing containers"
+
+    # Run all tests first
+    echo -e "\n${YELLOW}Running all tests before starting dev environment...${NC}"
+    if cmd_test "all"; then
+        log_success "All tests passed! Starting development environment..."
+    else
+        log_error "Some tests failed. Check the output above for details."
+        echo -e "\n${YELLOW}You can run tests manually with:${NC}"
+        echo -e "  ${WHITE}./dearreader test all${NC}"
+        if [ "$FORCE" != true ]; then
+            log_error "Exiting due to test failures. Use --force to continue anyway."
+            exit 1
+        fi
+        log_warn "Continuing despite test failures (--force used)"
+    fi
 
     # Start development environment
     run_cmd "docker-compose --profile dev up --build -d" "Starting development services"

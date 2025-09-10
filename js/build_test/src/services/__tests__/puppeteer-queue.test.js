@@ -56,7 +56,7 @@ describe('PuppeteerControl Queue System', () => {
                             this.requestQueue.splice(index, 1);
                             reject(new Error('Page request timeout'));
                         }
-                    }, 30000);
+                    }, 100); // Reduced from 30000ms to 100ms for faster testing
                     request.resolve = (page) => { clearTimeout(timeout); resolve(page); };
                     request.reject = (error) => { clearTimeout(timeout); reject(error); };
                     // Intentionally not calling processQueue() to let test control processing
@@ -216,7 +216,7 @@ describe('PuppeteerControl Queue System', () => {
     });
     describe('Error Handling', () => {
         it('should handle request timeouts', async function () {
-            this.timeout(31000); // Increase timeout to allow for the 30s mock timeout
+            this.timeout(500); // Reduced from 31000ms to 500ms to match faster mock timeout
             const promise = puppeteerControl.getNextPage(0);
             try {
                 await promise;

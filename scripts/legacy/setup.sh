@@ -110,3 +110,51 @@ else
     echo "❌ Failed to install Node.js dependencies. Please check your npm installation."
     exit 1
 fi
+
+# Check for Tesseract OCR (needed for PDF OCR functionality)
+echo "🔍 Checking for Tesseract OCR..."
+if ! command -v tesseract &> /dev/null; then
+    echo "⚠️  Tesseract OCR not found. Installing Tesseract for PDF OCR functionality..."
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Linux (Ubuntu/Debian)
+        if command -v apt-get &> /dev/null; then
+            echo "📦 Installing Tesseract OCR (Ubuntu/Debian)..."
+            sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+        elif command -v yum &> /dev/null; then
+            echo "📦 Installing Tesseract OCR (CentOS/RHEL)..."
+            sudo yum install -y tesseract
+        elif command -v dnf &> /dev/null; then
+            echo "📦 Installing Tesseract OCR (Fedora)..."
+            sudo dnf install -y tesseract
+        elif command -v pacman &> /dev/null; then
+            echo "📦 Installing Tesseract OCR (Arch Linux)..."
+            sudo pacman -S --noconfirm tesseract tesseract-data-eng
+        else
+            echo "⚠️  Could not determine package manager. Please install Tesseract OCR manually:"
+            echo "   Ubuntu/Debian: sudo apt-get install tesseract-ocr tesseract-ocr-eng"
+            echo "   CentOS/RHEL: sudo yum install tesseract"
+            echo "   Fedora: sudo dnf install tesseract"
+            echo "   Arch: sudo pacman -S tesseract tesseract-data-eng"
+            echo "   macOS: brew install tesseract tesseract-lang"
+            echo "   Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki"
+        fi
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        if command -v brew &> /dev/null; then
+            echo "📦 Installing Tesseract OCR (macOS)..."
+            brew install tesseract tesseract-lang
+        else
+            echo "⚠️  Homebrew not found. Please install Tesseract OCR manually:"
+            echo "   brew install tesseract tesseract-lang"
+        fi
+    elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+        # Windows
+        echo "⚠️  Tesseract OCR installation on Windows requires manual setup:"
+        echo "   Download from: https://github.com/UB-Mannheim/tesseract/wiki"
+        echo "   Add to PATH: C:\\Program Files\\Tesseract-OCR"
+    else
+        echo "⚠️  Unsupported OS for automatic Tesseract installation. Please install manually."
+    fi
+else
+    echo "✅ Tesseract OCR is already installed"
+fi

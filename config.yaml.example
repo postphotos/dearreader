@@ -127,15 +127,58 @@ environment:
   # Use a single-process in development
   single_process_dev: true
 
-openai:
-  # OpenAI API key (read from environment in runtime; placeholder here for documentation)
-  api_key: ""
-  # Base URL override (useful for proxies or OpenAI-compatible endpoints)
-  base_url: "https://api.openai.com/v1"
-  # Request timeout in milliseconds
-  request_timeout_ms: 30000
-  # Max retry attempts for transient OpenAI errors
-  max_retries: 2
+ai_providers:
+  openai:
+    # OpenAI API key (read from environment in runtime; placeholder here for documentation)
+    api_key: ""
+    # Base URL override (useful for proxies or OpenAI-compatible endpoints)
+    base_url: "https://api.openai.com/v1"
+    # Model to use (e.g., gpt-3.5-turbo, gpt-4, etc.)
+    model: "gpt-3.5-turbo"
+    # Temperature for generation (0.0 = deterministic, 1.0 = creative)
+    temperature: 0.2
+    # Default prompt for parsing tasks
+    parsing_prompt: "Extract structured data from the following text:"
+    # Additional prompt options for parsing (can be extended)
+    prompt_options:
+      max_tokens: 2048
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+    # Request timeout in milliseconds
+    request_timeout_ms: 30000
+    # Max retry attempts for transient OpenAI errors
+    max_retries: 2
+  openrouter:
+    # OpenRouter API key
+    api_key: ""
+    # Base URL for OpenRouter endpoints
+    base_url: "https://openrouter.ai/api/v1"
+    model: "openrouter/gpt-4"
+    temperature: 0.2
+    parsing_prompt: "Extract structured data from the following text:"
+    prompt_options:
+      max_tokens: 2048
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+    request_timeout_ms: 30000
+    max_retries: 2
+  gemini:
+    # Gemini API key
+    api_key: ""
+    # Base URL for Gemini endpoints
+    base_url: "https://generativelanguage.googleapis.com/v1"
+    model: "gemini-pro"
+    temperature: 0.2
+    parsing_prompt: "Extract structured data from the following text:"
+    prompt_options:
+      max_tokens: 2048
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+    request_timeout_ms: 30000
+    max_retries: 2
 
 concurrency:
   # API-level concurrency limit for incoming requests (global)

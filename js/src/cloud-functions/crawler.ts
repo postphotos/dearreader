@@ -852,6 +852,8 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                     .fromPairs()
                     .value();
             }
+            // For JSON responses, use plain text instead of markdown to avoid HTML tags
+            formatted.content = snapshot.text || cleanText;
         }
 
         return formatted;

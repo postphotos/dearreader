@@ -5,7 +5,7 @@ import app
 def test_run_cmd_type_validation():
     # run_cmd should require a list for the cmd argument
     with pytest.raises(TypeError):
-        app.run_cmd(['ls'])
+        app.run_cmd('ls')  # Should fail with string instead of list
 
 
 def test_ensure_port_available_delegates(monkeypatch):
