@@ -66,7 +66,10 @@
     "tsyringe": "^4.10.0",
     "turndown": "^7.2.1",
     "turndown-plugin-gfm": "^1.0.2",
-    "undici": "^7.15.0"
+    "undici": "^7.15.0",
+    "winston": "^3.13.0",
+    "joi": "^17.13.3",
+    "node-cache": "^5.1.2"
   },
   "devDependencies": {
     "@types/archiver": "^6.0.3",
@@ -97,6 +100,6 @@
     "glob": "^10.4.2",
     "rimraf": "^5.0.10",
     "inflight": "npm:lru-cache@^10.4.2",
-    "unicode-9.0.0": "@unicode/unicode-9.0.0@^1.0.0"
+    "@unicode/unicode-9.0.0": "^1.0.0"
   }
 }

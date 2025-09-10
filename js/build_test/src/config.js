@@ -14,6 +14,10 @@ function loadYamlConfig() {
 const yamlCfg = loadYamlConfig();
 const config = {
     url: yamlCfg.url || process.env.READER_BASE_URL || 'http://localhost:3001/',
+    base_path: {
+        enabled: yamlCfg.base_path?.enabled ?? false,
+        path: yamlCfg.base_path?.path || '/dearreader/',
+    },
     openai: {
         api_key: process.env.OPENAI_API_KEY || (yamlCfg.openai && yamlCfg.openai.api_key) || '',
         base_url: process.env.OPENAI_BASE_URL || (yamlCfg.openai && yamlCfg.openai.base_url) || 'https://api.openai.com/v1',

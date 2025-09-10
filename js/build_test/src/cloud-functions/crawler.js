@@ -149,7 +149,8 @@ let CrawlerHost = class CrawlerHost extends RPCHost {
             const configPath = path.join(process.cwd(), 'config.yaml');
             if (fs.existsSync(configPath)) {
                 const configContent = fs.readFileSync(configPath, 'utf8');
-                this.config = yaml.load(configContent) || {};
+                const loadedConfig = yaml.load(configContent);
+                this.config = loadedConfig || {};
                 console.log('Loaded configuration from config.yaml:', this.config);
             }
             else {
@@ -367,7 +368,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                 replacement: () => ''
             });
             turnDownService.addRule('truncate-svg', {
-                filter: 'svg',
+                filter: (node) => node.nodeName === 'SVG',
                 replacement: () => ''
             });
             turnDownService.addRule('title-as-h1', {
@@ -380,8 +381,9 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             turnDownService.addRule('data-url-to-pseudo-object-url', {
                 filter: (node) => Boolean(node.tagName === 'IMG' && node.getAttribute('src')?.startsWith('data:')),
                 replacement: (_content, node) => {
-                    const src = (node.getAttribute('src') || '').trim();
-                    const alt = cleanAttribute(node.getAttribute('alt')) || '';
+                    const element = node; // TurndownService types are incomplete
+                    const src = (element.getAttribute('src') || '').trim();
+                    const alt = cleanAttribute(element.getAttribute('alt')) || '';
                     if (options.url) {
                         const refUrl = new URL(options.url.toString());
                         const mappedUrl = new URL(`blob:${refUrl.origin}/${CrawlerHost_1.md5Hasher.hash(src)}`);
@@ -408,10 +410,11 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                     node.getAttribute('href'));
             },
             replacement: function (content, node) {
-                let href = node.getAttribute('href');
+                const element = node; // TurndownService types are incomplete
+                let href = element.getAttribute('href');
                 if (href)
                     href = href.replace(/([()])/g, '\\$1');
-                let title = cleanAttribute(node.getAttribute('title'));
+                let title = cleanAttribute(element.getAttribute('title'));
                 if (title)
                     title = ' "' + title.replace(/"/g, '\\"') + '"';
                 const fixedContent = content.replace(/\s+/g, ' ').trim();
@@ -429,8 +432,9 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
         });
         turnDownService.addRule('improved-code', {
             filter: function (node) {
-                let hasSiblings = node.previousSibling || node.nextSibling;
-                let isCodeBlock = node.parentNode.nodeName === 'PRE' && !hasSiblings;
+                const element = node; // TurndownService types are incomplete
+                let hasSiblings = element.previousSibling || element.nextSibling;
+                let isCodeBlock = element.parentNode?.nodeName === 'PRE' && !hasSiblings;
                 return node.nodeName === 'CODE' && !isCodeBlock;
             },
             replacement: function (inputContent) {
@@ -438,7 +442,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                     return '';
                 let content = inputContent;
                 let delimiter = '`';
-                let matches = content.match(/`+/gm) || [];
+                const matches = content.match(/`+/gm) || [];
                 while (matches.indexOf(delimiter) !== -1)
                     delimiter = delimiter + '`';
                 if (content.includes('\n')) {
@@ -461,7 +465,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             const imageSummary = {};
             const imageIdxTrack = new Map();
             let imgIdx = 0;
-            for (const img of inferred.imgs) {
+            for (const img of (inferred.imgs || [])) {
                 const imgSerial = ++imgIdx;
                 const idxArr = imageIdxTrack.has(img.src) ? imageIdxTrack.get(img.src) : [];
                 idxArr.push(imgSerial);
@@ -475,13 +479,13 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                     return [`Image ${(imageIdxTrack?.get(url) || [i + 1]).join(',')}${alt ? `: ${alt}` : ''}`, url];
                 }).fromPairs()
                     .value();
-            console.log(`Generated image summary with ${Object.keys(mixin.images).length} images`);
+            console.log(`Generated image summary with ${Object.keys(mixin.images || {}).length} images`);
         }
         if (this.threadLocal.get('withLinksSummary')) {
             console.log('Generating link summary');
             inferred ??= this.jsdomControl.inferSnapshot(snapshot);
             mixin.links = _.invert(inferred.links || {});
-            console.log(`Generated link summary with ${Object.keys(mixin.links).length} links`);
+            console.log(`Generated link summary with ${Object.keys(mixin.links || {}).length} links`);
         }
         return mixin;
     }
@@ -595,9 +599,10 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                 turnDownService.addRule('img-generated-alt', {
                     filter: 'img',
                     replacement: (_content, node) => {
-                        let linkPreferredSrc = (node.getAttribute('src') || '').trim();
+                        const element = node; // TurndownService types are incomplete
+                        let linkPreferredSrc = (element.getAttribute('src') || '').trim();
                         if (!linkPreferredSrc || linkPreferredSrc.startsWith('data:')) {
-                            const dataSrc = (node.getAttribute('data-src') || '').trim();
+                            const dataSrc = (element.getAttribute('data-src') || '').trim();
                             if (dataSrc && !dataSrc.startsWith('data:')) {
                                 linkPreferredSrc = dataSrc;
                             }
@@ -609,7 +614,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                         catch (_err) {
                             void 0;
                         }
-                        const alt = cleanAttribute(node.getAttribute('alt'));
+                        const alt = cleanAttribute(element.getAttribute('alt'));
                         if (!src) {
                             return '';
                         }
@@ -963,31 +968,52 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
             throw error;
         }
     }
-    async crawl(req, res) {
-        this.logger.info(`Crawl request received for URL: ${req.url}`);
-        console.log('Crawl method called with request:', req.url);
-        try {
-            let noSlashURL = req.url.slice(1);
-            // Handle JSON endpoint: /json/https://example.com
-            let forceJsonResponse = false;
-            if (noSlashURL.startsWith('json/')) {
-                forceJsonResponse = true;
-                noSlashURL = noSlashURL.slice(5); // Remove 'json/' prefix
-                console.log('JSON endpoint detected, forcing JSON response for URL:', noSlashURL);
-            }
-            // Handle favicon.ico request early
-            if (noSlashURL === 'favicon.ico') {
-                console.log('Favicon request detected');
-                return sendResponse(res, 'Favicon not available', { contentType: 'text/plain', code: 404 });
-            }
-            // Handle root path - return index
-            if (!noSlashURL || noSlashURL === '/') {
-                console.log('Root path requested, returning index');
-                const indexPage = this.getIndex(req);
-                // Convert markdown to HTML and wrap in a proper HTML page
-                const markdownContent = indexPage.toString();
-                const htmlContent = this.markdownToHtml(markdownContent);
-                const fullHtmlPage = `<!DOCTYPE html>
+    /**
+     * Parses the incoming request URL and determines the target URL to crawl
+     */
+    parseRequestUrl(req) {
+        let noSlashURL = req.url.slice(1);
+        let forceJsonResponse = false;
+        // Handle JSON endpoint: /json/https://example.com
+        if (noSlashURL.startsWith('json/')) {
+            forceJsonResponse = true;
+            noSlashURL = noSlashURL.slice(5); // Remove 'json/' prefix
+            console.log('JSON endpoint detected, forcing JSON response for URL:', noSlashURL);
+        }
+        return { url: noSlashURL, forceJson: forceJsonResponse };
+    }
+    /**
+     * Handles special routes (favicon, root path, screenshots)
+     * Returns the response if handled, null if should continue with normal flow
+     */
+    async handleSpecialRoutes(req, res, url) {
+        // Handle favicon.ico request early
+        if (url === 'favicon.ico') {
+            console.log('Favicon request detected');
+            sendResponse(res, 'Favicon not available', { contentType: 'text/plain', code: 404 });
+            return true;
+        }
+        // Handle root path - return index
+        if (!url || url === '/') {
+            console.log('Root path requested, returning index');
+            await this.serveIndexPage(req, res);
+            return true;
+        }
+        // Check if the request is for a local screenshot
+        if (url.startsWith('instant-screenshots/')) {
+            this.serveScreenshot(url, res);
+            return true;
+        }
+        return false;
+    }
+    /**
+     * Serves the index page with HTML styling
+     */
+    async serveIndexPage(req, res) {
+        const indexPage = this.getIndex(req);
+        const markdownContent = indexPage.toString();
+        const htmlContent = this.markdownToHtml(markdownContent);
+        const fullHtmlPage = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1067,134 +1093,191 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
     </div>
 </body>
 </html>`;
-                return sendResponse(res, fullHtmlPage, { contentType: 'text/html' });
+        sendResponse(res, fullHtmlPage, { contentType: 'text/html' });
+    }
+    /**
+     * Sets up thread-local context for the request
+     */
+    setupRequestContext(req, forceJson) {
+        // Store request headers for formatSnapshot to use
+        this.threadLocal.set('accept', req.headers.accept || '');
+        this.threadLocal.set('x-return-format', req.headers['x-return-format'] || '');
+        // Force JSON response if using /json/ endpoint
+        if (forceJson) {
+            this.threadLocal.set('accept', 'application/json');
+            this.threadLocal.set('x-return-format', 'json');
+        }
+    }
+    /**
+     * Extracts the target URL from request (POST body, query params, or path)
+     */
+    extractTargetUrl(req, pathUrl) {
+        // Prefer explicit URL in POST JSON body, then query param, then path
+        if (req.method === 'POST' && req.body && typeof req.body.url === 'string' && req.body.url.trim()) {
+            return req.body.url.trim();
+        }
+        if (req.query && (req.query.url || req.query.u)) {
+            const q = (req.query.url || req.query.u);
+            return Array.isArray(q) ? q[0] : String(q || '');
+        }
+        return pathUrl;
+    }
+    /**
+     * Validates and parses the target URL
+     */
+    parseAndValidateUrl(urlToCrawl, req) {
+        const requestWithGet = req;
+        const requestHeaders = req.headers;
+        const protoFromGet = (typeof requestWithGet.get === 'function') ? requestWithGet.get('x-forwarded-proto') : undefined;
+        const headerProto = requestHeaders['x-forwarded-proto'] || requestHeaders['X-Forwarded-Proto'];
+        const protocol = protoFromGet || headerProto || 'http';
+        const hostFromGet = (typeof requestWithGet.get === 'function') ? requestWithGet.get('host') : undefined;
+        const headerHost = requestHeaders.host || requestHeaders.Host;
+        const host = hostFromGet || headerHost || 'localhost:3000';
+        const requestBase = `${protocol}://${host}`;
+        const parsedUrl = safeNormalizeUrl(urlToCrawl, requestBase);
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+            throw new Error('Invalid protocol');
+        }
+        // Check TLD validation (can be disabled for development)
+        const allowAllTlds = this.config.domain?.allow_all_tlds || false;
+        if (!allowAllTlds && !this.isValidTLD(parsedUrl.hostname)) {
+            throw new Error('Invalid TLD');
+        }
+        return parsedUrl;
+    }
+    /**
+     * Checks robots.txt compliance for the given URL
+     */
+    async checkRobotsCompliance(parsedUrl) {
+        const respectRobots = this.config.robots?.respect_robots_txt !== false;
+        if (!respectRobots) {
+            return true;
+        }
+        console.log('Checking robots.txt compliance for:', parsedUrl.toString());
+        try {
+            const robotsCheckerWithMethods = this.robotsChecker;
+            const hasIsAllowed = robotsCheckerWithMethods && typeof robotsCheckerWithMethods.isAllowed === 'function';
+            const hasGetCrawlDelay = robotsCheckerWithMethods && typeof robotsCheckerWithMethods.getCrawlDelay === 'function';
+            if (hasIsAllowed && robotsCheckerWithMethods.isAllowed) {
+                const isAllowed = await robotsCheckerWithMethods.isAllowed(parsedUrl.toString(), 'DearReader-Bot');
+                if (!isAllowed) {
+                    console.log('URL blocked by robots.txt:', parsedUrl.toString());
+                    return false;
+                }
             }
-            // Check if the request is for a local screenshot
-            if (noSlashURL.startsWith('instant-screenshots/')) {
-                return this.serveScreenshot(noSlashURL, res);
+            else {
+                console.log('robotsChecker.isAllowed not available; skipping robots.txt allow check');
             }
+            // Check for crawl delay if supported
+            if (hasGetCrawlDelay && robotsCheckerWithMethods.getCrawlDelay) {
+                const crawlDelay = await robotsCheckerWithMethods.getCrawlDelay(parsedUrl.toString(), 'DearReader-Bot');
+                if (crawlDelay && crawlDelay > 0) {
+                    console.log(`Applying crawl delay of ${crawlDelay}s for:`, parsedUrl.toString());
+                    // In production, you might want to implement a proper rate limiting mechanism
+                }
+            }
+            else {
+                console.log('robotsChecker.getCrawlDelay not available; skipping crawl-delay handling');
+            }
+            return true;
+        }
+        catch (robotsError) {
+            console.log('Error checking robots.txt, proceeding:', robotsError);
+            // Continue if robots.txt check fails (be permissive)
+            return true;
+        }
+    }
+    /**
+     * Performs the actual scraping operation
+     */
+    async performScraping(parsedUrl, crawlerOptions, req) {
+        const crawlOpts = this.configure(crawlerOptions, req, parsedUrl);
+        console.log('Configured crawl options:', crawlOpts);
+        let lastScrapped;
+        const scrapIterator = this.scrap(parsedUrl, crawlOpts, crawlerOptions);
+        for await (const scrapped of scrapIterator) {
+            lastScrapped = scrapped;
+            if (crawlerOptions.waitForSelector || ((!scrapped?.parsed?.content || !scrapped.title?.trim()) && !scrapped?.pdfs?.length)) {
+                continue;
+            }
+            if (crawlerOptions.timeout === undefined) {
+                const formatted = await this.formatSnapshot(crawlerOptions.respondWith, scrapped, parsedUrl);
+                return { snapshot: scrapped, formatted };
+            }
+        }
+        if (!lastScrapped) {
+            return null;
+        }
+        const formatted = await this.formatSnapshot(crawlerOptions.respondWith, lastScrapped, parsedUrl);
+        return { snapshot: lastScrapped, formatted };
+    }
+    /**
+     * Handles scraping errors with appropriate error responses
+     */
+    async handleScrapingError(error, parsedUrl, crawlerOptions) {
+        console.error('Error during scraping:', error);
+        if (error instanceof AssertionFailureError &&
+            (error.message.includes('Invalid TLD') || error.message.includes('ERR_NAME_NOT_RESOLVED'))) {
+            const errorSnapshot = {
+                title: 'Error: Invalid domain or TLD',
+                href: parsedUrl.toString(),
+                html: '',
+                text: `Failed to access the page due to an invalid domain or TLD: ${parsedUrl.toString()}`,
+                error: 'Invalid domain or TLD'
+            };
+            const formatted = await this.formatSnapshot(crawlerOptions.respondWith, errorSnapshot, parsedUrl);
+            return { snapshot: errorSnapshot, formatted };
+        }
+        throw error;
+    }
+    async crawl(req, res) {
+        this.logger.info(`Crawl request received for URL: ${req.url}`);
+        console.log('Crawl method called with request:', req.url);
+        try {
+            // Parse request URL
+            const { url: noSlashURL, forceJson: forceJsonResponse } = this.parseRequestUrl(req);
+            // Handle special routes
+            if (await this.handleSpecialRoutes(req, res, noSlashURL)) {
+                return;
+            }
+            // Setup request context
+            this.setupRequestContext(req, forceJsonResponse);
+            // Parse crawler options
             const crawlerOptions = req.method === 'POST' ?
                 new CrawlerOptions(req.body, req) :
                 new CrawlerOptions(req.query, req);
             console.log('Crawler options:', crawlerOptions);
-            // Store request headers for formatSnapshot to use
-            this.threadLocal.set('accept', req.headers.accept || '');
-            this.threadLocal.set('x-return-format', req.headers['x-return-format'] || '');
-            // Force JSON response if using /json/ endpoint
-            if (forceJsonResponse) {
-                this.threadLocal.set('accept', 'application/json');
-                this.threadLocal.set('x-return-format', 'json');
-            }
-            // Prefer explicit URL in POST JSON body, then query param, then path
-            let urlToCrawl = noSlashURL;
-            if (req.method === 'POST' && req.body && typeof req.body.url === 'string' && req.body.url.trim()) {
-                urlToCrawl = req.body.url.trim();
-            }
-            else if (req.query && (req.query.url || req.query.u)) {
-                // express query values can be string or string[]
-                const q = (req.query.url || req.query.u);
-                urlToCrawl = Array.isArray(q) ? q[0] : String(q);
-            }
+            // Extract and validate target URL
+            const urlToCrawl = this.extractTargetUrl(req, noSlashURL);
             let parsedUrl;
             try {
-                // Build a base from the incoming request so relative paths like 'queue/stats' can be resolved
-                const protoFromGet = (typeof req.get === 'function') ? req.get('x-forwarded-proto') : undefined;
-                const headerProto = req.headers && (req.headers['x-forwarded-proto'] || req.headers['X-Forwarded-Proto']);
-                const protocol = protoFromGet || headerProto || req.protocol || 'http';
-                const hostFromGet = (typeof req.get === 'function') ? req.get('host') : undefined;
-                const headerHost = req.headers && (req.headers['host'] || req.headers['Host']);
-                const host = hostFromGet || headerHost || req.headers?.host || 'localhost:3000';
-                const requestBase = `${protocol}://${host}`;
-                parsedUrl = safeNormalizeUrl(urlToCrawl, requestBase);
-                if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-                    throw new Error('Invalid protocol');
-                }
-                // Check TLD validation (can be disabled for development)
-                const allowAllTlds = this.config.domain?.allow_all_tlds || false;
-                if (!allowAllTlds && !this.isValidTLD(parsedUrl.hostname)) {
-                    throw new Error('Invalid TLD');
-                }
+                parsedUrl = this.parseAndValidateUrl(urlToCrawl, req);
             }
             catch (error) {
                 console.log('Invalid URL:', urlToCrawl, error);
                 return sendResponse(res, 'Invalid URL or TLD', { contentType: 'text/plain', code: 400 });
             }
-            // Check robots.txt compliance if enabled
-            const respectRobots = this.config.robots?.respect_robots_txt !== false; // default to true
-            if (respectRobots) {
-                console.log('Checking robots.txt compliance for:', parsedUrl.toString());
-                try {
-                    // Some test mocks or environments may not provide a full robotsChecker implementation.
-                    // Guard calls to avoid runtime TypeError when methods are missing.
-                    const hasIsAllowed = this.robotsChecker && typeof this.robotsChecker.isAllowed === 'function';
-                    const hasGetCrawlDelay = this.robotsChecker && typeof this.robotsChecker.getCrawlDelay === 'function';
-                    if (hasIsAllowed) {
-                        const isAllowed = await this.robotsChecker.isAllowed(parsedUrl.toString(), 'DearReader-Bot');
-                        if (!isAllowed) {
-                            console.log('URL blocked by robots.txt:', parsedUrl.toString());
-                            return sendResponse(res, 'Access denied by robots.txt', { contentType: 'text/plain', code: 403 });
-                        }
-                    }
-                    else {
-                        console.log('robotsChecker.isAllowed not available; skipping robots.txt allow check');
-                    }
-                    // Check for crawl delay if supported
-                    if (hasGetCrawlDelay) {
-                        const crawlDelay = await this.robotsChecker.getCrawlDelay(parsedUrl.toString(), 'DearReader-Bot');
-                        if (crawlDelay && crawlDelay > 0) {
-                            console.log(`Applying crawl delay of ${crawlDelay}s for:`, parsedUrl.toString());
-                            // In production, you might want to implement a proper rate limiting mechanism
-                            // For now, just log it
-                        }
-                    }
-                    else {
-                        console.log('robotsChecker.getCrawlDelay not available; skipping crawl-delay handling');
-                    }
-                }
-                catch (robotsError) {
-                    console.log('Error checking robots.txt, proceeding:', robotsError);
-                    // Continue if robots.txt check fails (be permissive)
-                }
+            // Check robots.txt compliance
+            const robotsAllowed = await this.checkRobotsCompliance(parsedUrl);
+            if (!robotsAllowed) {
+                return sendResponse(res, 'Access denied by robots.txt', { contentType: 'text/plain', code: 403 });
             }
+            // Add to circuit breaker
             this.puppeteerControl.circuitBreakerHosts.add(req.hostname.toLowerCase());
             console.log('Added to circuit breaker hosts:', req.hostname.toLowerCase());
-            const crawlOpts = this.configure(crawlerOptions, req, parsedUrl);
-            console.log('Configured crawl options:', crawlOpts);
-            let lastScrapped;
-            const scrapIterator = this.scrap(parsedUrl, crawlOpts, crawlerOptions);
+            // Perform scraping
+            let result = null;
             try {
-                for await (const scrapped of scrapIterator) {
-                    lastScrapped = scrapped;
-                    if (crawlerOptions.waitForSelector || ((!scrapped?.parsed?.content || !scrapped.title?.trim()) && !scrapped?.pdfs?.length)) {
-                        continue;
-                    }
-                    if (crawlerOptions.timeout === undefined) {
-                        const formatted = await this.formatSnapshot(crawlerOptions.respondWith, scrapped, parsedUrl);
-                        return this.sendFormattedResponse(res, formatted, crawlerOptions.respondWith, scrapped);
-                    }
-                }
+                result = await this.performScraping(parsedUrl, crawlerOptions, req);
             }
             catch (scrapError) {
-                console.error('Error during scraping:', scrapError);
-                if (scrapError instanceof AssertionFailureError &&
-                    (scrapError.message.includes('Invalid TLD') || scrapError.message.includes('ERR_NAME_NOT_RESOLVED'))) {
-                    const errorSnapshot = {
-                        title: 'Error: Invalid domain or TLD',
-                        href: parsedUrl.toString(),
-                        html: '',
-                        text: `Failed to access the page due to an invalid domain or TLD: ${parsedUrl.toString()}`,
-                        error: 'Invalid domain or TLD'
-                    };
-                    const formatted = await this.formatSnapshot(crawlerOptions.respondWith, errorSnapshot, parsedUrl);
-                    return this.sendFormattedResponse(res, formatted, crawlerOptions.respondWith, errorSnapshot);
-                }
-                throw scrapError;
+                result = await this.handleScrapingError(scrapError, parsedUrl, crawlerOptions);
             }
-            if (!lastScrapped) {
+            if (!result) {
                 return sendResponse(res, 'No content available', { contentType: 'text/plain', code: 404 });
             }
-            const formatted = await this.formatSnapshot(crawlerOptions.respondWith, lastScrapped, parsedUrl);
-            return this.sendFormattedResponse(res, formatted, crawlerOptions.respondWith, lastScrapped);
+            return this.sendFormattedResponse(res, result.formatted, crawlerOptions.respondWith, result.snapshot);
         }
         catch (error) {
             console.error('Error in crawl method:', error);

@@ -176,6 +176,8 @@ let PuppeteerControl = class PuppeteerControl extends AsyncService {
         this.currentActivePages = 0;
         this.processing = false;
         this.PAGE_IDLE_TIMEOUT = 60 * 1000; // 1 minute for idle pages
+        this.MAX_PAGE_LIFETIME = 5 * 60 * 1000; // 5 minutes max lifetime
+        this.CLEANUP_INTERVAL = 30 * 1000; // 30 seconds cleanup interval
         this.__loadedPage = [];
         this.finalizerMap = new WeakMap();
         this.snMap = new WeakMap();
@@ -202,6 +204,85 @@ let PuppeteerControl = class PuppeteerControl extends AsyncService {
         if (process.env.NODE_ENV === 'test' || process.env.CI === 'true') {
             this.__emergencyCleanupInterval = setInterval(() => this.emergencyCleanup(), 60_000);
             this.__resourceMonitorInterval = setInterval(() => this.monitorResources(), 30_000);
+        }
+    }
+    /**
+     * Emergency cleanup for memory leak prevention
+     */
+    emergencyCleanup() {
+        const now = Date.now();
+        const memUsage = process.memoryUsage();
+        const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+        const rssMB = Math.round(memUsage.rss / 1024 / 1024);
+        this.logger.info('Emergency cleanup check', {
+            heapUsedMB,
+            rssMB,
+            livePages: this.livePages.size,
+            poolPages: this.pagePool.length,
+            queueLength: this.requestQueue.length
+        });
+        // Force cleanup if memory usage is high
+        if (heapUsedMB > 512 || rssMB > 1024) {
+            this.logger.warn('High memory usage detected, forcing cleanup', {
+                heapUsedMB,
+                rssMB
+            });
+            // Force cleanup all idle pages immediately
+            const idlePages = this.pagePool.filter(mp => !mp.inUse);
+            idlePages.forEach(mp => this.destroyManagedPage(mp));
+            // If still high memory, force close oldest pages
+            if (this.pagePool.length > 5) {
+                const oldestPages = this.pagePool
+                    .sort((a, b) => a.createdAt - b.createdAt)
+                    .slice(0, Math.floor(this.pagePool.length / 2));
+                oldestPages.forEach(mp => {
+                    this.logger.warn(`Force closing page ${mp.sn} due to high memory usage`);
+                    this.destroyManagedPage(mp);
+                });
+            }
+            // Force garbage collection if available
+            if (global.gc) {
+                global.gc();
+                this.logger.info('Forced garbage collection');
+            }
+        }
+        // Check for process lifetime
+        if (process.env.NODE_ENV === 'test' && (now - this.startTime) > this.maxLifetime) {
+            this.logger.warn('Test environment max lifetime exceeded, triggering restart');
+            this.emit('restart-needed');
+        }
+    }
+    /**
+     * Monitor resources and log warnings
+     */
+    monitorResources() {
+        const memUsage = process.memoryUsage();
+        const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+        const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+        const rssMB = Math.round(memUsage.rss / 1024 / 1024);
+        const externalMB = Math.round(memUsage.external / 1024 / 1024);
+        const stats = {
+            heap: {
+                used: heapUsedMB,
+                total: heapTotalMB,
+                percent: Math.round((heapUsedMB / heapTotalMB) * 100)
+            },
+            rss: rssMB,
+            external: externalMB,
+            pages: {
+                live: this.livePages.size,
+                pool: this.pagePool.length,
+                active: this.currentActivePages,
+                queue: this.requestQueue.length
+            },
+            uptime: Math.round(process.uptime())
+        };
+        // Log detailed stats every 5 minutes or if there are issues
+        if (stats.heap.percent > 80 || stats.rss > 1024 || stats.pages.live > 20) {
+            this.logger.warn('Resource usage warning', stats);
+        }
+        else {
+            this.logger.debug('Resource monitoring', stats);
         }
     }
     briefPages() {
@@ -358,11 +439,25 @@ let PuppeteerControl = class PuppeteerControl extends AsyncService {
     }
     cleanupIdlePages() {
         const now = Date.now();
+        // Clean up idle pages
         const idlePages = this.pagePool.filter(mp => !mp.inUse && (now - mp.lastUsed) > this.PAGE_IDLE_TIMEOUT);
-        idlePages.forEach(mp => {
-            this.logger.info(`Cleaning up idle page ${mp.sn}`);
-            this.destroyManagedPage(mp);
-        });
+        // Clean up pages that have exceeded max lifetime
+        const expiredPages = this.pagePool.filter(mp => (now - mp.createdAt) > this.MAX_PAGE_LIFETIME);
+        const pagesToCleanup = [...new Set([...idlePages, ...expiredPages])];
+        if (pagesToCleanup.length > 0) {
+            this.logger.info(`Cleaning up ${pagesToCleanup.length} pages`, {
+                idle: idlePages.length,
+                expired: expiredPages.length
+            });
+            pagesToCleanup.forEach(mp => {
+                this.logger.debug(`Cleaning up page ${mp.sn}`, {
+                    idle: !mp.inUse && (now - mp.lastUsed) > this.PAGE_IDLE_TIMEOUT,
+                    expired: (now - mp.createdAt) > this.MAX_PAGE_LIFETIME,
+                    inUse: mp.inUse
+                });
+                this.destroyManagedPage(mp);
+            });
+        }
     }
     processQueue() {
         if (this.processing || this.requestQueue.length === 0) {
@@ -778,44 +873,6 @@ let PuppeteerControl = class PuppeteerControl extends AsyncService {
         this.circuitBreakerHosts.clear();
         // Mark as closing to prevent new operations
         this.isClosing = true;
-    }
-    // Emergency cleanup for test environments
-    emergencyCleanup() {
-        if (this.isClosing)
-            return;
-        const currentTime = Date.now();
-        const uptime = currentTime - this.startTime;
-        // Force cleanup if running too long in test environment
-        if (uptime > this.maxLifetime) {
-            this.logger.warn('Emergency cleanup triggered due to excessive runtime');
-            this.close().catch(err => {
-                this.logger.error('Emergency cleanup failed', { err });
-                // Force exit as last resort
-                if (process.env.NODE_ENV === 'test') {
-                    process.exit(1);
-                }
-            });
-        }
-    }
-    // Monitor resource usage and detect leaks
-    monitorResources() {
-        if (this.isClosing)
-            return;
-        const pageCount = this.livePages.size + this.__loadedPage.length + this.pagePool.length;
-        const requestCount = this.requestQueue.length;
-        // Log resource status
-        this.logger.info(`Resource monitor: ${pageCount} pages, ${requestCount} pending requests, ${this.currentActivePages} active`);
-        // Detect potential leaks
-        if (pageCount > 50) {
-            this.logger.warn(`Potential page leak detected: ${pageCount} pages`);
-        }
-        if (requestCount > 100) {
-            this.logger.warn(`Potential request queue leak detected: ${requestCount} requests`);
-        }
-        // Force cleanup of idle resources
-        if (pageCount > 20) {
-            this.cleanupIdlePages();
-        }
     }
 };
 __decorate([

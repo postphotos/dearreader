@@ -8,11 +8,15 @@ import { PuppeteerControl } from './services/puppeteer.js';
 import { JSDomControl } from './services/jsdom.js';
 import { FirebaseStorageBucketControl } from './shared/index.js';
 import { AsyncContext } from './shared/index.js';
+import { ResponseCacheService } from './services/cache.js';
+import { HealthCheckService } from './services/health-check.js';
+import { config as appConfig } from './shared/config-manager.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import config from './config.js';
 import { VERSION } from './version.js';
+import { errorHandler } from './shared/error-handler.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -27,9 +31,13 @@ container.registerSingleton(PuppeteerControl);
 container.registerSingleton(JSDomControl);
 container.registerSingleton(FirebaseStorageBucketControl);
 container.registerSingleton(AsyncContext);
+container.registerSingleton(ResponseCacheService);
+container.registerSingleton(HealthCheckService);
 container.registerSingleton(CrawlerHost);
 
 const crawlerHost = container.resolve(CrawlerHost);
+const healthCheckService = container.resolve(HealthCheckService);
+const cacheService = container.resolve(ResponseCacheService);
 
 // Wait for Puppeteer service to initialize
 console.log('Initializing CrawlerHost');
@@ -145,26 +153,44 @@ app.post('/dearreader/queue/reset', (req, res) => {
   }
 });
 
-// Health/Status endpoint
-app.get('/health', (req, res) => {
-  try {
-    const healthStatus = {
-      status: 'healthy',
-      version: VERSION,
-      uptime: process.uptime(),
-      timestamp: new Date().toISOString(),
-      services: {
-        crawler: 'running',
-        storage: 'healthy',
-        queue: 'operational'
-      },
-      memory: process.memoryUsage()
-    };
+// Health/Status endpoint - comprehensive health check
+app.get('/health', errorHandler.wrapAsync(async (req, res) => {
+  const health = await healthCheckService.performHealthCheck();
+  const statusCode = health.status === 'healthy' ? 200 : 
+                     health.status === 'degraded' ? 200 : 503;
+  res.status(statusCode).json(health);
+}));
 
-    res.json(healthStatus);
+// Kubernetes-style probes
+app.get('/health/live', errorHandler.wrapAsync(async (req, res) => {
+  const isAlive = await healthCheckService.isAlive();
+  res.status(isAlive ? 200 : 503).json({ status: isAlive ? 'alive' : 'dead' });
+}));
+
+app.get('/health/ready', errorHandler.wrapAsync(async (req, res) => {
+  const isReady = await healthCheckService.isReady();
+  res.status(isReady ? 200 : 503).json({ status: isReady ? 'ready' : 'not ready' });
+}));
+
+// Cache statistics endpoint
+app.get('/cache/stats', (req, res) => {
+  try {
+    const stats = cacheService.getStats();
+    res.json(stats);
   } catch (error: any) {
-    console.error('Error getting health status:', error);
-    res.status(500).json({ error: 'Failed to get health status' });
+    console.error('Error getting cache stats:', error);
+    res.status(500).json({ error: 'Failed to get cache statistics' });
+  }
+});
+
+// Cache management endpoints
+app.post('/cache/clear', (req, res) => {
+  try {
+    cacheService.clear();
+    res.json({ message: 'Cache cleared successfully' });
+  } catch (error: any) {
+    console.error('Error clearing cache:', error);
+    res.status(500).json({ error: 'Failed to clear cache' });
   }
 });
 
@@ -216,36 +242,30 @@ app.get('/queue-ui', (req, res) => {
 });
 
 // Middleware to handle crawler requests for both root and /dearreader/ paths
-app.use(async (req, res, next) => {
-  try {
-    // Check if this is a crawler request
-    let urlPath = req.url;
+app.use(errorHandler.wrapAsync(async (req, res, next) => {
+  // Check if this is a crawler request
+  let urlPath = req.url;
 
-    // Handle /dearreader/ prefixed URLs
-    if (urlPath.startsWith('/dearreader/')) {
-      // Remove the /dearreader/ prefix to get the actual URL
-      urlPath = urlPath.substring('/dearreader/'.length);
-      if (urlPath) {
-        // Temporarily modify req.url for the crawler
-        const originalUrl = req.url;
-        req.url = '/' + urlPath;
-        await crawlerHost.crawl(req, res);
-        req.url = originalUrl; // Restore original URL
-        return;
-      }
-    }
-
-    // Handle root-level URLs (original behavior)
-    await crawlerHost.crawl(req, res);
-  } catch (error: any) {
-    console.error('Error during crawl:', error);
-    if (error && typeof error.message === 'string' && error.message.includes('Invalid TLD')) {
-      res.status(400).json({ error: 'Invalid URL or TLD' });
+  // Handle /dearreader/ prefixed URLs
+  if (urlPath.startsWith('/dearreader/')) {
+    // Remove the /dearreader/ prefix to get the actual URL
+    urlPath = urlPath.substring('/dearreader/'.length);
+    if (urlPath) {
+      // Temporarily modify req.url for the crawler
+      const originalUrl = req.url;
+      req.url = '/' + urlPath;
+      await crawlerHost.crawl(req, res);
+      req.url = originalUrl; // Restore original URL
       return;
     }
-    res.status(500).json({ error: 'An error occurred during the crawl' });
   }
-});
+
+  // Handle root-level URLs (original behavior)
+  await crawlerHost.crawl(req, res);
+}));
+
+// Add global error handling middleware
+app.use(errorHandler.expressErrorHandler());
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
