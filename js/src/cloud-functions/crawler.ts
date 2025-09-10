@@ -1434,8 +1434,8 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
 
             // Parse crawler options
             const crawlerOptions = req.method === 'POST' ?
-                new CrawlerOptions(req.body, req) :
-                new CrawlerOptions(req.query, req);
+                CrawlerOptions.from(req.body, req) :
+                CrawlerOptions.from(req.query, req);
             console.log('Crawler options:', crawlerOptions);
 
             // Extract and validate target URL

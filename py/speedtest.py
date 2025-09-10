@@ -41,7 +41,15 @@ class SpeedTester:
             else:
                 headers = {}
 
-            encoded_url = quote(url, safe='')
+            # Only encode the path/query part, not the protocol
+            from urllib.parse import urlparse, urlunparse
+            parsed = urlparse(url)
+            # Reconstruct URL with protocol intact, but encode the path
+            encoded_path = quote(parsed.path, safe='')
+            encoded_query = quote(parsed.query, safe='') if parsed.query else ''
+            query_part = f'?{encoded_query}' if encoded_query else ''
+            encoded_url = f"{parsed.scheme}://{parsed.netloc}{encoded_path}{query_part}"
+
             response = self.session.get(
                 f"{self.base_url}/{encoded_url}",
                 headers=headers,
@@ -286,11 +294,26 @@ def main():
     # Print results
     print_report(report)
 
-    print("\n🎉 Speed test complete!")
-    print("💡 Tips for better performance:")
-    print("   • Use caching for repeated requests")
-    print("   • Consider rate limiting for production use")
-    print("   • Monitor server resources during high load")
+    # Check if test should fail based on success rate
+    summary = report['summary']
+    overall_success_rate = summary['overall_success_rate']
+
+    print(f"\n� SUCCESS RATE: {overall_success_rate:.1f}%")
+
+    if overall_success_rate == 0.0:
+        print("❌ CRITICAL FAILURE: All requests failed!")
+        print("💡 This indicates the API is not functioning properly.")
+        sys.exit(1)
+    elif overall_success_rate < 50.0:
+        print("⚠️ WARNING: Success rate is below 50%")
+        print("💡 The API may have issues that need attention.")
+        sys.exit(1)
+    else:
+        print("✅ Speed test completed successfully!")
+        print("💡 Tips for better performance:")
+        print("   • Use caching for repeated requests")
+        print("   • Consider rate limiting for production use")
+        print("   • Monitor server resources during high load")
 
 
 if __name__ == "__main__":

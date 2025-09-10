@@ -156,7 +156,7 @@ app.post('/dearreader/queue/reset', (req, res) => {
 // Health/Status endpoint - comprehensive health check
 app.get('/health', errorHandler.wrapAsync(async (req, res) => {
   const health = await healthCheckService.performHealthCheck();
-  const statusCode = health.status === 'healthy' ? 200 : 
+  const statusCode = health.status === 'healthy' ? 200 :
                      health.status === 'degraded' ? 200 : 503;
   res.status(statusCode).json(health);
 }));
@@ -267,8 +267,25 @@ app.use(errorHandler.wrapAsync(async (req, res, next) => {
 // Add global error handling middleware
 app.use(errorHandler.expressErrorHandler());
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
+});
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
 });
 
 export default app;

@@ -38,6 +38,45 @@ curl -H "X-Respond-With: screenshot" "/https://google.com"
 curl "/https://httpbin.org/html"
 ```
 
+**AI Processing Control:**
+```bash
+# Enable AI processing with custom model
+curl "/https://example.com?ai_enabled=true&model=gpt-4"
+
+# Disable AI processing
+curl "/https://example.com?ai_enabled=false"
+
+# Custom prompt
+curl "/https://example.com?prompt=Extract%20the%20main%20arguments%20from%20this%20article"
+
+# Override API key
+curl "/https://example.com?api_key=your-custom-key"
+```
+
+**Content Filtering:**
+```bash
+# Exclude certain file types
+curl "/https://example.com?exclude_file_types=.xml,.rss,.json"
+
+# Exclude URL patterns
+curl "/https://example.com?exclude_url_patterns=.*/api/.*,.*/search\\.php.*"
+
+# Combined filtering
+curl "/https://example.com?exclude_file_types=.xml,.rss&exclude_url_patterns=.*/admin/.*"
+```
+
+**Custom Headers for Bypass:**
+```bash
+# Custom User-Agent
+curl "/https://example.com?custom_headers={\"User-Agent\":\"Custom-Bot/1.0\"}"
+
+# CORS bypass headers
+curl "/https://example.com?custom_headers={\"Origin\":\"https://trusted-site.com\",\"Sec-Fetch-Mode\":\"navigate\"}"
+
+# Multiple headers
+curl "/https://example.com?custom_headers={\"User-Agent\":\"Bot\",\"Authorization\":\"Bearer%20token\",\"X-Custom\":\"value\"}"
+```
+
 #### Request Methods
 - **GET**: Extract content using URL path
 - **POST**: Extract content using JSON payload
@@ -56,7 +95,15 @@ curl "/https://httpbin.org/html"
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `format` | string | markdown | Response format override |
+| `format` | string | markdown | Response format (`json`, `markdown`, `html`) |
+| `ai_enabled` | boolean | config default | Override AI processing enable/disable |
+| `api_key` | string | config default | Override API key for AI processing |
+| `model` | string | config default | Override AI model |
+| `prompt` | string | config default | Custom prompt for AI processing |
+| `exclude_file_types` | string | config default | Comma-separated file extensions to exclude |
+| `exclude_url_patterns` | string | config default | Comma-separated URL patterns to exclude |
+| `custom_headers` | string | config default | JSON string of custom headers |
+| `timeout` | number | 30000 | Request timeout in milliseconds |
 | `wait` | number | 0 | Wait time before extraction (ms) |
 | `screenshot.wait` | number | 2000 | Screenshot wait time (ms) |
 | `screenshot.width` | number | 1200 | Screenshot viewport width |

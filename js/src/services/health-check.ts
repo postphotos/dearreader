@@ -3,6 +3,7 @@ import { Logger } from '../shared/logger.js';
 import { config } from '../shared/config-manager.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { ResponseCacheService } from './cache.js';
 
 export interface HealthStatus {
@@ -93,8 +94,8 @@ export class HealthCheckService {
       const heapUsagePercent = (heapUsedMB / heapTotalMB) * 100;
       let status: 'pass' | 'warn' | 'fail' = 'pass';
 
-      if (heapUsagePercent > 85 || rssMB > 1024) {
-        status = heapUsagePercent > 95 || rssMB > 2048 ? 'fail' : 'warn';
+      if (heapUsagePercent > 90 || rssMB > 1024) {
+        status = heapUsagePercent > 98 || rssMB > 2048 ? 'fail' : 'warn';
       }
 
       return {
@@ -195,7 +196,10 @@ export class HealthCheckService {
     const start = Date.now();
     
     try {
-      const configPath = path.join(process.cwd(), 'config.yaml');
+      // Use the same path resolution as ConfigManager (ES module equivalent)
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
+      const configPath = path.resolve(__dirname, '..', '..', '..', 'config.yaml');
       let configExists = false;
       
       try {

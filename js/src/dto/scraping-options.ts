@@ -45,6 +45,15 @@ export class CrawlerOptions extends AutoCastable implements AutoCastableMetaClas
     @Prop({ type: Number, nullable: true }) viewportHeight?: number | null;
     @Prop({ default: false }) fullPage?: boolean;
     @Prop() pdfAction?: string;
+    // New AI and filtering options
+    @Prop({ default: null }) aiEnabled?: boolean | null;
+    @Prop() format?: string;
+    @Prop() apiKey?: string;
+    @Prop() model?: string;
+    @Prop() prompt?: string;
+    @Prop() excludeFileTypes?: string;
+    @Prop() excludeUrlPatterns?: string;
+    @Prop() customHeaders?: string;
 
     static override from<T extends CrawlerOptions>(this: Constructor<T>, input: any, ...args: any[]): T {
         const instance = super.from(input, ...args) as T;
@@ -136,6 +145,16 @@ export class CrawlerOptions extends AutoCastable implements AutoCastableMetaClas
             instance.proxyUrl ??= proxyUrl;
 
             if (instance.cacheTolerance) instance.cacheTolerance = instance.cacheTolerance * 1000;
+
+            // Handle new AI and filtering parameters from query
+            if (input.ai_enabled !== undefined) instance.aiEnabled = Boolean(input.ai_enabled);
+            if (input.format) instance.format = String(input.format);
+            if (input.api_key) instance.apiKey = String(input.api_key);
+            if (input.model) instance.model = String(input.model);
+            if (input.prompt) instance.prompt = String(input.prompt);
+            if (input.exclude_file_types) instance.excludeFileTypes = String(input.exclude_file_types);
+            if (input.exclude_url_patterns) instance.excludeUrlPatterns = String(input.exclude_url_patterns);
+            if (input.custom_headers) instance.customHeaders = String(input.custom_headers);
         }
 
         return instance;

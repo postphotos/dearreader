@@ -100,114 +100,158 @@ curl -X POST http://localhost:3000/crawl \
 
 ## Configuration
 
-### LLM Providers
-Configure AI providers in `crawl_pipeline.yaml`:
+### Hot Reloading
+DearReader supports **hot reloading** of configuration changes without requiring server restart:
 
 ```yaml
-llm_providers:
-  primary_text:
-    provider: "openai-gpt-4"
+# config.yaml - Changes are automatically detected and applied
+robots:
+  respect_robots_txt: false  # Change this and see it take effect immediately
+
+ai_enabled: false  # Disable AI processing globally
+```
+
+**Features:**
+- Automatic detection of `config.yaml` changes
+- No server restart required
+- Real-time configuration updates
+- Error handling for invalid configurations
+
+### LLM Usage (Optional)
+AI/LLM processing is **completely optional** and can be disabled:
+
+```yaml
+# Disable all AI processing
+ai_enabled: false
+
+# Or configure specific providers
+ai_enabled: true
+ai_providers:
+  openai-gpt-4:
+    api_key: "your-api-key"
+    model: "gpt-4"
+    # ... other settings
+```
+
+### Exclude File Types
+Prevent processing of unwanted file types:
+
+```yaml
+content:
+  # Exclude specific file extensions
+  exclude_file_types: ".xml, .rss, .atom, .json, .css, .js, .png, .jpg, .jpeg, .gif"
+  
+  # Exclude URL patterns (regex)
+  exclude_url_patterns: ".*\\.xml$, .*/search\\.php.*, .*/api/.*, .*/wp-admin/.*"
+```
+
+### Additional Headers for Bypass
+Configure custom headers to bypass restrictions:
+
+```yaml
+headers:
+  custom_headers:
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    "Accept-Language": "en-US,en;q=0.5"
+  
+  cors_bypass_headers:
+    "Origin": "https://example.com"
+    "Sec-Fetch-Mode": "navigate"
+  
+  robots_bypass_headers:
+    "X-Robots-Tag": "noindex,nofollow"
+```
+
+### LLM Providers
+Configure AI providers in `config.yaml`:
+
+```yaml
+ai_providers:
+  openai-gpt-4:
+    api_key: "your-api-key"
+    base_url: "https://api.openai.com/v1"
     model: "gpt-4"
     temperature: 0.2
     max_tokens: 2048
 
-  fast_processing:
-    provider: "openai-gpt-3.5-turbo"
+  openai-gpt-3.5-turbo:
+    api_key: "your-api-key"
+    base_url: "https://api.openai.com/v1"
     model: "gpt-3.5-turbo"
     temperature: 0.3
     max_tokens: 1024
-```
-
-### Custom Prompts
-Define reusable prompts for common tasks:
-
-```yaml
-prompts:
-  html_to_markdown:
-    name: "Convert HTML to Markdown"
-    template: |
-      Convert the following HTML to clean Markdown...
-      {content}
-
-  extract_metadata:
-    name: "Extract Content Metadata"
-    template: |
-      Extract metadata from: {content}
-```
-
-### Processing Pipelines
-Create custom pipelines for different content types:
-
-```yaml
-pipelines:
-  html_default:
-    content_type: "html"
-    stages:
-      - name: "crawl_content"
-        type: "crawl"
-      - name: "convert_to_markdown"
-        type: "llm_process"
-        llm_provider: "fast_processing"
-        prompt: "html_to_markdown"
-      - name: "extract_metadata"
-        type: "llm_process"
-        llm_provider: "primary_text"
-        prompt: "extract_metadata"
-```
-
-### Programmatic Steps
-Add custom code execution to pipelines:
-
-```yaml
-programmatic_steps:
-  database_update:
-    type: "javascript"
-    code: |
-      const db = require('./database');
-      await db.updateContent({
-        url: context.url,
-        title: context.metadata?.title,
-        content: context.markdown_content
-      });
-      return { success: true };
-
-pipelines:
-  html_with_db:
-    stages:
-      # ... other stages ...
-      - name: "save_to_database"
-        type: "programmatic"
-        step: "database_update"
 ```
 
 ## API Reference
 
 ### Endpoints
 
-#### `GET /json/{url}`
-Crawl a URL and return processed content as JSON.
+#### `GET /api/crawl`
+Crawl a URL and return processed content.
 
 **Parameters:**
-- `url` (path): URL to crawl (URL-encoded)
-- `pipeline` (query, optional): Pipeline to use (default: auto-detect)
-- `timeout_ms` (query, optional): Timeout in milliseconds
+- `url` (query, required): URL to crawl
+- `format` (query, optional): Response format (`json`, `markdown`, `html`) - default: `markdown`
+- `ai_enabled` (query, optional): Override AI processing (`true`/`false`)
+- `api_key` (query, optional): Override API key for AI processing
+- `model` (query, optional): Override AI model
+- `prompt` (query, optional): Custom prompt for AI processing
+- `exclude_patterns` (query, optional): Comma-separated patterns to exclude
+- `custom_headers` (query, optional): JSON string of custom headers
+- `timeout` (query, optional): Request timeout in milliseconds
 
-**Example:**
+**Examples:**
 ```bash
-curl "http://localhost:3000/json/https://example.com/article?pipeline=html_enhanced"
+# Basic crawling
+curl "http://localhost:3001/api/crawl?url=https://example.com"
+
+# JSON response with AI processing
+curl "http://localhost:3001/api/crawl?url=https://example.com&format=json&ai_enabled=true"
+
+# Override AI settings on-the-fly
+curl "http://localhost:3001/api/crawl?url=https://example.com&ai_enabled=true&model=gpt-4&api_key=your-key"
+
+# Custom prompt
+curl "http://localhost:3001/api/crawl?url=https://example.com&prompt=Extract%20key%20points%20from%20this%20article"
+
+# Exclude certain content
+curl "http://localhost:3001/api/crawl?url=https://example.com&exclude_patterns=.xml,.rss"
+
+# Custom headers for bypass
+curl "http://localhost:3001/api/crawl?url=https://example.com&custom_headers={\"User-Agent\":\"Custom-UA\",\"X-Bypass\":\"true\"}"
 ```
 
-#### `POST /crawl`
-Crawl a URL with custom configuration.
+#### `POST /api/crawl`
+Crawl a URL with advanced configuration.
 
 **Request Body:**
 ```json
 {
   "url": "https://example.com",
-  "pipeline": "html_enhanced",
+  "format": "json",
+  "ai": {
+    "enabled": true,
+    "provider": "openai-gpt-4",
+    "api_key": "your-api-key",
+    "model": "gpt-4",
+    "prompt": "Extract key information from this content",
+    "temperature": 0.2
+  },
+  "content": {
+    "exclude_file_types": ".xml,.rss,.json",
+    "exclude_url_patterns": ".*\\.xml$,.*/api/.*"
+  },
+  "headers": {
+    "custom": {
+      "User-Agent": "Custom User Agent",
+      "Authorization": "Bearer token"
+    },
+    "cors_bypass": true,
+    "robots_bypass": true
+  },
   "options": {
     "timeout_ms": 30000,
-    "include_metadata": true
+    "max_content_length": 1000000
   }
 }
 ```
@@ -217,12 +261,12 @@ Crawl a URL with custom configuration.
 {
   "success": true,
   "url": "https://example.com",
-  "content_type": "html",
-  "pipeline_used": "html_enhanced",
   "processing_time_ms": 2450,
+  "content_excluded": false,
+  "ai_processed": true,
   "result": {
     "title": "Example Article",
-    "markdown_content": "# Example Article\n\nContent here...",
+    "content": "Extracted content...",
     "metadata": {
       "author": "John Doe",
       "date": "2024-01-15"
@@ -234,6 +278,26 @@ Crawl a URL with custom configuration.
 #### `GET /health`
 Service health check endpoint.
 
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-15T10:30:00.000Z",
+  "uptime": 3600,
+  "version": "0.0.1",
+  "checks": {
+    "config": {
+      "status": "pass",
+      "configFileExists": true
+    },
+    "memory": {
+      "status": "pass",
+      "heapUsed": "87MB"
+    }
+  }
+}
+```
+
 ## CLI Reference
 
 ### Commands
@@ -242,20 +306,45 @@ Service health check endpoint.
 Crawl a single URL and process it.
 
 **Options:**
-- `--pipeline <name>`: Pipeline to use (default: auto-detect)
-- `--output <file>`: Save result to JSON file
-- `--timeout <ms>`: Timeout in milliseconds (default: 30000)
+- `--format <type>`: Output format (`json`, `markdown`, `html`) - default: `markdown`
+- `--output <file>`: Save result to file
+- `--ai-enabled`: Enable AI processing
+- `--ai-disabled`: Disable AI processing (default)
+- `--api-key <key>`: Override API key for AI processing
+- `--model <model>`: Override AI model (e.g., `gpt-4`, `claude-3`)
+- `--prompt <text>`: Custom prompt for AI processing
+- `--exclude-types <types>`: Comma-separated file extensions to exclude
+- `--exclude-patterns <patterns>`: Comma-separated URL patterns to exclude
+- `--custom-headers <json>`: JSON string of custom headers
+- `--timeout <ms>`: Request timeout in milliseconds
 - `--verbose`: Enable verbose logging
 
 **Examples:**
 ```bash
+# Basic crawling
 dearreader crawl "https://example.com"
-dearreader crawl "https://example.com" --pipeline html_enhanced
+
+# JSON output with AI processing
+dearreader crawl "https://example.com" --format json --ai-enabled
+
+# Override AI settings
+dearreader crawl "https://example.com" --ai-enabled --model gpt-4 --api-key your-key
+
+# Custom prompt
+dearreader crawl "https://example.com" --prompt "Summarize this article in 3 bullet points"
+
+# Exclude certain content
+dearreader crawl "https://example.com" --exclude-types ".xml,.rss,.json"
+
+# Custom headers
+dearreader crawl "https://example.com" --custom-headers '{"User-Agent":"Custom-UA","X-Bypass":"true"}'
+
+# Save to file
 dearreader crawl "https://example.com" --output result.json --verbose
 ```
 
 #### `dearreader config`
-Display current configuration.
+Display current configuration and hot-reload status.
 
 #### `dearreader health`
 Check service health and connectivity.
