@@ -1,7 +1,1 @@
-{
-  "version": 3,
-  "sources": ["../../../src/shared/decorators.ts"],
-  "sourcesContent": ["export function CloudHTTPv2(config: any): MethodDecorator {\n    return function (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) {\n        // Simplified implementation\n        console.log(`CloudHTTPv2 decorator applied to ${String(propertyKey)}`);\n        return descriptor;\n    };\n}"],
-  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAO,SAAS,YAAY,QAA8B;AACtD,SAAO,SAAU,QAAa,aAA8B,YAAgC;AAExF,YAAQ,IAAI,oCAAoC,OAAO,WAAW,CAAC,EAAE;AACrE,WAAO;AAAA,EACX;AACJ;",
-  "names": []
-}
+{"version":3,"file":"decorators.js","sourceRoot":"","sources":["../../../src/shared/decorators.ts"],"names":[],"mappings":"AAAA,MAAM,UAAU,WAAW,CAAC,MAAW;IACnC,OAAO,UAAU,MAAW,EAAE,WAA4B,EAAE,UAA8B;QACtF,4BAA4B;QAC5B,OAAO,CAAC,GAAG,CAAC,oCAAoC,MAAM,CAAC,WAAW,CAAC,EAAE,CAAC,CAAC;QACvE,OAAO,UAAU,CAAC;IACtB,CAAC,CAAC;AACN,CAAC"}

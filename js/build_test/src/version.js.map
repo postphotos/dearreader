@@ -1,7 +1,1 @@
-{
-  "version": 3,
-  "sources": ["../../src/version.ts"],
-  "sourcesContent": ["// Version information for DearReader\nexport const VERSION = '0.0.1';\nexport const NAME = 'DearReader';\nexport const DESCRIPTION = 'Lightning Fast Web Content Crawler';"],
-  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AACO,MAAM,UAAU;AAChB,MAAM,OAAO;AACb,MAAM,cAAc;",
-  "names": []
-}
+{"version":3,"file":"version.js","sourceRoot":"","sources":["../../src/version.ts"],"names":[],"mappings":"AAAA,qCAAqC;AACrC,MAAM,CAAC,MAAM,OAAO,GAAG,OAAO,CAAC;AAC/B,MAAM,CAAC,MAAM,IAAI,GAAG,YAAY,CAAC;AACjC,MAAM,CAAC,MAAM,WAAW,GAAG,oCAAoC,CAAC"}

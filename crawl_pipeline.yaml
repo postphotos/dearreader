@@ -211,7 +211,6 @@ pipeline_routing:
           max_retries: 3
           retry_delay_ms: 1000
           retry_backoff_multiplier: 2.0
-          timeout_ms: 45000
           # Circuit breaker pattern
           circuit_breaker_enabled: true
           circuit_breaker_failure_threshold: 5
@@ -313,7 +312,9 @@ pipeline_routing:
           # Include content quality score
           include_quality_score: true
           # Include processing warnings/errors
-          include_warnings: true    # Enhanced HTML Pipeline (with additional LLM processing)
+          include_warnings: true
+
+    # Enhanced HTML Pipeline (with additional LLM processing)
     html_enhanced:
       name: "Enhanced HTML Processing Pipeline"
       description: "Extended pipeline with categorization and business info extraction"

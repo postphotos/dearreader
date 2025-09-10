@@ -805,7 +805,7 @@ curl -H "X-Respond-With: screenshot" "${baseUrl}/https://example.com"
                 const linkSummaryChunks = ['Links/Buttons:'];
                 if (this.links) {
                     for (const [k, v] of Object.entries(this.links)) {
-                        linkSummaryChunks.push(`- [${k}](${v})`);
+                        linkSummaryChunks.push(`[${v}](${k})`);
                     }
                 }
                 if (linkSummaryChunks.length === 1) {

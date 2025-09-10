@@ -1,5 +1,18 @@
 // Test bootstrap (CJS): preload reflect-metadata and DOMMatrix polyfill for pdfjs
 require('reflect-metadata');
+
+// Polyfill for Promise.withResolvers (Node.js < 20 compatibility)
+if (typeof globalThis.Promise.withResolvers === 'undefined') {
+  globalThis.Promise.withResolvers = function() {
+    let resolve, reject;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+}
+
 // Minimal DOMMatrix polyfill to satisfy pdfjs in Node test environments.
 // This is intentionally small and only implements what pdfjs uses in tests.
 if (typeof globalThis.DOMMatrix === 'undefined') {

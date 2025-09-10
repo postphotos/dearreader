@@ -1,7 +1,1 @@
-{
-  "version": 3,
-  "sources": [],
-  "sourcesContent": [],
-  "mappings": "",
-  "names": []
-}
+{"version":3,"file":"brave-search.js","sourceRoot":"","sources":["../../../../src/shared/3rd-party/brave-search.ts"],"names":[],"mappings":""}

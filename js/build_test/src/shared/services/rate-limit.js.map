@@ -1,7 +1,1 @@
-{
-  "version": 3,
-  "sources": ["../../../../src/shared/services/rate-limit.ts"],
-  "sourcesContent": ["import { AsyncService } from 'civkit';\n\nexport interface RateLimitDesc {\n    key: string;\n    limit: number;\n    window: number;\n}\n\nexport class RateLimitControl extends AsyncService {\n    constructor() {\n        super();\n    }\n\n    override async init() {\n        // Mock implementation\n        this.emit('ready');\n    }\n\n    async increment(desc: RateLimitDesc): Promise<boolean> {\n        // Mock implementation\n        console.log(`Incrementing rate limit for key: ${desc.key}`);\n        return true;\n    }\n\n    async decrement(desc: RateLimitDesc): Promise<void> {\n        // Mock implementation\n        console.log(`Decrementing rate limit for key: ${desc.key}`);\n    }\n}\n"],
-  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,SAAS,oBAAoB;AAQtB,MAAM,yBAAyB,aAAa;AAAA,EAC/C,cAAc;AACV,UAAM;AAAA,EACV;AAAA,EAEA,MAAe,OAAO;AAElB,SAAK,KAAK,OAAO;AAAA,EACrB;AAAA,EAEA,MAAM,UAAU,MAAuC;AAEnD,YAAQ,IAAI,oCAAoC,KAAK,GAAG,EAAE;AAC1D,WAAO;AAAA,EACX;AAAA,EAEA,MAAM,UAAU,MAAoC;AAEhD,YAAQ,IAAI,oCAAoC,KAAK,GAAG,EAAE;AAAA,EAC9D;AACJ;",
-  "names": []
-}
+{"version":3,"file":"rate-limit.js","sourceRoot":"","sources":["../../../../src/shared/services/rate-limit.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,YAAY,EAAE,MAAM,QAAQ,CAAC;AAQtC,MAAM,OAAO,gBAAiB,SAAQ,YAAY;IAC9C;QACI,KAAK,EAAE,CAAC;IACZ,CAAC;IAEQ,KAAK,CAAC,IAAI;QACf,sBAAsB;QACtB,IAAI,CAAC,IAAI,CAAC,OAAO,CAAC,CAAC;IACvB,CAAC;IAED,KAAK,CAAC,SAAS,CAAC,IAAmB;QAC/B,sBAAsB;QACtB,OAAO,CAAC,GAAG,CAAC,oCAAoC,IAAI,CAAC,GAAG,EAAE,CAAC,CAAC;QAC5D,OAAO,IAAI,CAAC;IAChB,CAAC;IAED,KAAK,CAAC,SAAS,CAAC,IAAmB;QAC/B,sBAAsB;QACtB,OAAO,CAAC,GAAG,CAAC,oCAAoC,IAAI,CAAC,GAAG,EAAE,CAAC,CAAC;IAChE,CAAC;CACJ"}

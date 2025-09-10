@@ -1,7 +1,1 @@
-{
-  "version": 3,
-  "sources": ["../../../src/shared/output-stream.ts"],
-  "sourcesContent": ["export class OutputServerEventStream {\n    write(data: any) {\n        console.log('OutputServerEventStream write:', data);\n    }\n\n    end() {\n        console.log('OutputServerEventStream ended');\n    }\n}"],
-  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAO,MAAM,wBAAwB;AAAA,EACjC,MAAM,MAAW;AACb,YAAQ,IAAI,kCAAkC,IAAI;AAAA,EACtD;AAAA,EAEA,MAAM;AACF,YAAQ,IAAI,+BAA+B;AAAA,EAC/C;AACJ;",
-  "names": []
-}
+{"version":3,"file":"output-stream.js","sourceRoot":"","sources":["../../../src/shared/output-stream.ts"],"names":[],"mappings":"AAAA,MAAM,OAAO,uBAAuB;IAChC,KAAK,CAAC,IAAS;QACX,OAAO,CAAC,GAAG,CAAC,gCAAgC,EAAE,IAAI,CAAC,CAAC;IACxD,CAAC;IAED,GAAG;QACC,OAAO,CAAC,GAAG,CAAC,+BAA+B,CAAC,CAAC;IACjD,CAAC;CACJ"}

@@ -6,7 +6,7 @@
 set -e
 
 # Get the directory where this script is located and navigate to project root
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 PROJECT_ROOT="$SCRIPT_DIR"
 cd "$PROJECT_ROOT"
 
@@ -85,6 +85,7 @@ COMMANDS:
     logs            📝  Show service logs
     clean           🧹  Clean up containers and volumes
     migration       📋  Show migration status and tips
+    task            📋  Manage pipeline tasks (list, status, enable, disable)
 
 OPTIONS:
     --verbose, -v   Show detailed output
@@ -102,7 +103,10 @@ EXAMPLES:
     ./dearreader run prod           # Start production
     ./dearreader status             # Check system status
     ./dearreader api test           # Test API endpoints
-    ./dearreader logs -F            # Follow all logs
+    ./dearreader task list          # List all available pipeline tasks
+    ./dearreader task status        # Show task status (enabled/disabled)
+    ./dearreader task enable <task> # Enable a specific task
+    ./dearreader task disable <task># Disable a specific task
 
 QUICK START:
     1. ./scripts/quickstart.sh    # 1-click setup (fastest!)
@@ -315,6 +319,12 @@ storage:
   logs: "./logs"
 EOF
         log_success "Created default config.yaml"
+    fi
+
+    # Create enabled tasks file if not exists
+    if [ ! -f "enabled_tasks.txt" ]; then
+        touch enabled_tasks.txt
+        log_success "Created enabled_tasks.txt"
     fi
 
     # Build Docker images
@@ -632,6 +642,239 @@ cmd_api() {
     esac
 }
 
+# Task command
+cmd_task() {
+    local subcommand="${1:-list}"
+    local task_name="$2"
+    log_header "${BOOK} Pipeline Tasks"
+
+    case "$subcommand" in
+        list)
+            log_subheader "Listing Available Tasks"
+
+            if [ ! -f "crawl_pipeline.yaml" ]; then
+                log_error "crawl_pipeline.yaml not found. Please ensure the pipeline configuration exists."
+                exit 1
+            fi
+
+            if ! command -v node >/dev/null 2>&1; then
+                log_error "Node.js is not available. Please run setup first."
+                exit 1
+            fi
+
+            # Use Node.js to parse YAML and list tasks
+            run_cmd "cd js && node -e \"
+const yaml = require('js-yaml');
+const fs = require('fs');
+const path = require('path');
+
+try {
+    const configPath = path.join('..', 'crawl_pipeline.yaml');
+    const configContent = fs.readFileSync(configPath, 'utf8');
+    const config = yaml.load(configContent);
+
+    console.log('📋 Available Pipeline Tasks:');
+    console.log('');
+
+    if (config.pipeline_tests && config.pipeline_tests.stage_tests) {
+        console.log('🔧 Stage Tasks:');
+        Object.entries(config.pipeline_tests.stage_tests).forEach(([key, value]) => {
+            console.log(\`  • \${key}: \${value.name || 'Unnamed'}\`);
+        });
+        console.log('');
+    }
+
+    if (config.pipeline_tests && config.pipeline_tests.pipeline_tests) {
+        console.log('🔄 Pipeline Tasks:');
+        Object.entries(config.pipeline_tests.pipeline_tests).forEach(([key, value]) => {
+            console.log(\`  • \${key}: \${value.name || 'Unnamed'}\`);
+        });
+        console.log('');
+    }
+
+    if (config.pipeline_tests && config.pipeline_tests.ai_task_tests) {
+        console.log('🤖 AI Tasks:');
+        Object.entries(config.pipeline_tests.ai_task_tests).forEach(([key, value]) => {
+            console.log(\`  • \${key}: \${value.name || 'Unnamed'}\`);
+        });
+        console.log('');
+    }
+
+    if (!config.pipeline_tests ||
+        (!config.pipeline_tests.stage_tests && !config.pipeline_tests.pipeline_tests && !config.pipeline_tests.ai_task_tests)) {
+        console.log('No tasks found in pipeline configuration.');
+    }
+} catch (error) {
+    console.error('Error parsing pipeline configuration:', error.message);
+    process.exit(1);
+}
+\"" "Listing pipeline tasks" true
+            ;;
+        status)
+            log_subheader "Task Status"
+
+            if [ ! -f "crawl_pipeline.yaml" ]; then
+                log_error "crawl_pipeline.yaml not found. Please ensure the pipeline configuration exists."
+                exit 1
+            fi
+
+            if ! command -v node >/dev/null 2>&1; then
+                log_error "Node.js is not available. Please run setup first."
+                exit 1
+            fi
+
+            # Create enabled_tasks.txt if not exists
+            if [ ! -f "enabled_tasks.txt" ]; then
+                touch enabled_tasks.txt
+            fi
+
+            # Use Node.js to parse YAML and show status
+            run_cmd "cd js && node -e \"
+const yaml = require('js-yaml');
+const fs = require('fs');
+const path = require('path');
+
+try {
+    const configPath = path.join('..', 'crawl_pipeline.yaml');
+    const enabledPath = path.join('..', 'enabled_tasks.txt');
+    const configContent = fs.readFileSync(configPath, 'utf8');
+    const config = yaml.load(configContent);
+    const enabledContent = fs.readFileSync(enabledPath, 'utf8');
+    const enabledTasks = new Set(enabledContent.split('\n').filter(line => line.trim()));
+
+    console.log('📋 Pipeline Task Status:');
+    console.log('');
+
+    let hasTasks = false;
+
+    if (config.pipeline_tests && config.pipeline_tests.stage_tests) {
+        console.log('🔧 Stage Tasks:');
+        Object.entries(config.pipeline_tests.stage_tests).forEach(([key, value]) => {
+            const status = enabledTasks.has(key) ? '✅ Enabled' : '❌ Disabled';
+            console.log(\`  • \${key}: \${value.name || 'Unnamed'} [\${status}]\`);
+        });
+        console.log('');
+        hasTasks = true;
+    }
+
+    if (config.pipeline_tests && config.pipeline_tests.pipeline_tests) {
+        console.log('🔄 Pipeline Tasks:');
+        Object.entries(config.pipeline_tests.pipeline_tests).forEach(([key, value]) => {
+            const status = enabledTasks.has(key) ? '✅ Enabled' : '❌ Disabled';
+            console.log(\`  • \${key}: \${value.name || 'Unnamed'} [\${status}]\`);
+        });
+        console.log('');
+        hasTasks = true;
+    }
+
+    if (config.pipeline_tests && config.pipeline_tests.ai_task_tests) {
+        console.log('🤖 AI Tasks:');
+        Object.entries(config.pipeline_tests.ai_task_tests).forEach(([key, value]) => {
+            const status = enabledTasks.has(key) ? '✅ Enabled' : '❌ Disabled';
+            console.log(\`  • \${key}: \${value.name || 'Unnamed'} [\${status}]\`);
+        });
+        console.log('');
+        hasTasks = true;
+    }
+
+    if (!hasTasks) {
+        console.log('No tasks found in pipeline configuration.');
+    }
+} catch (error) {
+    console.error('Error parsing pipeline configuration:', error.message);
+    process.exit(1);
+}
+\"" "Showing task status" true
+            ;;
+        enable)
+            if [ -z "$task_name" ]; then
+                log_error "Task name is required for enable command."
+                echo "Usage: ./dearreader task enable <task_name>"
+                exit 1
+            fi
+
+            if [ ! -f "crawl_pipeline.yaml" ]; then
+                log_error "crawl_pipeline.yaml not found. Please ensure the pipeline configuration exists."
+                exit 1
+            fi
+
+            if ! command -v node >/dev/null 2>&1; then
+                log_error "Node.js is not available. Please run setup first."
+                exit 1
+            fi
+
+            # Create enabled_tasks.txt if not exists
+            if [ ! -f "enabled_tasks.txt" ]; then
+                touch enabled_tasks.txt
+            fi
+
+            # Check if task exists
+            if ! run_cmd "cd js && node -e \"
+const yaml = require('js-yaml');
+const fs = require('fs');
+const path = require('path');
+
+try {
+    const configPath = path.join('..', 'crawl_pipeline.yaml');
+    const configContent = fs.readFileSync(configPath, 'utf8');
+    const config = yaml.load(configContent);
+
+    const taskName = process.argv[1];
+    let found = false;
+
+    if (config.pipeline_tests && config.pipeline_tests.stage_tests && config.pipeline_tests.stage_tests[taskName]) found = true;
+    if (config.pipeline_tests && config.pipeline_tests.pipeline_tests && config.pipeline_tests.pipeline_tests[taskName]) found = true;
+    if (config.pipeline_tests && config.pipeline_tests.ai_task_tests && config.pipeline_tests.ai_task_tests[taskName]) found = true;
+
+    if (!found) {
+        console.error('Task not found:', taskName);
+        process.exit(1);
+    }
+} catch (error) {
+    console.error('Error:', error.message);
+    process.exit(1);
+}
+\" \"$task_name\"" "Checking if task exists" >/dev/null 2>&1; then
+                log_error "Task '$task_name' not found in pipeline configuration."
+                exit 1
+            fi
+
+            # Enable the task
+            if grep -q "^$task_name$" enabled_tasks.txt; then
+                log_warn "Task '$task_name' is already enabled."
+            else
+                echo "$task_name" >> enabled_tasks.txt
+                log_success "Task '$task_name' enabled."
+            fi
+            ;;
+        disable)
+            if [ -z "$task_name" ]; then
+                log_error "Task name is required for disable command."
+                echo "Usage: ./dearreader task disable <task_name>"
+                exit 1
+            fi
+
+            if [ ! -f "enabled_tasks.txt" ]; then
+                log_warn "No tasks are currently enabled."
+                exit 0
+            fi
+
+            # Disable the task
+            if grep -q "^$task_name$" enabled_tasks.txt; then
+                sed -i "/^$task_name$/d" enabled_tasks.txt
+                log_success "Task '$task_name' disabled."
+            else
+                log_warn "Task '$task_name' is not enabled."
+            fi
+            ;;
+        *)
+            log_error "Unknown task subcommand: $subcommand"
+            echo "Available: list, status, enable, disable"
+            exit 1
+            ;;
+    esac
+}
+
 # Test pipeline command
 cmd_test_pipeline() {
     log_header "${TEST} Running Pipeline Tests"
@@ -660,10 +903,9 @@ cmd_test_pipeline() {
  * Uses mock data and responses to avoid external API calls
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import yaml from 'js-yaml';
+const fs = require('fs');
+const path = require('path');
+const yaml = require('js-yaml');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1295,6 +1537,9 @@ main() {
             ;;
         api)
             cmd_api "$1"
+            ;;
+        task)
+            cmd_task "$1" "$2"
             ;;
         migration)
             cmd_migration

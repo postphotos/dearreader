@@ -3,6 +3,11 @@ import { AIConsumer } from './openai-consumer.js';
 
 // Helper function to get AI consumer for a specific task
 export function getAIConsumerForTask(taskName: string, useBackup: boolean = false): AIConsumer | null {
+  // Check if AI is enabled
+  if (config.ai_enabled === false) {
+    return null;
+  }
+
   const taskKey = useBackup ? `${taskName}_backup` : taskName;
   const providerName = config.ai_tasks?.[taskKey] || config.ai_tasks?.[useBackup ? 'default_backup' : 'default'];
 

@@ -141,17 +141,16 @@ if (process.env.NODE_ENV === 'test' || process.env.CI === 'true') {
 // You can add other global test setup here if needed
 // Global after hook to close puppeteer
 after(async () => {
-    await puppeteerControl.close();
-    // Only do minimal cleanup in smart test mode
-    if (process.env.SMART_TEST_CLEANUP === 'true') {
-        console.log('✅ Smart cleanup mode: letting script handle cleanup');
-        return;
+    try {
+        await puppeteerControl.close();
+        console.log('✅ Puppeteer closed successfully');
+    } catch (error) {
+        console.warn('⚠️  Error closing puppeteer:', error.message);
     }
-    // Force exit in test environments to prevent hanging (only when not in smart mode)
-    if (process.env.NODE_ENV === 'test' || process.env.CI === 'true') {
-        setTimeout(() => {
-            console.log('⚠️  Forcing process exit after test cleanup');
-            process.exit(0);
-        }, 100);
-    }
+
+    // Always force exit after cleanup to prevent hanging
+    console.log('✅ Test cleanup complete, exiting...');
+    setTimeout(() => {
+        process.exit(0);
+    }, 50);
 });
