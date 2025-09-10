@@ -7,17 +7,37 @@ dotenv.config();
 function loadYamlConfig() {
     try {
         // Determine the project root directory
-        const projectRoot = process.cwd().endsWith('/js') ? path.resolve(process.cwd(), '..') : process.cwd();
+        let projectRoot = process.cwd().endsWith('/js') ? path.resolve(process.cwd(), '..') : process.cwd();
+        // Check if we're in a test environment (temp directory)
+        const isTestEnv = projectRoot.includes('/tmp/') || projectRoot.includes('/temp/') || projectRoot.includes('dearreader-test-');
+        if (isTestEnv) {
+            // In test environment, also check the original project root
+            const originalProjectRoot = process.env.npm_config_local_prefix ||
+                process.env.PWD ||
+                path.resolve(__dirname, '../../../');
+            // If test directory doesn't have config files, use original project root
+            const testCfgPath = path.resolve(projectRoot, 'config.yaml');
+            const testPipelinePath = path.resolve(projectRoot, 'crawl_pipeline.yaml');
+            if (!fs.existsSync(testCfgPath) && !fs.existsSync(testPipelinePath)) {
+                projectRoot = originalProjectRoot;
+            }
+        }
         // Load main config.yaml
         const cfgPath = path.resolve(projectRoot, 'config.yaml');
+        if (!fs.existsSync(cfgPath)) {
+            console.log('config.yaml not found, using defaults');
+            return {};
+        }
         const raw = fs.readFileSync(cfgPath, 'utf8');
         const mainConfig = yaml.load(raw);
         // Load crawl_pipeline.yaml if it exists
         let pipelineConfig = {};
         try {
             const pipelinePath = path.resolve(projectRoot, 'crawl_pipeline.yaml');
-            const pipelineRaw = fs.readFileSync(pipelinePath, 'utf8');
-            pipelineConfig = yaml.load(pipelineRaw) || {};
+            if (fs.existsSync(pipelinePath)) {
+                const pipelineRaw = fs.readFileSync(pipelinePath, 'utf8');
+                pipelineConfig = yaml.load(pipelineRaw) || {};
+            }
         }
         catch (err) {
             // crawl_pipeline.yaml is optional
@@ -99,6 +119,57 @@ function loadAIProviders() {
         providers['gemini-pro'] = mergeProviderConfig(undefined, 'GEMINI');
     }
     return providers;
+}
+// Function to reload config (useful for testing)
+export function reloadConfig() {
+    // Clear module cache for yaml loading
+    delete require.cache[require.resolve('js-yaml')];
+    // Reload the YAML config
+    const newYamlCfg = loadYamlConfig();
+    Object.assign(yamlCfg, newYamlCfg);
+    // Reload AI providers
+    const newProviders = loadAIProviders();
+    if (config.ai_providers) {
+        Object.keys(config.ai_providers).forEach(key => delete config.ai_providers[key]);
+        Object.assign(config.ai_providers, newProviders);
+    }
+    // Reload other config properties
+    config.url = newYamlCfg.url || process.env.READER_BASE_URL || 'http://localhost:3001/';
+    config.base_path = {
+        enabled: newYamlCfg.base_path?.enabled ?? false,
+        path: newYamlCfg.base_path?.path || '/dearreader/',
+    };
+    config.ai_tasks = newYamlCfg.ai_tasks || {
+        parse_pdf: 'openai-gpt-3.5-turbo',
+        parse_pdf_backup: 'openrouter-gpt-4',
+        validate_format: 'openrouter-gpt-4',
+        validate_format_backup: 'openai-gpt-4',
+        edit_crawl: 'openrouter-claude',
+        edit_crawl_backup: 'gemini-pro',
+        general_chat: 'openai-gpt-3.5-turbo',
+        general_chat_backup: 'openrouter-gpt-4',
+        code_analysis: 'openrouter-gpt-4',
+        code_analysis_backup: 'openai-gpt-4',
+        ocr_processing: 'gemini-pro-vision',
+        ocr_processing_backup: 'openrouter-claude',
+        sentiment_analysis: 'openrouter-claude',
+        sentiment_analysis_backup: 'gemini-pro',
+        content_classification: 'openai-gpt-3.5-turbo',
+        content_classification_backup: 'openrouter-gpt-4',
+        default: 'openai-gpt-3.5-turbo',
+        default_backup: 'openrouter-gpt-4',
+    };
+    config.concurrency = {
+        max_api_concurrency: Number(process.env.MAX_API_CONCURRENCY) || (newYamlCfg.concurrency && newYamlCfg.concurrency.max_api_concurrency) || 50,
+        default_client_concurrency: Number(process.env.DEFAULT_CLIENT_CONCURRENCY) || (newYamlCfg.concurrency && newYamlCfg.concurrency.default_client_concurrency) || 5,
+        max_queue_length_per_client: Number(process.env.MAX_QUEUE_LENGTH_PER_CLIENT) || (newYamlCfg.concurrency && newYamlCfg.concurrency.max_queue_length_per_client) || 20,
+    };
+    // Copy any other properties from the new config
+    Object.keys(newYamlCfg).forEach(key => {
+        if (!(key in config)) {
+            config[key] = newYamlCfg[key];
+        }
+    });
 }
 const config = {
     url: yamlCfg.url || process.env.READER_BASE_URL || 'http://localhost:3001/',

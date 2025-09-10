@@ -10,6 +10,9 @@ SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 PROJECT_ROOT="$SCRIPT_DIR"
 cd "$PROJECT_ROOT"
 
+# Global variable for uv usage
+USE_UV=false
+
 # Color and formatting constants
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -283,7 +286,7 @@ cmd_setup() {
             run_cmd "cd js && npm run gcp-build" "Installing Chromium via npm (fallback)"
         fi
     else
-        log_success "Chromium browser is already installed"
+        log_success "Chromium is already installed"
     fi
 
     # Check for uv (Python package manager)
@@ -300,6 +303,7 @@ cmd_setup() {
     else
         USE_UV=true
     fi
+    log_info "USE_UV is: $USE_UV"
 
     # Create necessary directories
     log_subheader "Creating Project Structure"
@@ -736,9 +740,9 @@ const path = require('path');
 
 try {
     const configPath = path.join('..', 'crawl_pipeline.yaml');
-    const enabledPath = path.join('..', 'enabled_tasks.txt');
     const configContent = fs.readFileSync(configPath, 'utf8');
     const config = yaml.load(configContent);
+    const enabledPath = path.join('..', 'enabled_tasks.txt');
     const enabledContent = fs.readFileSync(enabledPath, 'utf8');
     const enabledTasks = new Set(enabledContent.split('\n').filter(line => line.trim()));
 
@@ -906,6 +910,7 @@ cmd_test_pipeline() {
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+const { fileURLToPath } = require('url');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1212,17 +1217,15 @@ class PipelineTestRunner {
             }
         }
 
-        if (test.expected_nested_fields) {
-            for (const field of test.expected_nested_fields) {
-                const keys = field.split('.');
-                let value = result;
-                for (const key of keys) {
-                    value = value?.[key];
-                }
-                if (value === undefined) {
-                    passed = false;
-                    details.push(`Missing expected nested field: ${field}`);
-                }
+        for (const field of test.expected_nested_fields || []) {
+            const keys = field.split('.');
+            let value = result;
+            for (const key of keys) {
+                value = value?.[key];
+            }
+            if (value === undefined) {
+                passed = false;
+                details.push(`Missing expected nested field: ${field}`);
             }
         }
 

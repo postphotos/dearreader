@@ -6,7 +6,17 @@ export class AIConsumer {
         this.provider = this.extractProviderFromKey(providerKey);
         const providerConfig = config.ai_providers?.[providerKey];
         if (!providerConfig) {
-            throw new Error(`AI provider '${providerKey}' not configured in config.yaml`);
+            // In test environments or when config is not yet loaded, use defaults
+            console.warn(`AI provider '${providerKey}' not configured, using defaults`);
+            this.baseUrl = this.getDefaultBaseUrl(this.provider);
+            this.apiKey = this.getEnvApiKey(this.provider) || '';
+            this.model = this.getDefaultModel(this.provider);
+            this.temperature = 0.2;
+            this.parsingPrompt = 'Extract structured data from the following text:';
+            this.promptOptions = {};
+            this.timeoutMs = 30000;
+            this.maxRetries = 2;
+            return;
         }
         this.baseUrl = (providerConfig.base_url || this.getDefaultBaseUrl(this.provider)).replace(/\/$/, '');
         this.apiKey = providerConfig.api_key || this.getEnvApiKey(this.provider) || '';

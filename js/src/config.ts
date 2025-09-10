@@ -53,10 +53,32 @@ export interface AppConfig {
 function loadYamlConfig(): Partial<AppConfig> {
   try {
     // Determine the project root directory
-    const projectRoot = process.cwd().endsWith('/js') ? path.resolve(process.cwd(), '..') : process.cwd();
+    let projectRoot = process.cwd().endsWith('/js') ? path.resolve(process.cwd(), '..') : process.cwd();
+
+    // Check if we're in a test environment (temp directory)
+    const isTestEnv = projectRoot.includes('/tmp/') || projectRoot.includes('/temp/') || projectRoot.includes('dearreader-test-');
+
+    if (isTestEnv) {
+      // In test environment, also check the original project root
+      const originalProjectRoot = process.env.npm_config_local_prefix ||
+                                 process.env.PWD ||
+                                 path.resolve(__dirname, '../../../');
+
+      // If test directory doesn't have config files, use original project root
+      const testCfgPath = path.resolve(projectRoot, 'config.yaml');
+      const testPipelinePath = path.resolve(projectRoot, 'crawl_pipeline.yaml');
+
+      if (!fs.existsSync(testCfgPath) && !fs.existsSync(testPipelinePath)) {
+        projectRoot = originalProjectRoot;
+      }
+    }
 
     // Load main config.yaml
     const cfgPath = path.resolve(projectRoot, 'config.yaml');
+    if (!fs.existsSync(cfgPath)) {
+      console.log('config.yaml not found, using defaults');
+      return {};
+    }
     const raw = fs.readFileSync(cfgPath, 'utf8');
     const mainConfig = yaml.load(raw) as Partial<AppConfig>;
 
@@ -64,8 +86,10 @@ function loadYamlConfig(): Partial<AppConfig> {
     let pipelineConfig: any = {};
     try {
       const pipelinePath = path.resolve(projectRoot, 'crawl_pipeline.yaml');
-      const pipelineRaw = fs.readFileSync(pipelinePath, 'utf8');
-      pipelineConfig = yaml.load(pipelineRaw) || {};
+      if (fs.existsSync(pipelinePath)) {
+        const pipelineRaw = fs.readFileSync(pipelinePath, 'utf8');
+        pipelineConfig = yaml.load(pipelineRaw) || {};
+      }
     } catch (err) {
       // crawl_pipeline.yaml is optional
       console.log('crawl_pipeline.yaml not found, using config.yaml only');
@@ -154,32 +178,90 @@ function loadAIProviders(): AIProvidersConfig {
   return providers;
 }
 
+// Function to reload config (useful for testing)
+export function reloadConfig(): void {
+  // Clear module cache for yaml loading
+  delete require.cache[require.resolve('js-yaml')];
+
+  // Reload the YAML config
+  const newYamlCfg = loadYamlConfig();
+  Object.assign(yamlCfg, newYamlCfg);
+
+  // Reload AI providers
+  const newProviders = loadAIProviders();
+  if (config.ai_providers) {
+    Object.keys(config.ai_providers).forEach(key => delete config.ai_providers![key]);
+    Object.assign(config.ai_providers, newProviders);
+  }
+
+  // Reload other config properties
+  config.url = newYamlCfg.url || process.env.READER_BASE_URL || 'http://localhost:3001/';
+  config.base_path = {
+    enabled: newYamlCfg.base_path?.enabled ?? false,
+    path: newYamlCfg.base_path?.path || '/dearreader/',
+  };
+  config.ai_enabled = newYamlCfg.ai_enabled !== false && newYamlCfg.ai_enabled !== "false";
+  config.ai_tasks = newYamlCfg.ai_tasks || {
+    parse_pdf: 'deepseek/deepseek-r1:free',
+    parse_pdf_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+    validate_format: 'meta-llama/llama-3.3-70b-instruct:free',
+    validate_format_backup: 'deepseek/deepseek-chat-v3.1:free',
+    edit_crawl: 'qwen/qwen-2.5-72b-instruct:free',
+    edit_crawl_backup: 'google/gemma-3-27b-it:free',
+    general_chat: 'deepseek/deepseek-r1:free',
+    general_chat_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+    code_analysis: 'qwen/qwen-2.5-coder-32b-instruct:free',
+    code_analysis_backup: 'deepseek/deepseek-r1-distill-llama-70b:free',
+    ocr_processing: 'google/gemma-3-27b-it:free',
+    ocr_processing_backup: 'qwen/qwen2.5-vl-72b-instruct:free',
+    sentiment_analysis: 'mistralai/mistral-small-3.1-24b-instruct:free',
+    sentiment_analysis_backup: 'google/gemma-3-27b-it:free',
+    content_classification: 'deepseek/deepseek-r1:free',
+    content_classification_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+    default: 'deepseek/deepseek-r1:free',
+    default_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+  };
+  config.concurrency = {
+    max_api_concurrency: Number(process.env.MAX_API_CONCURRENCY) || (newYamlCfg.concurrency && newYamlCfg.concurrency.max_api_concurrency) || 50,
+    default_client_concurrency: Number(process.env.DEFAULT_CLIENT_CONCURRENCY) || (newYamlCfg.concurrency && newYamlCfg.concurrency.default_client_concurrency) || 5,
+    max_queue_length_per_client: Number(process.env.MAX_QUEUE_LENGTH_PER_CLIENT) || (newYamlCfg.concurrency && newYamlCfg.concurrency.max_queue_length_per_client) || 20,
+  };
+
+  // Copy any other properties from the new config
+  Object.keys(newYamlCfg).forEach(key => {
+    if (!(key in config)) {
+      (config as any)[key] = (newYamlCfg as any)[key];
+    }
+  });
+}
+
 const config: AppConfig = {
   url: yamlCfg.url || process.env.READER_BASE_URL || 'http://localhost:3001/',
   base_path: {
     enabled: yamlCfg.base_path?.enabled ?? false,
     path: yamlCfg.base_path?.path || '/dearreader/',
   },
+  ai_enabled: yamlCfg.ai_enabled !== false && yamlCfg.ai_enabled !== "false",
   ai_providers: loadAIProviders(),
   ai_tasks: yamlCfg.ai_tasks || {
-    parse_pdf: 'openai-gpt-3.5-turbo',
-    parse_pdf_backup: 'openrouter-gpt-4',
-    validate_format: 'openrouter-gpt-4',
-    validate_format_backup: 'openai-gpt-4',
-    edit_crawl: 'openrouter-claude',
-    edit_crawl_backup: 'gemini-pro',
-    general_chat: 'openai-gpt-3.5-turbo',
-    general_chat_backup: 'openrouter-gpt-4',
-    code_analysis: 'openrouter-gpt-4',
-    code_analysis_backup: 'openai-gpt-4',
-    ocr_processing: 'gemini-pro-vision',
-    ocr_processing_backup: 'openrouter-claude',
-    sentiment_analysis: 'openrouter-claude',
-    sentiment_analysis_backup: 'gemini-pro',
-    content_classification: 'openai-gpt-3.5-turbo',
-    content_classification_backup: 'openrouter-gpt-4',
-    default: 'openai-gpt-3.5-turbo',
-    default_backup: 'openrouter-gpt-4',
+    parse_pdf: 'deepseek/deepseek-r1:free',
+    parse_pdf_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+    validate_format: 'meta-llama/llama-3.3-70b-instruct:free',
+    validate_format_backup: 'deepseek/deepseek-chat-v3.1:free',
+    edit_crawl: 'qwen/qwen-2.5-72b-instruct:free',
+    edit_crawl_backup: 'google/gemma-3-27b-it:free',
+    general_chat: 'deepseek/deepseek-r1:free',
+    general_chat_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+    code_analysis: 'qwen/qwen-2.5-coder-32b-instruct:free',
+    code_analysis_backup: 'deepseek/deepseek-r1-distill-llama-70b:free',
+    ocr_processing: 'google/gemma-3-27b-it:free',
+    ocr_processing_backup: 'qwen/qwen2.5-vl-72b-instruct:free',
+    sentiment_analysis: 'mistralai/mistral-small-3.1-24b-instruct:free',
+    sentiment_analysis_backup: 'google/gemma-3-27b-it:free',
+    content_classification: 'deepseek/deepseek-r1:free',
+    content_classification_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+    default: 'deepseek/deepseek-r1:free',
+    default_backup: 'meta-llama/llama-3.3-70b-instruct:free',
   },
   concurrency: {
     max_api_concurrency: Number(process.env.MAX_API_CONCURRENCY) || (yamlCfg.concurrency && yamlCfg.concurrency.max_api_concurrency) || 50,
