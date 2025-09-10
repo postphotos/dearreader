@@ -54,12 +54,39 @@ POST http://localhost:3000/crawl
 
 ## Quick Start
 
-### Installation
+### 1. Setup Configuration Files
 ```bash
-npm install -g dearreader
+# Run the setup script to create configuration files
+./scripts/setup.sh    # Linux/Mac
 # or
-git clone https://github.com/your-org/dearreader.git
-cd dearreader && npm install
+scripts\setup.bat     # Windows
+
+# This creates:
+# - .env (from .env.example) - for API keys
+# - crawl_pipeline.yaml - for AI configurations
+```
+
+### 2. Configure API Keys
+```bash
+# Edit .env with your actual API keys
+nano .env
+
+# Example .env content:
+OPENAI_API_KEY=sk-your-openai-api-key-here
+OPENROUTER_API_KEY=sk-or-v1-your-openrouter-key-here
+GEMINI_API_KEY=your-gemini-api-key-here
+```
+
+### 3. Run DearReader
+```bash
+# Install dependencies
+npm install
+
+# Start the service
+npm start
+
+# Or run in development mode
+npm run dev
 ```
 
 ### Basic Usage
@@ -79,9 +106,6 @@ dearreader crawl "https://example.com" --output article.json
 
 ### API Usage
 ```bash
-# Start the service
-npm start
-
 # Get JSON result via API
 curl "http://localhost:3000/json/https://example.com/article"
 
@@ -100,89 +124,86 @@ curl -X POST http://localhost:3000/crawl \
 
 ## Configuration
 
-### Environment Variables (.env files)
-DearReader supports loading configuration from environment variables and `.env` files for secure API key management:
+### Configuration File Structure
+DearReader uses a clean separation of configuration:
 
+**`.env`** - API Keys and Base URLs (gitignored, secure)
 ```bash
-# Copy the example file
-cp .env.example .env
-
-# Edit with your actual API keys
-nano .env
-```
-
-**Supported Environment Variables:**
-```bash
-# OpenAI Configuration
-OPENAI_API_KEY=sk-your-openai-key-here
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-3.5-turbo
-
-# OpenRouter Configuration
-OPENROUTER_API_KEY=sk-or-v1-your-openrouter-key-here
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-
-# Google Gemini Configuration
-GEMINI_API_KEY=your-gemini-api-key-here
-GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1
-
-# Pinecone Vector Database (optional)
-PINECONE_API_KEY=your-pinecone-api-key-here
-PINECONE_ENVIRONMENT=your-pinecone-environment
-
-# External Monitoring (optional)
-MONITORING_API_KEY=your-monitoring-api-key-here
-
-# Proxy Configuration
-HTTP_PROXY=http://127.0.0.1:8080
-HTTPS_PROXY=http://127.0.0.1:8080
-
-# Performance Settings
-MAX_API_CONCURRENCY=50
-DEFAULT_CLIENT_CONCURRENCY=5
-```
-
-**Configuration Files:**
-- `.env` - API keys and secrets (gitignored, loaded via dotenv)
-- `config.yaml` - Application settings, performance tuning, and AI provider configs
-- `crawl_pipeline.yaml` - LLM processing pipelines, prompts, and model configurations
-```bash
-# OpenAI Configuration
+# API Keys - REQUIRED for AI features
 OPENAI_API_KEY=sk-your-openai-api-key-here
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-3.5-turbo
-
-# OpenRouter Configuration
 OPENROUTER_API_KEY=sk-or-v1-your-openrouter-key-here
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-
-# Google Gemini Configuration
 GEMINI_API_KEY=your-gemini-api-key-here
+PINECONE_API_KEY=your-pinecone-api-key-here
+
+# Base URL Overrides - OPTIONAL
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1
 
-# Proxy Configuration
+# Proxy Settings - OPTIONAL
 HTTP_PROXY=http://127.0.0.1:8080
 HTTPS_PROXY=http://127.0.0.1:8080
-
-# Performance Settings
-MAX_API_CONCURRENCY=50
-DEFAULT_CLIENT_CONCURRENCY=5
 ```
 
-**Security Notes:**
-- ✅ `.env` files are automatically ignored by git (already in `.gitignore`)
-- ✅ Never commit `.env` files containing real API keys
-- ✅ Use `.env.example` as a template for required variables
-- ✅ Environment variables override YAML configuration values
+**`config.yaml`** - Application Settings
+```yaml
+# Application configuration
+url: http://localhost:3001/
+base_path:
+  enabled: true
+  path: "/dearreader/"
+
+# Performance settings
+performance:
+  max_concurrent_pages: 10
+  max_rps: 60
+
+# AI settings (simple enable/disable)
+ai_enabled: true
+```
+
+**`crawl_pipeline.yaml`** - AI Configurations, Models, Prompts
+```yaml
+# All AI provider configurations, models, prompts, and pipelines
+llm_providers:
+  openai-gpt-3.5-turbo:
+    api_key: "${OPENAI_API_KEY}"  # References .env variable
+    base_url: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+    model: "gpt-3.5-turbo"
+    temperature: 0.2
+    max_tokens: 2048
+    rpm_limit: 3500  # Requests per minute limit
+    parsing_prompt: "Extract structured data from the following text:"
+
+ai_tasks:
+  parse_pdf: "openai-gpt-3.5-turbo"
+  validate_format: "openrouter-gpt-4"
+
+prompts:
+  html_to_markdown:
+    name: "Convert HTML to Markdown"
+    template: |
+      Convert the following HTML content to clean, readable Markdown format...
+```
+
+### Setup Process
+1. **Run Setup Script**: Creates `.env` and `crawl_pipeline.yaml` from templates
+2. **Edit `.env`**: Add your actual API keys (never committed to git)
+3. **Customize `crawl_pipeline.yaml`**: Adjust AI models, prompts, and pipelines as needed
+4. **API keys can be overridden** in `crawl_pipeline.yaml` if needed for specific providers
+
+### Security Best Practices
+- ✅ `.env` files are automatically gitignored
+- ✅ Never commit real API keys to version control
+- ✅ Use `.env.example` as a template
+- ✅ Environment variables override YAML configuration
+- ✅ API keys can be overridden in `crawl_pipeline.yaml` for testing
 
 ### Hot Reloading
-DearReader supports **hot reloading** of configuration changes without requiring server restart:
+DearReader supports **hot reloading** of configuration changes:
 
 ```yaml
 # config.yaml - Changes are automatically detected and applied
-robots:
-  respect_robots_txt: false  # Change this and see it take effect immediately
-
 ai_enabled: false  # Disable AI processing globally
 ```
 
@@ -191,80 +212,6 @@ ai_enabled: false  # Disable AI processing globally
 - No server restart required
 - Real-time configuration updates
 - Error handling for invalid configurations
-
-### LLM Usage (Optional)
-AI/LLM processing is **completely optional** and can be disabled:
-
-```yaml
-# Disable all AI processing
-ai_enabled: false
-
-# Or configure specific providers
-ai_enabled: true
-ai_providers:
-  openai-gpt-4:
-    api_key: "your-api-key"
-    model: "gpt-4"
-    # ... other settings
-```
-
-### Exclude File Types
-Prevent processing of unwanted file types:
-
-```yaml
-content:
-  # Exclude specific file extensions
-  exclude_file_types: ".xml, .rss, .atom, .json, .css, .js, .png, .jpg, .jpeg, .gif"
-  
-  # Exclude URL patterns (regex)
-  exclude_url_patterns: ".*\\.xml$, .*/search\\.php.*, .*/api/.*, .*/wp-admin/.*"
-```
-
-**Examples:**
-```bash
-# Exclude multiple file types
-exclude_file_types: ".pdf, .xml, .jpg, .png, .gif, .css, .js"
-
-# Exclude specific URL patterns
-exclude_url_patterns: ".*\\.xml$, .*/api/.*, .*/admin/.*, .*/search\\?q=.*"
-```
-
-### Additional Headers for Bypass
-Configure custom headers to bypass restrictions:
-
-```yaml
-headers:
-  custom_headers:
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    "Accept-Language": "en-US,en;q=0.5"
-  
-  cors_bypass_headers:
-    "Origin": "https://example.com"
-    "Sec-Fetch-Mode": "navigate"
-  
-  robots_bypass_headers:
-    "X-Robots-Tag": "noindex,nofollow"
-```
-
-### LLM Providers
-Configure AI providers in `config.yaml`:
-
-```yaml
-ai_providers:
-  openai-gpt-4:
-    api_key: "your-api-key"
-    base_url: "https://api.openai.com/v1"
-    model: "gpt-4"
-    temperature: 0.2
-    max_tokens: 2048
-
-  openai-gpt-3.5-turbo:
-    api_key: "your-api-key"
-    base_url: "https://api.openai.com/v1"
-    model: "gpt-3.5-turbo"
-    temperature: 0.3
-    max_tokens: 1024
-```
 
 ## API Reference
 
