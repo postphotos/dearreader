@@ -100,6 +100,81 @@ curl -X POST http://localhost:3000/crawl \
 
 ## Configuration
 
+### Environment Variables (.env files)
+DearReader supports loading configuration from environment variables and `.env` files for secure API key management:
+
+```bash
+# Copy the example file
+cp .env.example .env
+
+# Edit with your actual API keys
+nano .env
+```
+
+**Supported Environment Variables:**
+```bash
+# OpenAI Configuration
+OPENAI_API_KEY=sk-your-openai-key-here
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-3.5-turbo
+
+# OpenRouter Configuration
+OPENROUTER_API_KEY=sk-or-v1-your-openrouter-key-here
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+
+# Google Gemini Configuration
+GEMINI_API_KEY=your-gemini-api-key-here
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1
+
+# Pinecone Vector Database (optional)
+PINECONE_API_KEY=your-pinecone-api-key-here
+PINECONE_ENVIRONMENT=your-pinecone-environment
+
+# External Monitoring (optional)
+MONITORING_API_KEY=your-monitoring-api-key-here
+
+# Proxy Configuration
+HTTP_PROXY=http://127.0.0.1:8080
+HTTPS_PROXY=http://127.0.0.1:8080
+
+# Performance Settings
+MAX_API_CONCURRENCY=50
+DEFAULT_CLIENT_CONCURRENCY=5
+```
+
+**Configuration Files:**
+- `.env` - API keys and secrets (gitignored, loaded via dotenv)
+- `config.yaml` - Application settings, performance tuning, and AI provider configs
+- `crawl_pipeline.yaml` - LLM processing pipelines, prompts, and model configurations
+```bash
+# OpenAI Configuration
+OPENAI_API_KEY=sk-your-openai-api-key-here
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-3.5-turbo
+
+# OpenRouter Configuration
+OPENROUTER_API_KEY=sk-or-v1-your-openrouter-key-here
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+
+# Google Gemini Configuration
+GEMINI_API_KEY=your-gemini-api-key-here
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1
+
+# Proxy Configuration
+HTTP_PROXY=http://127.0.0.1:8080
+HTTPS_PROXY=http://127.0.0.1:8080
+
+# Performance Settings
+MAX_API_CONCURRENCY=50
+DEFAULT_CLIENT_CONCURRENCY=5
+```
+
+**Security Notes:**
+- ✅ `.env` files are automatically ignored by git (already in `.gitignore`)
+- ✅ Never commit `.env` files containing real API keys
+- ✅ Use `.env.example` as a template for required variables
+- ✅ Environment variables override YAML configuration values
+
 ### Hot Reloading
 DearReader supports **hot reloading** of configuration changes without requiring server restart:
 

@@ -53,6 +53,41 @@ curl "/https://example.com?prompt=Extract%20the%20main%20arguments%20from%20this
 curl "/https://example.com?api_key=your-custom-key"
 ```
 
+## 🔐 API Key Configuration
+
+### Environment Variables (.env files)
+
+For secure API key management, DearReader supports loading configuration from `.env` files:
+
+```bash
+# Create .env file from template
+cp .env.example .env
+
+# Add your API keys
+echo "OPENAI_API_KEY=sk-your-key-here" >> .env
+echo "OPENROUTER_API_KEY=sk-or-v1-your-key-here" >> .env
+```
+
+**Supported Environment Variables:**
+- `OPENAI_API_KEY` - OpenAI API key
+- `OPENROUTER_API_KEY` - OpenRouter API key  
+- `GEMINI_API_KEY` - Google Gemini API key
+- `PINECONE_API_KEY` - Pinecone vector database key
+- `MONITORING_API_KEY` - External monitoring service key
+- `HTTP_PROXY` / `HTTPS_PROXY` - Proxy settings
+- `MAX_API_CONCURRENCY` - Performance tuning
+
+**Configuration Files:**
+- `.env` - API keys and secrets (auto-loaded)
+- `config.yaml` - Application settings and AI provider configs
+- `crawl_pipeline.yaml` - LLM processing pipelines and prompts
+
+**Security Notes:**
+- 🔒 `.env` files are automatically gitignored
+- 🚫 Never commit real API keys
+- ✅ Environment variables override YAML config
+- 🔄 Changes require server restart (not hot-reloaded)
+
 **Content Filtering:**
 ```bash
 # Exclude certain file types

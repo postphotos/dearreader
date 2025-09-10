@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { getAIConsumerForTask, getAIConsumerWithFallback, getAvailableTasks, getTaskConfig } from '../ai-task-manager.js';
-import config from '../../config.js';
+import config from '../config.js';
 describe('AI Task Manager', () => {
     // Check if AI is enabled in config
     const aiEnabled = config.ai_enabled !== false;

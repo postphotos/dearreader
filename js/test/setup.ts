@@ -20,6 +20,23 @@ if (typeof (globalThis as any).DOMMatrix === 'undefined') {
   (globalThis as any).DOMMatrix = DOMMatrixPolyfill;
 }
 
+// Polyfill for Promise.withResolvers (Node.js 18+)
+if (typeof (globalThis as any).Promise.withResolvers === 'undefined') {
+  (globalThis as any).Promise.withResolvers = function<T>() {
+    let resolve: (value: T | PromiseLike<T>) => void;
+    let reject: (reason?: any) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve: resolve!, reject: reject! };
+  };
+}
+
+// Configure pdfjs-dist for testing
+import * as pdfjsLib from 'pdfjs-dist';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs-dist/build/pdf.worker.mjs';
+
 import 'reflect-metadata';
 import * as fs from 'fs';
 

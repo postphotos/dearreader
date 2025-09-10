@@ -10,7 +10,6 @@ import config from '../../config.js';
 describe('AI Task Manager', () => {
     // Check if AI is enabled in config
     const aiEnabled = config.ai_enabled !== false;
-
     describe('Configuration Tests', () => {
         it('should check AI enable/disable configuration', () => {
             // This test always passes - it verifies the AI enable/disable logic

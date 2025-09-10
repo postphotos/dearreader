@@ -24,6 +24,50 @@ That's it! The script will:
 - ✅ Start the development server
 - ✅ Open your browser to http://localhost:3001
 
+## 🔐 API Key Setup (Optional)
+
+For AI features, configure your API keys securely:
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit with your actual API keys (NEVER commit this file!)
+nano .env
+```
+
+**Example .env file:**
+```bash
+# OpenAI (for GPT models)
+OPENAI_API_KEY=sk-your-openai-key-here
+OPENAI_MODEL=gpt-4
+
+# OpenRouter (for Claude, Gemini, etc.)
+OPENROUTER_API_KEY=sk-or-v1-your-openrouter-key-here
+
+# Google Gemini
+GEMINI_API_KEY=your-gemini-api-key-here
+
+# Optional: Pinecone for vector storage
+PINECONE_API_KEY=your-pinecone-key-here
+PINECONE_ENVIRONMENT=your-environment
+
+# Proxy settings (optional)
+HTTP_PROXY=http://127.0.0.1:8080
+HTTPS_PROXY=http://127.0.0.1:8080
+```
+
+**Configuration Structure:**
+- `.env` - API keys and secrets (gitignored)
+- `config.yaml` - Application settings and AI provider configurations
+- `crawl_pipeline.yaml` - LLM processing pipelines and prompts
+
+**Security Notes:**
+- 🔒 `.env` files are automatically ignored by git
+- 🚫 Never commit real API keys to version control
+- ✅ Use `.env.example` as a template
+- 🔄 Environment variables override YAML config
+
 ## 🧪 Test Your Setup
 
 ```bash
