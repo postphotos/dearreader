@@ -20,43 +20,147 @@
 #
 # ============================================================================
 
-# LLM Provider Definitions
+# ============================================================================
+# LLM PROVIDER DEFINITIONS
+# ============================================================================
+# All AI provider configurations, models, prompts, and settings
+# API keys are loaded from .env file, but can be overridden here
+
 llm_providers:
-  # Primary providers for different use cases
-  primary_text:
-    provider: "openai-gpt-4"
-    model: "gpt-4"
+  # OpenAI Provider - Multiple models with RPM limits
+  openai-gpt-3.5-turbo:
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+    model: "gpt-3.5-turbo"
     temperature: 0.2
     max_tokens: 2048
-    timeout_ms: 30000
+    rpm_limit: 3500  # OpenAI Tier 1 limit
+    parsing_prompt: "Extract structured data from the following text:"
+    prompt_options:
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+    request_timeout_ms: 30000
+    max_retries: 2
 
-  primary_vision:
-    provider: "gemini-pro-vision"
-    model: "gemini-pro-vision"
+  openai-gpt-4:
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+    model: "gpt-4"
     temperature: 0.1
     max_tokens: 4096
-    timeout_ms: 45000
+    rpm_limit: 200  # GPT-4 rate limit
+    parsing_prompt: "Analyze and extract key information from the following text:"
+    prompt_options:
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+    request_timeout_ms: 60000
+    max_retries: 3
 
-  fast_processing:
-    provider: "openai-gpt-3.5-turbo"
-    model: "gpt-3.5-turbo"
-    temperature: 0.3
-    max_tokens: 1024
-    timeout_ms: 20000
-
-  creative_enhancement:
-    provider: "openrouter-claude"
-    model: "anthropic/claude-3-haiku"
-    temperature: 0.7
-    max_tokens: 2048
-    timeout_ms: 35000
-
-  fallback:
-    provider: "openrouter-gpt-4"
+  # OpenRouter Provider - Multiple models
+  openrouter-gpt-4:
+    api_key: "${OPENROUTER_API_KEY}"
+    base_url: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
     model: "openai/gpt-4"
     temperature: 0.2
+    max_tokens: 4096
+    rpm_limit: 100  # OpenRouter limit
+    parsing_prompt: "Extract structured data from the following text:"
+    prompt_options:
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+    request_timeout_ms: 30000
+    max_retries: 2
+
+  openrouter-claude:
+    api_key: "${OPENROUTER_API_KEY}"
+    base_url: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
+    model: "anthropic/claude-3-haiku"
+    temperature: 0.3
+    max_tokens: 4096
+    rpm_limit: 100  # OpenRouter limit
+    parsing_prompt: "Analyze this content and provide insights:"
+    prompt_options:
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+    request_timeout_ms: 30000
+    max_retries: 2
+
+  # Google Gemini Provider
+  gemini-pro:
+    api_key: "${GEMINI_API_KEY}"
+    base_url: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1}"
+    model: "gemini-pro"
+    temperature: 0.2
     max_tokens: 2048
-    timeout_ms: 30000
+    rpm_limit: 60  # Gemini rate limit
+    parsing_prompt: "Extract structured data from the following text:"
+    prompt_options:
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+    request_timeout_ms: 30000
+    max_retries: 2
+
+  gemini-pro-vision:
+    api_key: "${GEMINI_API_KEY}"
+    base_url: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1}"
+    model: "gemini-pro-vision"
+    temperature: 0.2
+    max_tokens: 2048
+    rpm_limit: 60  # Gemini rate limit
+    parsing_prompt: "Analyze this image and text content:"
+    prompt_options:
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+    request_timeout_ms: 30000
+    max_retries: 2
+
+# ============================================================================
+# TASK-SPECIFIC AI MODEL ASSIGNMENTS
+# ============================================================================
+# Map tasks to specific provider-model combinations
+
+ai_tasks:
+  # PDF processing tasks - Use local model for speed, cloud for accuracy
+  parse_pdf: "openai-gpt-3.5-turbo"           # Primary: Local model for fast PDF parsing
+  parse_pdf_backup: "openrouter-gpt-4"         # Backup: Cloud model for complex PDFs
+
+  # Content validation - Use more capable models
+  validate_format: "openrouter-gpt-4"          # Primary: GPT-4 for reliable validation
+  validate_format_backup: "openai-gpt-4"       # Backup: OpenAI GPT-4
+
+  # Web crawling and content editing
+  edit_crawl: "openrouter-claude"              # Primary: Claude for content enhancement
+  edit_crawl_backup: "gemini-pro"              # Backup: Gemini for editing
+
+  # General purpose tasks - Use cost-effective models
+  general_chat: "openai-gpt-3.5-turbo"         # Primary: Fast, cheap model
+  general_chat_backup: "openrouter-gpt-4"      # Backup: More capable model
+
+  # Code analysis - Use specialized models
+  code_analysis: "openrouter-gpt-4"            # Primary: GPT-4 for technical analysis
+  code_analysis_backup: "openai-gpt-4"         # Backup: OpenAI GPT-4
+
+  # OCR and document processing
+  ocr_processing: "gemini-pro-vision"          # Primary: Vision model for OCR
+  ocr_processing_backup: "openrouter-claude"   # Backup: Claude for text analysis
+
+  # Sentiment analysis
+  sentiment_analysis: "openrouter-claude"      # Primary: Claude for nuanced analysis
+  sentiment_analysis_backup: "gemini-pro"      # Backup: Gemini
+
+  # Content classification
+  content_classification: "openai-gpt-3.5-turbo" # Primary: Fast classification
+  content_classification_backup: "openrouter-gpt-4" # Backup: More accurate
+
+  # Default fallbacks
+  default: "openai-gpt-3.5-turbo"               # Default to fast, local model
+  default_backup: "openrouter-gpt-4"           # Default backup to capable cloud model
 
 # Prompt Definitions
 prompts:

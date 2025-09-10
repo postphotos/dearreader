@@ -54,7 +54,7 @@ function loadYamlConfig(): Partial<AppConfig> {
   try {
     // Determine the project root directory
     const projectRoot = process.cwd().endsWith('/js') ? path.resolve(process.cwd(), '..') : process.cwd();
-    
+
     // Load main config.yaml
     const cfgPath = path.resolve(projectRoot, 'config.yaml');
     const raw = fs.readFileSync(cfgPath, 'utf8');
