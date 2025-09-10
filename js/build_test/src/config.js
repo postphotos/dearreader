@@ -87,12 +87,14 @@ function mergeProviderConfig(yamlConfig, envPrefix = '') {
     const envPresPenalty = envPrefix ? `${envPrefix}_PRESENCE_PENALTY` : '';
     const envTimeout = envPrefix ? `${envPrefix}_REQUEST_TIMEOUT_MS` : '';
     const envRetries = envPrefix ? `${envPrefix}_MAX_RETRIES` : '';
+    const envRpmLimit = envPrefix ? `${envPrefix}_RPM_LIMIT` : '';
     return {
         api_key: process.env[envKey] || yamlConfig?.api_key || '',
         base_url: process.env[envBaseUrl] || yamlConfig?.base_url || '',
         model: process.env[envModel] || yamlConfig?.model || '',
         temperature: Number(process.env[envTemp]) || yamlConfig?.temperature || 0.2,
         parsing_prompt: process.env[envPrompt] || yamlConfig?.parsing_prompt || 'Extract structured data from the following text:',
+        rpm_limit: Number(process.env[envRpmLimit]) || yamlConfig?.rpm_limit || 100,
         prompt_options: {
             max_tokens: Number(process.env[envMaxTokens]) || yamlConfig?.prompt_options?.max_tokens || 2048,
             top_p: Number(process.env[envTopP]) || yamlConfig?.prompt_options?.top_p || 1.0,
@@ -112,11 +114,29 @@ function loadAIProviders() {
             providers[providerKey] = mergeProviderConfig(yamlConfig);
         });
     }
-    // If no providers defined in YAML, provide some defaults
+    // If no providers defined in YAML, provide some defaults with free OpenRouter models
     if (Object.keys(providers).length === 0) {
-        providers['openai-gpt-3.5-turbo'] = mergeProviderConfig(undefined, 'OPENAI');
-        providers['openrouter-gpt-4'] = mergeProviderConfig(undefined, 'OPENROUTER');
-        providers['gemini-pro'] = mergeProviderConfig(undefined, 'GEMINI');
+        // Free OpenRouter models - no API key required
+        providers['deepseek/deepseek-r1:free'] = mergeProviderConfig({
+            base_url: 'https://openrouter.ai/api/v1',
+            model: 'deepseek/deepseek-r1:free'
+        });
+        providers['meta-llama/llama-3.3-70b-instruct:free'] = mergeProviderConfig({
+            base_url: 'https://openrouter.ai/api/v1',
+            model: 'meta-llama/llama-3.3-70b-instruct:free'
+        });
+        providers['qwen/qwen-2.5-72b-instruct:free'] = mergeProviderConfig({
+            base_url: 'https://openrouter.ai/api/v1',
+            model: 'qwen/qwen-2.5-72b-instruct:free'
+        });
+        providers['google/gemma-3-27b-it:free'] = mergeProviderConfig({
+            base_url: 'https://openrouter.ai/api/v1',
+            model: 'google/gemma-3-27b-it:free'
+        });
+        providers['mistralai/mistral-small-3.1-24b-instruct:free'] = mergeProviderConfig({
+            base_url: 'https://openrouter.ai/api/v1',
+            model: 'mistralai/mistral-small-3.1-24b-instruct:free'
+        });
     }
     return providers;
 }
@@ -139,30 +159,35 @@ export function reloadConfig() {
         enabled: newYamlCfg.base_path?.enabled ?? false,
         path: newYamlCfg.base_path?.path || '/dearreader/',
     };
+    config.ai_enabled = newYamlCfg.ai_enabled !== false && newYamlCfg.ai_enabled !== "false";
     config.ai_tasks = newYamlCfg.ai_tasks || {
-        parse_pdf: 'openai-gpt-3.5-turbo',
-        parse_pdf_backup: 'openrouter-gpt-4',
-        validate_format: 'openrouter-gpt-4',
-        validate_format_backup: 'openai-gpt-4',
-        edit_crawl: 'openrouter-claude',
-        edit_crawl_backup: 'gemini-pro',
-        general_chat: 'openai-gpt-3.5-turbo',
-        general_chat_backup: 'openrouter-gpt-4',
-        code_analysis: 'openrouter-gpt-4',
-        code_analysis_backup: 'openai-gpt-4',
-        ocr_processing: 'gemini-pro-vision',
-        ocr_processing_backup: 'openrouter-claude',
-        sentiment_analysis: 'openrouter-claude',
-        sentiment_analysis_backup: 'gemini-pro',
-        content_classification: 'openai-gpt-3.5-turbo',
-        content_classification_backup: 'openrouter-gpt-4',
-        default: 'openai-gpt-3.5-turbo',
-        default_backup: 'openrouter-gpt-4',
+        parse_pdf: 'deepseek/deepseek-r1:free',
+        parse_pdf_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+        validate_format: 'meta-llama/llama-3.3-70b-instruct:free',
+        validate_format_backup: 'deepseek/deepseek-chat-v3.1:free',
+        edit_crawl: 'qwen/qwen-2.5-72b-instruct:free',
+        edit_crawl_backup: 'google/gemma-3-27b-it:free',
+        general_chat: 'deepseek/deepseek-r1:free',
+        general_chat_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+        code_analysis: 'qwen/qwen-2.5-coder-32b-instruct:free',
+        code_analysis_backup: 'deepseek/deepseek-r1-distill-llama-70b:free',
+        ocr_processing: 'google/gemma-3-27b-it:free',
+        ocr_processing_backup: 'qwen/qwen2.5-vl-72b-instruct:free',
+        sentiment_analysis: 'mistralai/mistral-small-3.1-24b-instruct:free',
+        sentiment_analysis_backup: 'google/gemma-3-27b-it:free',
+        content_classification: 'deepseek/deepseek-r1:free',
+        content_classification_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+        default: 'deepseek/deepseek-r1:free',
+        default_backup: 'meta-llama/llama-3.3-70b-instruct:free',
     };
     config.concurrency = {
         max_api_concurrency: Number(process.env.MAX_API_CONCURRENCY) || (newYamlCfg.concurrency && newYamlCfg.concurrency.max_api_concurrency) || 50,
         default_client_concurrency: Number(process.env.DEFAULT_CLIENT_CONCURRENCY) || (newYamlCfg.concurrency && newYamlCfg.concurrency.default_client_concurrency) || 5,
         max_queue_length_per_client: Number(process.env.MAX_QUEUE_LENGTH_PER_CLIENT) || (newYamlCfg.concurrency && newYamlCfg.concurrency.max_queue_length_per_client) || 20,
+    };
+    config.performance = newYamlCfg.performance || {
+        max_concurrent_pages: 10,
+        max_rps: 30,
     };
     // Copy any other properties from the new config
     Object.keys(newYamlCfg).forEach(key => {
@@ -177,31 +202,36 @@ const config = {
         enabled: yamlCfg.base_path?.enabled ?? false,
         path: yamlCfg.base_path?.path || '/dearreader/',
     },
+    ai_enabled: yamlCfg.ai_enabled !== false && yamlCfg.ai_enabled !== "false",
     ai_providers: loadAIProviders(),
     ai_tasks: yamlCfg.ai_tasks || {
-        parse_pdf: 'openai-gpt-3.5-turbo',
-        parse_pdf_backup: 'openrouter-gpt-4',
-        validate_format: 'openrouter-gpt-4',
-        validate_format_backup: 'openai-gpt-4',
-        edit_crawl: 'openrouter-claude',
-        edit_crawl_backup: 'gemini-pro',
-        general_chat: 'openai-gpt-3.5-turbo',
-        general_chat_backup: 'openrouter-gpt-4',
-        code_analysis: 'openrouter-gpt-4',
-        code_analysis_backup: 'openai-gpt-4',
-        ocr_processing: 'gemini-pro-vision',
-        ocr_processing_backup: 'openrouter-claude',
-        sentiment_analysis: 'openrouter-claude',
-        sentiment_analysis_backup: 'gemini-pro',
-        content_classification: 'openai-gpt-3.5-turbo',
-        content_classification_backup: 'openrouter-gpt-4',
-        default: 'openai-gpt-3.5-turbo',
-        default_backup: 'openrouter-gpt-4',
+        parse_pdf: 'deepseek/deepseek-r1:free',
+        parse_pdf_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+        validate_format: 'meta-llama/llama-3.3-70b-instruct:free',
+        validate_format_backup: 'deepseek/deepseek-chat-v3.1:free',
+        edit_crawl: 'qwen/qwen-2.5-72b-instruct:free',
+        edit_crawl_backup: 'google/gemma-3-27b-it:free',
+        general_chat: 'deepseek/deepseek-r1:free',
+        general_chat_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+        code_analysis: 'qwen/qwen-2.5-coder-32b-instruct:free',
+        code_analysis_backup: 'deepseek/deepseek-r1-distill-llama-70b:free',
+        ocr_processing: 'google/gemma-3-27b-it:free',
+        ocr_processing_backup: 'qwen/qwen2.5-vl-72b-instruct:free',
+        sentiment_analysis: 'mistralai/mistral-small-3.1-24b-instruct:free',
+        sentiment_analysis_backup: 'google/gemma-3-27b-it:free',
+        content_classification: 'deepseek/deepseek-r1:free',
+        content_classification_backup: 'meta-llama/llama-3.3-70b-instruct:free',
+        default: 'deepseek/deepseek-r1:free',
+        default_backup: 'meta-llama/llama-3.3-70b-instruct:free',
     },
     concurrency: {
         max_api_concurrency: Number(process.env.MAX_API_CONCURRENCY) || (yamlCfg.concurrency && yamlCfg.concurrency.max_api_concurrency) || 50,
         default_client_concurrency: Number(process.env.DEFAULT_CLIENT_CONCURRENCY) || (yamlCfg.concurrency && yamlCfg.concurrency.default_client_concurrency) || 5,
         max_queue_length_per_client: Number(process.env.MAX_QUEUE_LENGTH_PER_CLIENT) || (yamlCfg.concurrency && yamlCfg.concurrency.max_queue_length_per_client) || 20,
+    },
+    performance: yamlCfg.performance || {
+        max_concurrent_pages: 10,
+        max_rps: 30,
     },
     ...yamlCfg,
 };

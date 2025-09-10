@@ -12,6 +12,7 @@ export interface AIProviderConfig {
   model?: string;
   temperature?: number;
   parsing_prompt?: string;
+  rpm_limit?: number; // Add rpm_limit property
   prompt_options?: {
     max_tokens?: number;
     top_p?: number;
@@ -32,6 +33,11 @@ export interface ConcurrencyConfig {
   max_queue_length_per_client?: number;
 }
 
+export interface PerformanceConfig {
+  max_concurrent_pages?: number;
+  max_rps?: number;
+}
+
 export interface BasePathConfig {
   enabled?: boolean;
   path?: string;
@@ -47,6 +53,7 @@ export interface AppConfig {
   ai_providers?: AIProvidersConfig;
   ai_tasks?: AITaskAssignments;
   concurrency?: ConcurrencyConfig;
+  performance?: PerformanceConfig; // Add performance property
   [k: string]: any;
 }
 
@@ -139,6 +146,7 @@ function mergeProviderConfig(yamlConfig?: AIProviderConfig, envPrefix: string = 
   const envPresPenalty = envPrefix ? `${envPrefix}_PRESENCE_PENALTY` : '';
   const envTimeout = envPrefix ? `${envPrefix}_REQUEST_TIMEOUT_MS` : '';
   const envRetries = envPrefix ? `${envPrefix}_MAX_RETRIES` : '';
+  const envRpmLimit = envPrefix ? `${envPrefix}_RPM_LIMIT` : '';
 
   return {
     api_key: process.env[envKey] || yamlConfig?.api_key || '',
@@ -146,6 +154,7 @@ function mergeProviderConfig(yamlConfig?: AIProviderConfig, envPrefix: string = 
     model: process.env[envModel] || yamlConfig?.model || '',
     temperature: Number(process.env[envTemp]) || yamlConfig?.temperature || 0.2,
     parsing_prompt: process.env[envPrompt] || yamlConfig?.parsing_prompt || 'Extract structured data from the following text:',
+    rpm_limit: Number(process.env[envRpmLimit]) || yamlConfig?.rpm_limit || 100,
     prompt_options: {
       max_tokens: Number(process.env[envMaxTokens]) || yamlConfig?.prompt_options?.max_tokens || 2048,
       top_p: Number(process.env[envTopP]) || yamlConfig?.prompt_options?.top_p || 1.0,
@@ -245,6 +254,11 @@ export function reloadConfig(): void {
     max_queue_length_per_client: Number(process.env.MAX_QUEUE_LENGTH_PER_CLIENT) || (newYamlCfg.concurrency && newYamlCfg.concurrency.max_queue_length_per_client) || 20,
   };
 
+  config.performance = newYamlCfg.performance || {
+    max_concurrent_pages: 10,
+    max_rps: 30,
+  };
+
   // Copy any other properties from the new config
   Object.keys(newYamlCfg).forEach(key => {
     if (!(key in config)) {
@@ -285,6 +299,10 @@ const config: AppConfig = {
     max_api_concurrency: Number(process.env.MAX_API_CONCURRENCY) || (yamlCfg.concurrency && yamlCfg.concurrency.max_api_concurrency) || 50,
     default_client_concurrency: Number(process.env.DEFAULT_CLIENT_CONCURRENCY) || (yamlCfg.concurrency && yamlCfg.concurrency.default_client_concurrency) || 5,
     max_queue_length_per_client: Number(process.env.MAX_QUEUE_LENGTH_PER_CLIENT) || (yamlCfg.concurrency && yamlCfg.concurrency.max_queue_length_per_client) || 20,
+  },
+  performance: yamlCfg.performance || {
+    max_concurrent_pages: 10,
+    max_rps: 30,
   },
   ...yamlCfg,
 };

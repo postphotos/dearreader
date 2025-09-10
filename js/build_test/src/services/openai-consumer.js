@@ -28,6 +28,14 @@ export class AIConsumer {
         this.maxRetries = providerConfig.max_retries ?? 2;
     }
     extractProviderFromKey(providerKey) {
+        // Handle new OpenRouter format with slashes (e.g., "deepseek/deepseek-r1:free")
+        if (providerKey.includes('/')) {
+            const providerPart = providerKey.split('/')[0];
+            if (providerPart === 'deepseek' || providerPart === 'meta-llama' || providerPart === 'qwen' || providerPart === 'google' || providerPart === 'mistralai') {
+                return 'openrouter'; // All these are accessed via OpenRouter
+            }
+        }
+        // Handle legacy format with dashes
         if (providerKey.startsWith('openai-')) {
             return 'openai';
         }
@@ -46,7 +54,7 @@ export class AIConsumer {
                     return baseProvider;
                 }
             }
-            return 'openai'; // Default fallback
+            return 'openrouter'; // Default to openrouter for new format
         }
     }
     getDefaultBaseUrl(provider) {
@@ -68,9 +76,9 @@ export class AIConsumer {
     getDefaultModel(provider) {
         switch (provider) {
             case 'openai': return 'gpt-3.5-turbo';
-            case 'openrouter': return 'openrouter/gpt-4';
+            case 'openrouter': return 'openai/gpt-4'; // Default OpenRouter model
             case 'gemini': return 'gemini-pro';
-            default: return 'gpt-3.5-turbo';
+            default: return 'openai/gpt-4'; // Default to OpenRouter format
         }
     }
     headers() {
