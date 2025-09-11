@@ -38,7 +38,7 @@ function logTest(testName, status, details = '') {
 
 // Mock implementations for pipeline stages
 class MockCrawler {
-    static async crawl(url, config) {
+    static async crawl(url) {
         log(colors.blue, `🔍 Mock crawling: ${url}`);
 
         // Simulate different response types based on URL
@@ -276,7 +276,7 @@ class PipelineTestRunner {
     }
 
     async testCrawlStage(test) {
-        const result = await MockCrawler.crawl(test.test_url, test);
+        const result = await MockCrawler.crawl(test.test_url);
 
         let passed = true;
         let details = [];

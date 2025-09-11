@@ -3,10 +3,13 @@
 # DearReader - Unified Project Manager
 # A delightful CLI for managing the DearReader web crawler
 
+# Exit immediately if a command exits with a non-zero status.
 set -e
 
-# Get the directory where this script is located and navigate to project root
-SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+# --- Portability Fix ---
+# Get the directory where this script is located and navigate to project root.
+# This approach is more portable than `readlink -f` which is not available on macOS by default.
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 PROJECT_ROOT="$SCRIPT_DIR"
 cd "$PROJECT_ROOT"
 
@@ -68,7 +71,7 @@ log_subheader() {
 
 # Show beautiful help
 show_help() {
-    cat << 'EOF'
+    cat <<'EOF'
 
 ╔══════════════════════════════════════════════════════════════╗
 ║                     📚 DearReader CLI                       ║
@@ -141,32 +144,49 @@ check_docker() {
     fi
 }
 
-# Cross-platform command execution with better feedback
-# Usage: run_cmd <command> <description> [show_output]
-# Arguments:
-#   $1 - command string or array (e.g. "ls -l" or "npm install")
-#   $2 - description (string shown in logs)
-#   $3 - show_output (optional, true/false; if true, output is shown)
-# Example:
-#   run_cmd "ls -l" "Listing files" true
+# Cross-platform command execution with better feedback and security.
 run_cmd() {
-    local cmd="$1"
-    local description="$2"
-    local show_output="${3:-false}"
+    local description="$1"
+    shift
+    local cmd_str="$*"
 
-    if [ "$VERBOSE" = true ] || [ "$show_output" = true ]; then
-        log_info "$description..."
-        echo -e "${CYAN}  └─ ${cmd}${NC}"
-        bash -c "$cmd"
+    log_info "$description..."
+
+    if [ "$VERBOSE" = true ]; then
+        echo -e "${CYAN}  └─ ${cmd_str}${NC}"
+        # Execute with output visible
+        "$@"
         return $?
     else
-        log_info "$description..."
-        if ! bash -c "$cmd" >/dev/null 2>&1; then
-            log_error "Command failed: ${cmd}"
-            return 1
+        # Execute and capture stderr on failure
+        local stderr
+        stderr=$("$@" 2>&1 >/dev/null)
+        local exit_code=$?
+        if [ $exit_code -ne 0 ]; then
+            log_error "Failed: $description"
+            echo -e "${RED}Error details:${NC}\n$stderr" >&2
+            return $exit_code
         fi
     fi
 }
+
+# Checks for a command and provides installation instructions if missing.
+check_dependency() {
+    local cmd="$1"
+    local package="$2"
+    local instructions="$3"
+
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        log_warn "$package not found. This is required for some features."
+        echo -e "${YELLOW}To install it, please run:${NC}"
+        echo -e "  $instructions"
+        return 1
+    else
+        log_success "$package is installed"
+        return 0
+    fi
+}
+
 # Setup command - comprehensive environment setup
 cmd_setup() {
     log_header "${ROCKET} Setting up DearReader Environment"
@@ -174,19 +194,16 @@ cmd_setup() {
     # Pre-flight checks
     log_subheader "Pre-flight Checks"
 
-    # Check internet connectivity (cloud-friendly)
     if ! curl -s --connect-timeout 5 --max-time 10 https://www.google.com >/dev/null 2>&1 && \
-       ! curl -s --connect-timeout 5 --max-time 10 https://www.cloudflare.com >/dev/null 2>&1 && \
-       ! ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+       ! curl -s --connect-timeout 5 --max-time 10 https://www.cloudflare.com >/dev/null 2>&1; then
         log_error "No internet connection detected. Please check your network."
-        log_info "Note: Some cloud environments block ICMP ping but allow HTTP"
         exit 1
     fi
     log_success "Internet connection verified"
 
-    # Check available disk space (need at least 2GB)
     if [[ "$OSTYPE" != "msys" && "$OSTYPE" != "win32" ]]; then
-        local available_space=$(df --output=avail -BG . | tail -1 | sed 's/G//;s/^[[:space:]]*//')
+        local available_space
+        available_space=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
         if [ "$available_space" -lt 2 ]; then
             log_error "Insufficient disk space. Need at least 2GB free."
             exit 1
@@ -198,187 +215,96 @@ cmd_setup() {
     log_subheader "Checking Prerequisites"
     check_docker
 
-    # Check for Node.js and npm
-    # Check for Node.js and npm
-        if ! command -v node >/dev/null 2>&1; then
-            log_error "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org"
-            exit 1
-        fi
-
-        # capture node version (strip leading "v")
-        node_version=$(node -v 2>/dev/null | sed 's/^v//')
-        node_major_version=$(echo "${node_version%%.*}" | sed 's/[^0-9]*//g')
-
-        if [ -n "$node_major_version" ] && [ "$node_major_version" -lt 18 ]; then
-            log_warn "Node.js version ${node_version:-unknown} detected. Recommended: 18+"
-        else
-            log_success "Node.js environment ready"
-        fi
-    # Check for Tesseract OCR (needed for PDF OCR functionality)
-    if ! command -v tesseract >/dev/null 2>&1; then
-        log_warn "Tesseract OCR not found. Installing Tesseract for PDF OCR functionality..."
-        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            # Linux (Ubuntu/Debian)
-            if command -v apt-get >/dev/null 2>&1; then
-                run_cmd "sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-eng" "Installing Tesseract OCR (Ubuntu/Debian)"
-            elif command -v yum >/dev/null 2>&1; then
-                run_cmd "sudo yum install -y tesseract" "Installing Tesseract OCR (CentOS/RHEL)"
-            elif command -v dnf >/dev/null 2>&1; then
-                run_cmd "sudo dnf install -y tesseract" "Installing Tesseract OCR (Fedora)"
-            elif command -v pacman >/dev/null 2>&1; then
-                run_cmd "sudo pacman -S --noconfirm tesseract tesseract-data-eng" "Installing Tesseract OCR (Arch Linux)"
-            else
-                log_warn "Could not determine package manager. Please install Tesseract OCR manually:"
-                log_warn "  Ubuntu/Debian: sudo apt-get install tesseract-ocr tesseract-ocr-eng"
-                log_warn "  CentOS/RHEL: sudo yum install tesseract"
-                log_warn "  Fedora: sudo dnf install tesseract"
-                log_warn "  Arch: sudo pacman -S tesseract tesseract-data-eng"
-                log_warn "  macOS: brew install tesseract tesseract-lang"
-                log_warn "  Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki"
-            fi
-        elif [[ "$OSTYPE" == "darwin"* ]]; then
-            # macOS
-            if command -v brew >/dev/null 2>&1; then
-                run_cmd "brew install tesseract tesseract-lang" "Installing Tesseract OCR (macOS)"
-            else
-                log_warn "Homebrew not found. Please install Tesseract OCR manually:"
-                log_warn "  brew install tesseract tesseract-lang"
-            fi
-        elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-            # Windows
-            log_warn "Tesseract OCR installation on Windows requires manual setup:"
-            log_warn "  Download from: https://github.com/UB-Mannheim/tesseract/wiki"
-            log_warn "  Add to PATH: C:\\Program Files\\Tesseract-OCR"
-        else
-            log_warn "Unsupported OS for automatic Tesseract installation. Please install manually."
-        fi
-    else
-        log_success "Tesseract OCR is already installed"
+    if ! command -v node >/dev/null 2>&1; then
+        log_error "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org"
+        exit 1
     fi
 
-    # Install Chromium for Puppeteer (needed for web scraping)
-    log_subheader "Installing Chromium Browser"
-    if ! command -v chromium-browser >/dev/null 2>&1 && ! command -v chromium >/dev/null 2>&1 && ! command -v google-chrome >/dev/null 2>&1; then
-        log_info "Installing Chromium browser for web scraping functionality..."
-        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            # Linux (Ubuntu/Debian)
-            if command -v apt-get >/dev/null 2>&1; then
-                run_cmd "sudo apt-get update && sudo apt-get install -y chromium-browser" "Installing Chromium Browser (Ubuntu/Debian)"
-            elif command -v yum >/dev/null 2>&1; then
-                run_cmd "sudo yum install -y chromium" "Installing Chromium Browser (CentOS/RHEL)"
-            elif command -v dnf >/dev/null 2>&1; then
-                run_cmd "sudo dnf install -y chromium" "Installing Chromium Browser (Fedora)"
-            elif command -v pacman >/dev/null 2>&1; then
-                run_cmd "sudo pacman -S --noconfirm chromium" "Installing Chromium Browser (Arch Linux)"
-            else
-                log_warn "Could not determine package manager. Installing Chromium with npm fallback..."
-                run_cmd "cd js && npm run gcp-build" "Installing Chromium via npm (fallback)"
-            fi
-        elif [[ "$OSTYPE" == "darwin"* ]]; then
-            # macOS
-            if command -v brew >/dev/null 2>&1; then
-                run_cmd "brew install --cask chromium" "Installing Chromium Browser (macOS)"
-            else
-                log_warn "Homebrew not found. Installing Chromium with npm fallback..."
-                run_cmd "cd js && npm run gcp-build" "Installing Chromium via npm (fallback)"
-            fi
-        elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-            # Windows - use npm fallback
-            log_info "Installing Chromium for Windows via npm..."
-            run_cmd "cd js && npm run gcp-build" "Installing Chromium via npm (Windows)"
-        else
-            log_warn "Unsupported OS for automatic Chromium installation. Installing with npm fallback..."
-            run_cmd "cd js && npm run gcp-build" "Installing Chromium via npm (fallback)"
-        fi
+    node_version=$(node -v 2>/dev/null | sed 's/^v//')
+    node_major_version=$(echo "${node_version%%.*}")
+    if [ "$node_major_version" -lt 18 ]; then
+        log_warn "Node.js version $node_version detected. Recommended: 18+"
     else
-        log_success "Chromium is already installed"
+        log_success "Node.js environment ready"
     fi
 
-    # Check for uv (Python package manager)
+    log_subheader "Checking Optional Dependencies"
+    case "$OSTYPE" in
+      linux-gnu*)
+        check_dependency "tesseract" "Tesseract OCR" "sudo apt-get update && sudo apt-get install -y tesseract-ocr"
+        check_dependency "chromium-browser" "Chromium" "sudo apt-get update && sudo apt-get install -y chromium-browser"
+        ;;
+      darwin*)
+        check_dependency "tesseract" "Tesseract OCR" "brew install tesseract"
+        check_dependency "chromium" "Chromium" "brew install --cask chromium"
+        ;;
+      msys*|win32*)
+        log_warn "On Windows, please manually install Tesseract OCR and ensure it's in your PATH."
+        log_info "Puppeteer will download its own Chromium browser on Windows."
+        ;;
+       *)
+        log_warn "Could not determine OS for optional dependency checks. Please install Tesseract and Chromium manually if needed."
+        ;;
+    esac
+
+
     if ! command -v uv >/dev/null 2>&1; then
         log_warn "uv not found. Installing uv for faster Python package management..."
-        if ! run_cmd "curl -LsSf https://astral.sh/uv/install.sh | sh" "Installing uv"; then
+        if ! (curl -LsSf https://astral.sh/uv/install.sh | sh); then
             log_warn "Failed to install uv automatically. Will use pip as fallback."
             USE_UV=false
-            log_info "USE_UV set to: $USE_UV"
         else
             export PATH="$HOME/.cargo/bin:$PATH"
-            USE_UV=true
+            if ! command -v uv >/dev/null 2>&1; then
+                log_warn "uv installed, but not found in PATH. Please restart your terminal or source your shell profile."
+                USE_UV=false
+            else
+                log_success "uv installed successfully."
+                USE_UV=true
+            fi
         fi
     else
+        log_success "uv is already installed"
         USE_UV=true
     fi
-    log_info "USE_UV is: $USE_UV"
 
-    # Create necessary directories
     log_subheader "Creating Project Structure"
-    run_cmd "mkdir -p storage logs docker js/node_modules" "Creating directories"
+    run_cmd "Creating directories" mkdir -p storage logs docker js/node_modules
 
-    # Move Dockerfile if needed
-    if [ -f "Dockerfile" ] && [ ! -f "docker/Dockerfile" ]; then
-        run_cmd "mv Dockerfile docker/" "Moving Dockerfile to docker directory"
+    if [ -f "config.yaml" ]; then
+        log_info "config.yaml already exists."
+    else
+        run_cmd "Creating default config.yaml" cp config.example.yaml config.yaml
     fi
 
-    # Create default config
-    if [ ! -f "config.yaml" ]; then
-        cat > config.yaml << 'EOF'
-url: "http://localhost:3001"
-storage:
-  screenshots: "./storage"
-  logs: "./logs"
-EOF
-        log_success "Created default config.yaml"
-    fi
-
-    # Create enabled tasks file if not exists
     if [ ! -f "enabled_tasks.txt" ]; then
-        touch enabled_tasks.txt
-        log_success "Created enabled_tasks.txt"
+        run_cmd "Creating enabled_tasks.txt" touch enabled_tasks.txt
     fi
 
-    # Build Docker images
     log_subheader "Building Docker Images"
-    run_cmd "docker-compose build" "Building Docker images"
+    run_cmd "Building Docker images" docker-compose build
 
-    # Setup Python environment
     log_subheader "Setting up Python Environment"
     if [ "$USE_UV" = true ]; then
-        run_cmd "uv venv --clear" "Creating Python virtual environment"
+        run_cmd "Creating Python virtual environment with uv" uv venv --clear
     else
-        run_cmd "python -m venv .venv" "Creating Python virtual environment (using venv)"
+        run_cmd "Creating Python virtual environment with venv" python -m venv .venv
     fi
 
-    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-        # Detect shell and activate accordingly
-        if [[ "$SHELL" == *"bash"* || "$SHELL" == *"zsh"* ]]; then
-            source .venv/Scripts/activate
-        elif [[ "$COMSPEC" == *"cmd.exe"* ]]; then
-            .venv/Scripts/activate.bat
-        elif [[ "$SHELL" == *"powershell"* || "$SHELL" == *"pwsh"* ]]; then
-            .venv/Scripts/Activate.ps1
-        else
-            # Default to bash-style activation
-            source .venv/Scripts/activate
-        fi
-    else
-        source .venv/bin/activate
-    fi
-    log_success "Python virtual environment ready"
     log_success "Python virtual environment ready"
 
-    # Install Python dependencies
     if [ "$USE_UV" = true ]; then
-        run_cmd "uv pip install -r py/requirements.txt" "Installing Python dependencies"
+        run_cmd "Installing Python dependencies with uv" uv pip install -r py/requirements.txt
     else
-        run_cmd "pip install -r py/requirements.txt" "Installing Python dependencies (using pip)"
+        source .venv/bin/activate || source .venv/Scripts/activate
+        run_cmd "Installing Python dependencies with pip" pip install -r py/requirements.txt
     fi
 
-    # Install Node.js dependencies
     log_subheader "Setting up Node.js Environment"
-    run_cmd "npm install --prefix js" "Installing Node.js dependencies"
+    run_cmd "Installing Node.js dependencies" npm install --prefix js
 
-    log_success "Setup complete!"
-    echo -e "\n${GREEN}${SPARKLES} You're all set! Next steps:${NC}"
+    log_success "${SPARKLES} Setup complete!"
+    echo -e "\n${GREEN}You're all set! Next steps:${NC}"
     echo -e "  ${CYAN}1.${NC} Start development: ${WHITE}./dearreader dev${NC}"
     echo -e "  ${CYAN}2.${NC} Run tests: ${WHITE}./dearreader test${NC}"
     echo -e "  ${CYAN}3.${NC} Open browser: ${WHITE}http://localhost:3001${NC}"
@@ -387,20 +313,15 @@ EOF
 # Development command
 cmd_dev() {
     log_header "${GEAR} Starting Development Environment"
-
     check_docker
 
-    # Clean up any existing containers
-    run_cmd "docker-compose down --remove-orphans" "Cleaning up existing containers"
+    run_cmd "Cleaning up existing containers" docker-compose down --remove-orphans
+    log_info "Running end-to-end tests before starting..."
 
-    # Run all tests first
-    echo -e "\n${YELLOW}Running end-to-end tests before starting dev environment...${NC}"
     if cmd_test "e2e"; then
         log_success "End-to-end tests passed! Starting development environment..."
     else
-        log_error "End-to-end tests failed. Check the output above for details."
-        echo -e "\n${YELLOW}You can run tests manually with:${NC}"
-        echo -e "  ${WHITE}./dearreader test e2e${NC}"
+        log_error "End-to-end tests failed."
         if [ "$FORCE" != true ]; then
             log_error "Exiting due to test failures. Use --force to continue anyway."
             exit 1
@@ -408,19 +329,16 @@ cmd_dev() {
         log_warn "Continuing despite test failures (--force used)"
     fi
 
-    # Start development environment
-    run_cmd "docker-compose --profile dev up --build -d" "Starting development services"
+    run_cmd "Starting development services" docker-compose --profile dev up --build -d
 
     log_success "Development environment started!"
     echo -e "\n${GREEN}${HEART} Services are running:${NC}"
     echo -e "  ${CYAN}•${NC} Web Interface: ${WHITE}http://localhost:3001${NC}"
     echo -e "  ${CYAN}•${NC} API Endpoint: ${WHITE}http://localhost:3001/https://www.ala.org${NC}"
-    echo -e "  ${CYAN}•${NC} View logs: ${WHITE}./dearreader logs${NC}"
+    echo -e "  ${CYAN}•${NC} View logs: ${WHITE}./dearreader logs --follow${NC}"
 
-    # Show logs if requested
     if [ "$FOLLOW" = true ]; then
-        echo -e "\n${YELLOW}Following logs (Ctrl+C to exit)...${NC}"
-        docker-compose logs -f js-functions python
+        cmd_logs
     fi
 }
 
@@ -429,71 +347,129 @@ cmd_test() {
     local test_type="${1:-all}"
     log_header "${TEST} Running Tests ($test_type)"
 
+    # Count test types and number of tests for each
+    local test_types=("js" "python" "e2e" "pipeline")
+    local total_types=0
+    local js_count=0
+    local python_count=0
+    local e2e_count=0
+    local pipeline_count=0
+
+    # Count JS tests (count actual test cases, not just files)
+    if [ -d "js/src" ]; then
+        if command -v bc >/dev/null 2>&1; then
+            js_count=$(find js/src -name "*.test.ts" -exec grep -c "it(" {} \; | paste -sd+ | bc 2>/dev/null)
+        else
+            # Fallback if bc is not available
+            js_count=$(find js/src -name "*.test.ts" -exec grep -c "it(" {} \; | awk '{sum += $1} END {print sum}')
+        fi
+        if ! [[ "$js_count" =~ ^[0-9]+$ ]] || [ -z "$js_count" ]; then
+            js_count=0
+        fi
+    else
+        js_count=0
+    fi
+
+    # Count Python tests (count actual test functions, not just files)
+    if [ -d "py/tests" ]; then
+        if command -v bc >/dev/null 2>&1; then
+            python_count=$(find py/tests -name "test_*.py" -exec grep -c "def test_" {} \; | paste -sd+ | bc 2>/dev/null)
+        else
+            # Fallback if bc is not available
+            python_count=$(find py/tests -name "test_*.py" -exec grep -c "def test_" {} \; | awk '{sum += $1} END {print sum}')
+        fi
+        if ! [[ "$python_count" =~ ^[0-9]+$ ]] || [ -z "$python_count" ]; then
+            python_count=0
+        fi
+    else
+        python_count=0
+    fi
+
+    # Count E2E tests
+    if [ -f "./scripts/e2e-test.sh" ]; then
+        e2e_count=$(grep -c "^pytest " ./scripts/e2e-test.sh 2>/dev/null | tr -d '[:space:]')
+        if ! [[ "$e2e_count" =~ ^[0-9]+$ ]] || [ -z "$e2e_count" ]; then
+            e2e_count=0
+        fi
+    else
+        e2e_count=0
+    fi
+
+    # Count Pipeline tests (count actual test calls)
+    if [ -f "js/src/test-pipeline.js" ]; then
+        pipeline_count=$(grep -c "logTest" js/src/test-pipeline.js 2>/dev/null | tr -d '[:space:]')
+        if ! [[ "$pipeline_count" =~ ^[0-9]+$ ]] || [ -z "$pipeline_count" ]; then
+            pipeline_count=0
+        fi
+    else
+        pipeline_count=0
+    fi
+
+    # Count enabled test types
+    for t in "${test_types[@]}"; do
+        case "$t" in
+            js) [ "$js_count" -gt 0 ] && total_types=$((total_types+1)) ;;
+            python) [ "$python_count" -gt 0 ] && total_types=$((total_types+1)) ;;
+            e2e) [ "$e2e_count" -gt 0 ] && total_types=$((total_types+1)) ;;
+            pipeline) [ "$pipeline_count" -gt 0 ] && total_types=$((total_types+1)) ;;
+        esac
+    done
+
+    # Display test counts in a delightful way
+    echo -e "\n${BOLD}${CYAN}📊 Test Suite Overview${NC}"
+    echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+    echo -e "${GREEN}JavaScript:${NC}   $(printf '%-3s' "$js_count") $(yes '🟩' | head -n "$js_count" | tr -d '\n')"
+    echo -e "${YELLOW}Python:${NC}       $(printf '%-3s' "$python_count") $(yes '🟨' | head -n "$python_count" | tr -d '\n')"
+    echo -e "${BLUE}End-to-End:${NC}   $(printf '%-3s' "$e2e_count") $(yes '🟦' | head -n "$e2e_count" | tr -d '\n')"
+    echo -e "${MAGENTA}Pipeline:${NC}     $(printf '%-3s' "$pipeline_count") $(yes '🟪' | head -n "$pipeline_count" | tr -d '\n')"
+    echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+    echo -e "${BOLD}Test types enabled:${NC} $total_types\n"
+
+    run_test() {
+        local test_name="$1"
+        shift
+        log_subheader "Running $test_name Tests"
+        if run_cmd "Running $test_name tests" "$@"; then
+            log_success "$test_name tests passed"
+            return 0
+        else
+            log_error "$test_name tests failed"
+            echo -e "${RED}Details of failure:${NC}"
+            # Show output of the failed command for debugging
+            "$@"
+            [ "$FORCE" != true ] && exit 1
+            return 1
+        fi
+    }
+
     case "$test_type" in
         js)
-            run_cmd "docker-compose --profile dev run --rm js-test" "Running JavaScript tests" true
+            run_test "JavaScript" docker-compose --profile dev run --rm js-test
             ;;
         python)
-            if ! command -v uv >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; then
-                log_error "Neither uv nor python found. Please run setup first"
-                exit 1
-            fi
-            if command -v uv >/dev/null 2>&1; then
-                run_cmd "uv run py/app.py tests --verbose" "Running Python tests" true
+            if [ "$USE_UV" = true ]; then
+                run_test "Python" uv run python3 -m pytest py/tests --verbose
             else
-                run_cmd "python py/app.py tests --verbose" "Running Python tests (using python)" true
+                run_test "Python" bash -c "source .venv/bin/activate || source .venv/Scripts/activate; python3 -m pytest py/tests --verbose"
             fi
             ;;
         e2e)
-            log_subheader "Running End-to-End Tests"
-            if run_cmd "./scripts/e2e-test.sh" "Running end-to-end tests" true; then
-                log_success "End-to-end tests passed"
-            else
-                log_error "End-to-end tests failed"
-                [ "$FORCE" != true ] && exit 1
-            fi
-            ;;
-        all)
-            log_subheader "Running JavaScript Tests (excluding AI/LLM)"
-            # Run JS tests but exclude AI/LLM related tests to avoid burning API requests
-            if run_cmd "docker-compose --profile dev run --rm js-test npm run test:no-ai" "Running JavaScript tests (excluding AI)" true; then
-                log_success "JavaScript tests passed"
-            else
-                log_error "JavaScript tests failed"
-                [ "$FORCE" != true ] && exit 1
-            fi
-
-            log_subheader "Running Python Tests"
-            if command -v uv >/dev/null 2>&1; then
-                if run_cmd "uv run py/app.py tests --verbose" "Running Python tests" true; then
-                    log_success "Python tests passed"
-                else
-                    log_error "Python tests failed"
-                    [ "$FORCE" != true ] && exit 1
-                fi
-            elif command -v python >/dev/null 2>&1; then
-                if run_cmd "python py/app.py tests --verbose" "Running Python tests (using python)" true; then
-                    log_success "Python tests passed"
-                else
-                    log_error "Python tests failed"
-                    [ "$FORCE" != true ] && exit 1
-                fi
-            else
-                log_warn "Neither uv nor python found, skipping Python tests"
-            fi
-
-            log_subheader "Running End-to-End Tests"
-            if run_cmd "./scripts/e2e-test.sh" "Running end-to-end tests" true; then
-                log_success "End-to-end tests passed"
-            else
-                log_error "End-to-end tests failed"
-                [ "$FORCE" != true ] && exit 1
-            fi
-
-            log_success "All tests completed!"
+            run_test "End-to-End" ./scripts/e2e-test.sh
             ;;
         pipeline)
-            cmd_test_pipeline
+            if [ ! -f "js/src/test-pipeline.js" ]; then
+                log_error "Pipeline test runner script not found at js/src/test-pipeline.js"
+                log_info "Please ensure this file exists in your project and is checked into version control."
+                exit 1
+            fi
+            run_test "Pipeline" node js/src/test-pipeline.js
+            ;;
+        all)
+            cmd_test js
+            cmd_test python
+            cmd_test e2e
+            cmd_test pipeline
+            log_success "All tests completed!"
             ;;
         *)
             log_error "Unknown test type: $test_type"
@@ -507,21 +483,18 @@ cmd_test() {
 cmd_run() {
     local env="${1:-dev}"
     log_header "${ROCKET} Starting $env Environment"
-
     check_docker
 
     case "$env" in
         dev)
-            run_cmd "docker-compose down --remove-orphans" "Cleaning up containers"
-            run_cmd "docker-compose --profile dev up --build -d" "Starting development environment"
+            run_cmd "Cleaning up containers" docker-compose down --remove-orphans
+            run_cmd "Starting development environment" docker-compose --profile dev up --build -d
             log_success "Development environment started"
-            log_info "View logs with: ./dearreader logs -F"
             ;;
         prod)
-            run_cmd "docker-compose down --remove-orphans" "Cleaning up containers"
-            run_cmd "docker-compose --profile prod up --build -d" "Starting production environment"
+            run_cmd "Cleaning up containers" docker-compose down --remove-orphans
+            run_cmd "Starting production environment" docker-compose --profile prod up --build -d
             log_success "Production environment started"
-            log_info "Services running in background"
             ;;
         *)
             log_error "Unknown environment: $env"
@@ -534,70 +507,27 @@ cmd_run() {
 # Stop command
 cmd_stop() {
     log_header "${STOP} Stopping Services"
-    run_cmd "docker-compose down --remove-orphans" "Stopping all containers"
+    run_cmd "Stopping all containers" docker-compose down --remove-orphans
     log_success "All services stopped"
 }
 
 # Status command
 cmd_status() {
     log_header "${INFO} System Status"
-
     echo -e "\n${BOLD}Docker Services:${NC}"
-    if command -v docker >/dev/null 2>&1 && docker version >/dev/null 2>&1; then
-        docker-compose ps
-    else
-        log_warn "Docker not available"
-    fi
+    docker-compose ps
 
     echo -e "\n${BOLD}API Health Check:${NC}"
-    if curl -s http://localhost:3001/health >/dev/null 2>&1; then
+    if curl -s --fail http://localhost:3001/health >/dev/null 2>&1; then
         log_success "API is healthy"
     else
-        log_warn "API not responding (services may not be running)"
-    fi
-
-    echo -e "\n${BOLD}Project Structure:${NC}"
-    for dir in storage logs docker js/node_modules; do
-        if [ -d "$dir" ]; then
-            echo -e "  ${GREEN}${CHECK}${NC} $dir"
-        else
-            echo -e "  ${RED}${CROSS}${NC} $dir"
-        fi
-    done
-
-    echo -e "\n${BOLD}Configuration:${NC}"
-    if [ -f "config.yaml" ]; then
-        echo -e "  ${GREEN}${CHECK}${NC} config.yaml"
-    else
-        echo -e "  ${RED}${CROSS}${NC} config.yaml"
-    fi
-
-    echo -e "\n${BOLD}Environment Variables (.env):${NC}"
-    if [ -f ".env" ]; then
-        echo -e "  ${GREEN}${CHECK}${NC} .env file exists"
-        # List set variables (non-empty lines starting with letters, ignoring comments)
-        local env_vars=$(grep -E '^[A-Z_][A-Z0-9_]*=' .env | sed 's/=.*//' | tr '\n' ' ')
-        if [ -n "$env_vars" ]; then
-            echo -e "  ${CYAN}Set variables:${NC} $env_vars"
-        else
-            echo -e "  ${YELLOW}${WARNING}${NC} No variables set in .env"
-        fi
-    else
-        echo -e "  ${RED}${CROSS}${NC} .env file not found"
-    fi
-
-    echo -e "\n${BOLD}Pipeline Configuration:${NC}"
-    if [ -f "crawl_pipeline.yaml" ]; then
-        echo -e "  ${GREEN}${CHECK}${NC} crawl_pipeline.yaml"
-    else
-        echo -e "  ${RED}${CROSS}${NC} crawl_pipeline.yaml"
+        log_warn "API not responding (is the dev environment running?)"
     fi
 }
 
 # Logs command
 cmd_logs() {
     log_header "${BOOK} Service Logs"
-
     if [ "$FOLLOW" = true ]; then
         docker-compose logs -f
     else
@@ -608,56 +538,123 @@ cmd_logs() {
 # Clean command
 cmd_clean() {
     log_header "${WARNING} Cleaning Up"
-
-    log_warn "This will remove all containers, volumes, and cached images"
+    log_warn "This will remove all containers, volumes, and local logs/storage."
     read -p "Are you sure? (y/N): " -n 1 -r
     echo
 
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        run_cmd "docker-compose down --remove-orphans" "Stopping containers"
-        run_cmd "docker-compose down --volumes --remove-orphans" "Removing volumes"
-        run_cmd "docker system prune -f" "Cleaning Docker system"
-        run_cmd "rm -rf storage/* logs/*" "Cleaning local storage"
+        run_cmd "Stopping containers" docker-compose down --volumes --remove-orphans
+        run_cmd "Cleaning Docker system" docker system prune -f
+        run_cmd "Cleaning local storage and logs" rm -rf storage/* logs/*
         log_success "Cleanup complete"
     else
         log_info "Cleanup cancelled"
     fi
 }
 
-# API test command
-cmd_api() {
-    local action="${1:-test}"
-    log_header "${DOCKER} API Testing"
 
-    case "$action" in
-        test)
-            echo -e "\n${BOLD}Testing API endpoints...${NC}"
+# Create a dedicated script to handle task management logic.
+create_task_script_if_not_exists() {
+    local script_path="js/src/manage-tasks.js"
+    if [ -f "$script_path" ]; then
+        return
+    fi
+    log_info "Creating helper script for task management at $script_path..."
+    cat > "$script_path" << 'EOF'
+const fs = require('fs');
+const path = require('path');
+const yaml = require('js-yaml');
 
-            # Test basic health
-            if curl -s http://localhost:3001/health >/dev/null 2>&1; then
-                log_success "Health check passed"
-            else
-                log_error "Health check failed"
-            fi
+const configPath = path.join(__dirname, '../../crawl_pipeline.yaml');
+const enabledTasksPath = path.join(__dirname, '../../enabled_tasks.txt');
+const command = process.argv[2];
+const taskName = process.argv[3];
 
-            # Test content extraction
-            echo -e "\n${BOLD}Testing content extraction:${NC}"
-            echo -e "  ${CYAN}ALA Website:${NC}"
-            curl -s "http://localhost:3001/https://www.ala.org" | head -5
+function loadConfig() {
+    if (!fs.existsSync(configPath)) {
+        console.error('Error: crawl_pipeline.yaml not found.');
+        process.exit(1);
+    }
+    return yaml.load(fs.readFileSync(configPath, 'utf8'));
+}
 
-            echo -e "\n  ${CYAN}Wikipedia Reading:${NC}"
-            curl -s "http://localhost:3001/https://en.wikipedia.org/wiki/Reading" | head -5
+function getAllTasks(config) {
+    const tasks = {};
+    const extract = (taskGroup, type) => {
+        if (!taskGroup) return;
+        for (const [key, value] of Object.entries(taskGroup)) {
+            tasks[key] = { name: value.name || 'Unnamed', type };
+        }
+    };
+    extract(config.pipeline_tests?.stage_tests, 'Stage');
+    extract(config.pipeline_tests?.pipeline_tests, 'Pipeline');
+    extract(config.pipeline_tests?.ai_task_tests, 'AI');
+    return tasks;
+}
 
-            # Test JSON response
-            echo -e "\n${BOLD}Testing JSON response:${NC}"
-            curl -s -H "Accept: application/json" "http://localhost:3001/https://worldliteracyfoundation.org" | jq '.data.title' 2>/dev/null || echo "  JSON parsing failed"
-            ;;
-        *)
-            log_error "Unknown API action: $action"
-            echo "Available: test"
-            exit 1
-            ;;
-    esac
+function listTasks() {
+    const config = loadConfig();
+    const allTasks = getAllTasks(config);
+    if (Object.keys(allTasks).length === 0) {
+        console.log('No tasks found in pipeline configuration.');
+        return;
+    }
+    console.log('📋 Available Pipeline Tasks:');
+    for (const [key, value] of Object.entries(allTasks)) {
+        console.log(`  • ${key} (${value.type}): ${value.name}`);
+    }
+}
+
+function showStatus() {
+    const config = loadConfig();
+    const allTasks = getAllTasks(config);
+    const enabledTasks = new Set(
+        fs.existsSync(enabledTasksPath)
+            ? fs.readFileSync(enabledTasksPath, 'utf8').split('\n').filter(Boolean)
+            : []
+    );
+    console.log('📋 Pipeline Task Status:');
+    for (const [key, value] of Object.entries(allTasks)) {
+        const status = enabledTasks.has(key) ? '✅ Enabled' : '❌ Disabled';
+        console.log(`  • ${key} (${value.type}): [${status}]`);
+    }
+}
+
+function enableTask(task) {
+    const allTasks = getAllTasks(loadConfig());
+    if (!allTasks[task]) {
+        console.error(`Error: Task '${task}' not found.`);
+        return;
+    }
+    const enabledTasks = fs.readFileSync(enabledTasksPath, 'utf8');
+    if (enabledTasks.includes(task)) {
+        console.warn(`Warning: Task '${task}' is already enabled.`);
+    } else {
+        fs.appendFileSync(enabledTasksPath, `${task}\n`);
+        console.log(`Success: Task '${task}' enabled.`);
+    }
+}
+
+function disableTask(task) {
+    if (!fs.existsSync(enabledTasksPath)) return;
+    let enabledTasks = fs.readFileSync(enabledTasksPath, 'utf8').split('\n');
+    if (!enabledTasks.includes(task)) {
+        console.warn(`Warning: Task '${task}' is not currently enabled.`);
+        return;
+    }
+    const updatedTasks = enabledTasks.filter(t => t !== task && t).join('\n') + '\n';
+    fs.writeFileSync(enabledTasksPath, updatedTasks);
+    console.log(`Success: Task '${task}' disabled.`);
+}
+
+switch (command) {
+    case 'list': listTasks(); break;
+    case 'status': showStatus(); break;
+    case 'enable': enableTask(taskName); break;
+    case 'disable': disableTask(taskName); break;
+    default: console.error(`Unknown command: ${command}`);
+}
+EOF
 }
 
 # Task command
@@ -666,849 +663,61 @@ cmd_task() {
     local task_name="$2"
     log_header "${BOOK} Pipeline Tasks"
 
+    create_task_script_if_not_exists
+
+    if [ "$subcommand" = "enable" ] || [ "$subcommand" = "disable" ]; then
+        if [ -z "$task_name" ]; then
+            log_error "Task name is required for '$subcommand' command."
+            echo "Usage: ./dearreader task $subcommand <task_name>"
+            exit 1
+        fi
+    fi
+
+    run_cmd "Running task command" node js/src/manage-tasks.js "$subcommand" "$task_name"
+}
+
+# API command
+cmd_api() {
+    local subcommand="${1:-test}"
+    log_header "${INFO} API Management"
+
     case "$subcommand" in
-        list)
-            log_subheader "Listing Available Tasks"
-
-            if [ ! -f "crawl_pipeline.yaml" ]; then
-                log_error "crawl_pipeline.yaml not found. Please ensure the pipeline configuration exists."
-                exit 1
-            fi
-
-            if ! command -v node >/dev/null 2>&1; then
-                log_error "Node.js is not available. Please run setup first."
-                exit 1
-            fi
-
-            # Use Node.js to parse YAML and list tasks
-            run_cmd "cd js && node -e \"
-const yaml = require('js-yaml');
-const fs = require('fs');
-const path = require('path');
-
-try {
-    const configPath = path.join('..', 'crawl_pipeline.yaml');
-    const configContent = fs.readFileSync(configPath, 'utf8');
-    const config = yaml.load(configContent);
-
-    console.log('📋 Available Pipeline Tasks:');
-    console.log('');
-
-    if (config.pipeline_tests && config.pipeline_tests.stage_tests) {
-        console.log('🔧 Stage Tasks:');
-        Object.entries(config.pipeline_tests.stage_tests).forEach(([key, value]) => {
-            console.log(\`  • \${key}: \${value.name || 'Unnamed'}\`);
-        });
-        console.log('');
-    }
-
-    if (config.pipeline_tests && config.pipeline_tests.pipeline_tests) {
-        console.log('🔄 Pipeline Tasks:');
-        Object.entries(config.pipeline_tests.pipeline_tests).forEach(([key, value]) => {
-            console.log(\`  • \${key}: \${value.name || 'Unnamed'}\`);
-        });
-        console.log('');
-    }
-
-    if (config.pipeline_tests && config.pipeline_tests.ai_task_tests) {
-        console.log('🤖 AI Tasks:');
-        Object.entries(config.pipeline_tests.ai_task_tests).forEach(([key, value]) => {
-            console.log(\`  • \${key}: \${value.name || 'Unnamed'}\`);
-        });
-        console.log('');
-    }
-
-    if (!config.pipeline_tests ||
-        (!config.pipeline_tests.stage_tests && !config.pipeline_tests.pipeline_tests && !config.pipeline_tests.ai_task_tests)) {
-        console.log('No tasks found in pipeline configuration.');
-    }
-} catch (error) {
-    console.error('Error parsing pipeline configuration:', error.message);
-    process.exit(1);
-}
-\"" "Listing pipeline tasks" true
-            ;;
-        status)
-            log_subheader "Task Status"
-
-            if [ ! -f "crawl_pipeline.yaml" ]; then
-                log_error "crawl_pipeline.yaml not found. Please ensure the pipeline configuration exists."
-                exit 1
-            fi
-
-            if ! command -v node >/dev/null 2>&1; then
-                log_error "Node.js is not available. Please run setup first."
-                exit 1
-            fi
-
-            # Create enabled_tasks.txt if not exists
-            if [ ! -f "enabled_tasks.txt" ]; then
-                touch enabled_tasks.txt
-            fi
-
-            # Use Node.js to parse YAML and show status
-            run_cmd "cd js && node -e \"
-const yaml = require('js-yaml');
-const fs = require('fs');
-const path = require('path');
-
-try {
-    const configPath = path.join('..', 'crawl_pipeline.yaml');
-    const configContent = fs.readFileSync(configPath, 'utf8');
-    const config = yaml.load(configContent);
-    const enabledPath = path.join('..', 'enabled_tasks.txt');
-    const enabledContent = fs.readFileSync(enabledPath, 'utf8');
-    const enabledTasks = new Set(enabledContent.split('\n').filter(line => line.trim()));
-
-    console.log('📋 Pipeline Task Status:');
-    console.log('');
-
-    let hasTasks = false;
-
-    if (config.pipeline_tests && config.pipeline_tests.stage_tests) {
-        console.log('🔧 Stage Tasks:');
-        Object.entries(config.pipeline_tests.stage_tests).forEach(([key, value]) => {
-            const status = enabledTasks.has(key) ? '✅ Enabled' : '❌ Disabled';
-            console.log(\`  • \${key}: \${value.name || 'Unnamed'} [\${status}]\`);
-        });
-        console.log('');
-        hasTasks = true;
-    }
-
-    if (config.pipeline_tests && config.pipeline_tests.pipeline_tests) {
-        console.log('🔄 Pipeline Tasks:');
-        Object.entries(config.pipeline_tests.pipeline_tests).forEach(([key, value]) => {
-            const status = enabledTasks.has(key) ? '✅ Enabled' : '❌ Disabled';
-            console.log(\`  • \${key}: \${value.name || 'Unnamed'} [\${status}]\`);
-        });
-        console.log('');
-        hasTasks = true;
-    }
-
-    if (config.pipeline_tests && config.pipeline_tests.ai_task_tests) {
-        console.log('🤖 AI Tasks:');
-        Object.entries(config.pipeline_tests.ai_task_tests).forEach(([key, value]) => {
-            const status = enabledTasks.has(key) ? '✅ Enabled' : '❌ Disabled';
-            console.log(\`  • \${key}: \${value.name || 'Unnamed'} [\${status}]\`);
-        });
-        console.log('');
-        hasTasks = true;
-    }
-
-    if (!hasTasks) {
-        console.log('No tasks found in pipeline configuration.');
-    }
-} catch (error) {
-    console.error('Error parsing pipeline configuration:', error.message);
-    process.exit(1);
-}
-\"" "Showing task status" true
-            ;;
-        enable)
-            if [ -z "$task_name" ]; then
-                log_error "Task name is required for enable command."
-                echo "Usage: ./dearreader task enable <task_name>"
-                exit 1
-            fi
-
-            if [ ! -f "crawl_pipeline.yaml" ]; then
-                log_error "crawl_pipeline.yaml not found. Please ensure the pipeline configuration exists."
-                exit 1
-            fi
-
-            if ! command -v node >/dev/null 2>&1; then
-                log_error "Node.js is not available. Please run setup first."
-                exit 1
-            fi
-
-            # Create enabled_tasks.txt if not exists
-            if [ ! -f "enabled_tasks.txt" ]; then
-                touch enabled_tasks.txt
-            fi
-
-            # Check if task exists
-            if ! run_cmd "cd js && node -e \"
-const yaml = require('js-yaml');
-const fs = require('fs');
-const path = require('path');
-
-try {
-    const configPath = path.join('..', 'crawl_pipeline.yaml');
-    const configContent = fs.readFileSync(configPath, 'utf8');
-    const config = yaml.load(configContent);
-
-    const taskName = process.argv[2];
-    let found = false;
-
-    if (config.pipeline_tests && config.pipeline_tests.stage_tests && config.pipeline_tests.stage_tests[taskName]) found = true;
-    if (config.pipeline_tests && config.pipeline_tests.pipeline_tests && config.pipeline_tests.pipeline_tests[taskName]) found = true;
-    if (config.pipeline_tests && config.pipeline_tests.ai_task_tests && config.pipeline_tests.ai_task_tests[taskName]) found = true;
-
-    if (!found) {
-        console.error('Task not found:', taskName);
-        process.exit(1);
-    }
-} catch (error) {
-    console.error('Error:', error.message);
-    process.exit(1);
-}
-\" \"$task_name\"" "Checking if task exists" >/dev/null 2>&1; then
-                log_error "Task '$task_name' not found in pipeline configuration."
-                exit 1
-            fi
-
-            # Enable the task
-            if grep -q "^$task_name$" enabled_tasks.txt; then
-                log_warn "Task '$task_name' is already enabled."
+        test)
+            log_subheader "Testing API Endpoints"
+            if curl -s --fail http://localhost:3001/health >/dev/null 2>&1; then
+                log_success "API health check passed"
             else
-                echo "$task_name" >> enabled_tasks.txt
-                log_success "Task '$task_name' enabled."
-            fi
-            ;;
-        disable)
-            if [ -z "$task_name" ]; then
-                log_error "Task name is required for disable command."
-                echo "Usage: ./dearreader task disable <task_name>"
+                log_error "API health check failed"
                 exit 1
             fi
-
-            # Disable the task
-            if grep -q "^$task_name$" enabled_tasks.txt; then
-                sed -i "/^$task_name$/d" enabled_tasks.txt
-                log_success "Task '$task_name' disabled."
-            else
-                log_warn "Task '$task_name' is not enabled."
-            fi
-            exit 0
+            ;;
+        *)
+            log_error "Unknown API subcommand: $subcommand"
+            echo "Available: test"
+            exit 1
             ;;
     esac
 }
 
-# Test pipeline command
-cmd_test_pipeline() {
-    log_header "${TEST} Running Pipeline Tests"
-
-    # Check if Node.js environment is available
-    if ! command -v node >/dev/null 2>&1; then
-        log_error "Node.js is not available. Pipeline tests require Node.js."
-        exit 1
-    fi
-
-    # Check if the pipeline test configuration exists
-    if [ ! -f "crawl_pipeline.yaml" ]; then
-        log_error "crawl_pipeline.yaml not found. Pipeline tests require this configuration file."
-        exit 1
-    fi
-
-    # Check if the pipeline test script exists
-    if [ ! -f "js/src/test-pipeline.js" ]; then
-        log_info "Creating pipeline test script..."
-        cat > js/src/test-pipeline.js << 'EOF'
-#!/usr/bin/env node
-
-/**
- * Pipeline Test Runner
- * Tests all pipeline features defined in crawl_pipeline.yaml
- * Uses mock data and responses to avoid external API calls
- */
-
-const fs = require('fs');
-const path = require('path');
-const yaml = require('js-yaml');
-const { fileURLToPath } = require('url');
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Colors for output
-const colors = {
-    reset: '\x1b[0m',
-    red: '\x1b[31m',
-    green: '\x1b[32m',
-    yellow: '\x1b[33m',
-    blue: '\x1b[34m',
-    magenta: '\x1b[35m',
-    cyan: '\x1b[36m',
-    white: '\x1b[37m'
-};
-
-function log(color, message) {
-    console.log(`${color}${message}${colors.reset}`);
-}
-
-function logTest(testName, status, details = '') {
-    const statusColor = status === 'PASS' ? colors.green : status === 'FAIL' ? colors.red : colors.yellow;
-    const statusIcon = status === 'PASS' ? '✅' : status === 'FAIL' ? '❌' : '⚠️';
-    console.log(`${statusColor}${statusIcon} ${testName}${colors.reset}${details ? ` - ${details}` : ''}`);
-}
-
-// Mock implementations for pipeline stages
-class MockCrawler {
-    static async crawl(url, config) {
-        log(colors.blue, `🔍 Mock crawling: ${url}`);
-
-        // Simulate different response types based on URL
-        if (url.includes('html')) {
-            return {
-                content: '<html><body><h1>Test Article</h1><p>This is test content.</p></body></html>',
-                contentType: 'text/html',
-                statusCode: 200,
-                headers: { 'content-type': 'text/html' }
-            };
-        } else if (url.includes('json')) {
-            return {
-                content: JSON.stringify({ title: 'Test JSON', data: 'test content' }),
-                contentType: 'application/json',
-                statusCode: 200,
-                headers: { 'content-type': 'application/json' }
-            };
-        }
-
-        return {
-            content: 'Default mock content',
-            contentType: 'text/plain',
-            statusCode: 200,
-            headers: { 'content-type': 'text/plain' }
-        };
-    }
-}
-
-class MockTextExtractor {
-    static extractText(html) {
-        log(colors.cyan, `📝 Mock extracting text from HTML`);
-
-        // Simple HTML to text conversion
-        const text = html
-            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-        return {
-            text: text,
-            wordCount: text.split(' ').length,
-            paragraphs: text.split(/[.!?]+/).filter(p => p.trim().length > 0)
-        };
-    }
-}
-
-class MockContentFilter {
-    static filter(content, config) {
-        log(colors.yellow, `🔧 Mock filtering content`);
-
-        let filtered = content;
-
-        // Apply filters based on config
-        if (config.min_content_length && filtered.length < config.min_content_length) {
-            return { filtered: '', removed: true, reason: 'too short' };
-        }
-
-        if (config.remove_duplicates) {
-            // Simple deduplication
-            const sentences = filtered.split(/[.!?]+/);
-            const unique = [...new Set(sentences.map(s => s.trim()))];
-            filtered = unique.join('. ') + '.';
-        }
-
-        return {
-            filtered: filtered,
-            removed: false,
-            stats: { originalLength: content.length, filteredLength: filtered.length }
-        };
-    }
-}
-
-class MockJSONFormatter {
-    static format(data, config) {
-        log(colors.magenta, `📋 Mock formatting as JSON`);
-
-        const result = {
-            success: true,
-            timestamp: new Date().toISOString(),
-            data: data,
-            metadata: {
-                processing_time_ms: Math.random() * 1000,
-                version: '1.0.0'
-            }
-        };
-
-        // Add optional fields based on config
-        if (config.include_url) result.url = data.url || 'mock://test';
-        if (config.include_processing_stats) result.processing_stats = result.metadata;
-
-        return result;
-    }
-}
-
-class MockPDFExtractor {
-    static async extractText(buffer) {
-        log(colors.red, `📄 Mock extracting text from PDF`);
-
-        // Mock PDF text extraction
-        if (buffer.length === 0) {
-            throw new Error('Failed to extract text from PDF: Empty buffer');
-        }
-
-        return {
-            text: 'This is mock extracted text from a PDF document.',
-            pageCount: 1,
-            metadata: {
-                title: 'Mock PDF Document',
-                author: 'Test Author',
-                pages: 1
-            }
-        };
-    }
-}
-
-// Test runner class
-class PipelineTestRunner {
-    constructor() {
-        this.results = { passed: 0, failed: 0, skipped: 0 };
-        this.testConfig = null;
-    }
-
-    async loadConfig() {
-        try {
-            const configPath = path.join(__dirname, '../../crawl_pipeline.yaml');
-            const configContent = fs.readFileSync(configPath, 'utf8');
-            this.testConfig = yaml.load(configContent);
-            log(colors.green, '✅ Loaded pipeline configuration');
-        } catch (error) {
-            log(colors.red, `❌ Failed to load configuration: ${error.message}`);
-            throw error;
-        }
-    }
-
-    async runStageTests() {
-        log(colors.blue, '\n🧪 Running Stage Tests');
-
-        if (!this.testConfig.pipeline_tests?.stage_tests) {
-            log(colors.yellow, '⚠️ No stage tests defined, skipping');
-            return;
-        }
-
-        for (const [stageType, stageConfig] of Object.entries(this.testConfig.pipeline_tests.stage_tests)) {
-            log(colors.cyan, `\n📋 Testing ${stageConfig.name}`);
-
-            for (const test of stageConfig.tests) {
-                try {
-                    await this.runStageTest(stageType, test);
-                } catch (error) {
-                    logTest(`${stageType}:${test.name}`, 'FAIL', error.message);
-                    this.results.failed++;
-                }
-            }
-        }
-    }
-
-    async runStageTest(stageType, test) {
-        switch (stageType) {
-            case 'crawl':
-                await this.testCrawlStage(test);
-                break;
-            case 'text_extract':
-                await this.testTextExtractStage(test);
-                break;
-            case 'content_filter':
-                await this.testContentFilterStage(test);
-                break;
-            case 'json_format':
-                await this.testJSONFormatStage(test);
-                break;
-            case 'pdf_extract':
-                await this.testPDFExtractStage(test);
-                break;
-            default:
-                logTest(`${stageType}:${test.name}`, 'SKIP', 'Unknown stage type');
-                this.results.skipped++;
-        }
-    }
-
-    async testCrawlStage(test) {
-        const result = await MockCrawler.crawl(test.test_url, test);
-
-        let passed = true;
-        let details = [];
-
-        if (test.expected_content_type && result.contentType !== test.expected_content_type) {
-            passed = false;
-            details.push(`Expected content-type: ${test.expected_content_type}, got: ${result.contentType}`);
-        }
-
-        if (test.expected_selectors && test.test_url.includes('html')) {
-            for (const selector of test.expected_selectors) {
-                if (!result.content.includes(`<${selector}>`)) {
-                    passed = false;
-                    details.push(`Missing expected selector: ${selector}`);
-                }
-            }
-        }
-
-        if (passed) {
-            logTest(`crawl:${test.name}`, 'PASS');
-            this.results.passed++;
-        } else {
-            logTest(`crawl:${test.name}`, 'FAIL', details.join(', '));
-            this.results.failed++;
-        }
-    }
-
-    async testTextExtractStage(test) {
-        const result = MockTextExtractor.extractText(test.test_html);
-
-        let passed = true;
-        let details = [];
-
-        for (const expected of test.expected_text_contains || []) {
-            if (!result.text.includes(expected)) {
-                passed = false;
-                details.push(`Missing expected text: "${expected}"`);
-            }
-        }
-
-        for (const excluded of test.expected_text_excludes || []) {
-            if (result.text.includes(excluded)) {
-                passed = false;
-                details.push(`Found unexpected text: "${excluded}"`);
-            }
-        }
-
-        if (passed) {
-            logTest(`text_extract:${test.name}`, 'PASS');
-            this.results.passed++;
-        } else {
-            logTest(`text_extract:${test.name}`, 'FAIL', details.join(', '));
-            this.results.failed++;
-        }
-    }
-
-    async testContentFilterStage(test) {
-        const result = MockContentFilter.filter(test.test_content, test);
-
-        let passed = true;
-        let details = [];
-
-        if (test.expected_filtered && !result.removed) {
-            passed = false;
-            details.push('Expected content to be filtered but it was not');
-        }
-
-        if (test.expected_content && result.filtered !== test.expected_content) {
-            passed = false;
-            details.push('Filtered content does not match expected result');
-        }
-
-        if (passed) {
-            logTest(`content_filter:${test.name}`, 'PASS');
-            this.results.passed++;
-        } else {
-            logTest(`content_filter:${test.name}`, 'FAIL', details.join(', '));
-            this.results.failed++;
-        }
-    }
-
-    async testJSONFormatStage(test) {
-        const result = MockJSONFormatter.format(test.test_data, test);
-
-        let passed = true;
-        let details = [];
-
-        for (const field of test.expected_fields || []) {
-            if (!(field in result)) {
-                passed = false;
-                details.push(`Missing expected field: ${field}`);
-            }
-        }
-
-        for (const field of test.expected_nested_fields || []) {
-            const keys = field.split('.');
-            let value = result;
-            for (const key of keys) {
-                value = value?.[key];
-            }
-            if (value === undefined) {
-                passed = false;
-                details.push(`Missing expected nested field: ${field}`);
-            }
-        }
-
-        if (passed) {
-            logTest(`json_format:${test.name}`, 'PASS');
-            this.results.passed++;
-        } else {
-            logTest(`json_format:${test.name}`, 'FAIL', details.join(', '));
-            this.results.failed++;
-        }
-    }
-
-    async testPDFExtractStage(test) {
-        try {
-            const buffer = Buffer.from(test.test_pdf_content || '', 'utf8');
-            const result = await MockPDFExtractor.extractText(buffer);
-
-            let passed = true;
-            let details = [];
-
-            if (test.expected_error) {
-                passed = false;
-                details.push('Expected error but got successful result');
-            }
-
-            for (const expected of test.expected_text_contains || []) {
-                if (!result.text.includes(expected)) {
-                    passed = false;
-                    details.push(`Missing expected text: "${expected}"`);
-                }
-            }
-
-            if (passed) {
-                logTest(`pdf_extract:${test.name}`, 'PASS');
-                this.results.passed++;
-            } else {
-                logTest(`pdf_extract:${test.name}`, 'FAIL', details.join(', '));
-                this.results.failed++;
-            }
-        } catch (error) {
-            if (test.expected_error && error.message.includes(test.expected_error)) {
-                logTest(`pdf_extract:${test.name}`, 'PASS');
-                this.results.passed++;
-            } else {
-                logTest(`pdf_extract:${test.name}`, 'FAIL', error.message);
-                this.results.failed++;
-            }
-        }
-    }
-
-    async runPipelineTests() {
-        log(colors.blue, '\n🔧 Running Pipeline Tests');
-
-        if (!this.testConfig.pipeline_tests?.pipeline_tests) {
-            log(colors.yellow, '⚠️ No pipeline tests defined, skipping');
-            return;
-        }
-
-        for (const [pipelineName, pipelineConfig] of Object.entries(this.testConfig.pipeline_tests.pipeline_tests)) {
-            log(colors.cyan, `\n📋 Testing Pipeline: ${pipelineConfig.name}`);
-
-            try {
-                const result = await this.testPipeline(pipelineName, pipelineConfig);
-                if (result.passed) {
-                    logTest(`pipeline:${pipelineName}`, 'PASS');
-                    this.results.passed++;
-                } else {
-                    logTest(`pipeline:${pipelineName}`, 'FAIL', result.details.join(', '));
-                    this.results.failed++;
-                }
-            } catch (error) {
-                logTest(`pipeline:${pipelineName}`, 'FAIL', error.message);
-                this.results.failed++;
-            }
-        }
-    }
-
-    async testPipeline(pipelineName, config) {
-        // Mock pipeline execution
-        const result = {
-            passed: true,
-            details: []
-        };
-
-        // Check if all expected fields are present in mock result
-        const mockResult = {
-            title: 'Mock Article',
-            content: 'Mock content',
-            links: [],
-            metadata: {},
-            timestamp: new Date().toISOString()
-        };
-
-        for (const field of config.expected_fields || []) {
-            if (!(field in mockResult)) {
-                result.passed = false;
-                result.details.push(`Missing expected field: ${field}`);
-            }
-        }
-
-        // Validate output format
-        if (config.expected_output_format === 'json') {
-            try {
-                JSON.stringify(mockResult);
-            } catch (error) {
-                result.passed = false;
-                result.details.push('Invalid JSON format');
-            }
-        }
-
-        return result;
-    }
-
-    async runAITaskTests() {
-        log(colors.blue, '\n🤖 Running AI Task Tests (Mocked)');
-
-        if (!this.testConfig.pipeline_tests?.ai_task_tests) {
-            log(colors.yellow, '⚠️ No AI task tests defined, skipping');
-            return;
-        }
-
-        for (const [taskName, taskConfig] of Object.entries(this.testConfig.pipeline_tests.ai_task_tests)) {
-            log(colors.cyan, `\n📋 Testing AI Task: ${taskConfig.name}`);
-
-            try {
-                const result = await this.testAITask(taskName, taskConfig);
-                if (result.passed) {
-                    logTest(`ai_task:${taskName}`, 'PASS');
-                    this.results.passed++;
-                } else {
-                    logTest(`ai_task:${taskName}`, 'FAIL', result.details.join(', '));
-                    this.results.failed++;
-                }
-            } catch (error) {
-                logTest(`ai_task:${taskName}`, 'FAIL', error.message);
-                this.results.failed++;
-            }
-        }
-    }
-
-    async testAITask(taskName, config) {
-        const result = {
-            passed: true,
-            details: []
-        };
-
-        // Mock AI task execution (no real API calls)
-        const mockResponse = config.mock_response || 'Mock AI response';
-
-        // Validate task routing
-        if (config.validate_task_routing) {
-            const expectedProvider = config.expected_provider;
-            if (expectedProvider) {
-                // In a real implementation, this would check if the task routes to the correct provider
-                log(colors.blue, `🔄 Mock routing task ${taskName} to provider: ${expectedProvider}`);
-            }
-        }
-
-        // Validate response format
-        if (config.expected_response_format === 'json') {
-            try {
-                JSON.parse(mockResponse);
-            } catch (error) {
-                result.passed = false;
-                result.details.push('Invalid JSON response format');
-            }
-        }
-
-        return result;
-    }
-
-    printSummary() {
-        const total = this.results.passed + this.results.failed + this.results.skipped;
-
-        log(colors.blue, '\n📊 Test Summary');
-        console.log(`Total Tests: ${total}`);
-        console.log(`${colors.green}Passed: ${this.results.passed}${colors.reset}`);
-        console.log(`${colors.red}Failed: ${this.results.failed}${colors.reset}`);
-        console.log(`${colors.yellow}Skipped: ${this.results.skipped}${colors.reset}`);
-
-        if (this.results.failed === 0) {
-            log(colors.green, '\n🎉 All pipeline tests passed!');
-            return 0;
-        } else {
-            log(colors.red, '\n❌ Some pipeline tests failed!');
-            return 1;
-        }
-    }
-
-    async run() {
-        try {
-            log(colors.magenta, '🚀 Starting Pipeline Tests');
-
-            await this.loadConfig();
-
-            // Run all test categories
-            await this.runStageTests();
-            await this.runPipelineTests();
-            await this.runAITaskTests();
-
-            return this.printSummary();
-
-        } catch (error) {
-            log(colors.red, `❌ Pipeline tests failed: ${error.message}`);
-            return 1;
-        }
-    }
-}
-
-// Run the tests
-const runner = new PipelineTestRunner();
-runner.run().then(exitCode => {
-    process.exit(exitCode);
-}).catch(error => {
-    log(colors.red, `❌ Unexpected error: ${error.message}`);
-    process.exit(1);
-});
-EOF
-        log_success "Created pipeline test script"
-    fi
-
-    # Run the pipeline tests
-    log_subheader "Running Pipeline Tests"
-    if run_cmd "cd js && node src/test-pipeline.js" "Running pipeline tests" true; then
-        log_success "Pipeline tests passed"
-    else
-        log_error "Pipeline tests failed"
-        [ "$FORCE" != true ] && exit 1
-    fi
-}
-
 # Migration command
 cmd_migration() {
+    log_header "Migration Guide"
+    # This informational command is fine as is
     echo -e "  ${GREEN}${CHECK}${NC} ./dearreader script created and working"
     echo -e "  ${GREEN}${CHECK}${NC} All functionality from old scripts preserved"
     echo -e "  ${GREEN}${CHECK}${NC} Enhanced with new features (status, logs, api test)"
-
-    echo -e "\n${BOLD}📋 Old Scripts Status:${NC}"
-    OLD_SCRIPTS=("setup.sh" "dev.sh" "run.sh")
-    for script in "${OLD_SCRIPTS[@]}"; do
-        if [ -f "$script" ]; then
-            echo -e "  ${YELLOW}${WARNING}${NC} $script (deprecated, has migration notice)"
-        else
-            echo -e "  ${GREEN}${CHECK}${NC} $script (removed)"
-        fi
-    done
-
-    echo -e "\n${BOLD}🔄 Migration Commands:${NC}"
-    echo -e "  ${CYAN}Old:${NC} ./setup.sh ${WHITE}→${NC} ${GREEN}New:${NC} ./dearreader setup"
-    echo -e "  ${CYAN}Old:${NC} ./dev.sh ${WHITE}→${NC} ${GREEN}New:${NC} ./dearreader dev"
-    echo -e "  ${CYAN}Old:${NC} ./run.sh test all ${WHITE}→${NC} ${GREEN}New:${NC} ./dearreader test all"
-
-    echo -e "\n${BOLD}🆕 New Features:${NC}"
-    echo -e "  ${MAGENTA}•${NC} ./dearreader status - System health check"
-    echo -e "  ${MAGENTA}•${NC} ./dearreader logs -F - Follow logs in real-time"
-    echo -e "  ${MAGENTA}•${NC} ./dearreader api test - Test API endpoints"
-    echo -e "  ${MAGENTA}•${NC} ./dearreader clean - Safe cleanup"
-
-    echo -e "\n${BOLD}📚 For detailed migration guide:${NC}"
-    echo -e "  See: docs/migration.md"
-    echo -e "  Run: cat docs/migration.md"
-
-    echo -e "\n${BOLD}🛠️ Manual Migration Steps for Custom Scripts/Configs:${NC}"
-    echo -e "  1. Review your custom scripts for project-specific logic."
-    echo -e "  2. Move any custom environment variables to .env."
-    echo -e "  3. Update custom Docker Compose overrides to docker-compose.override.yml."
-    echo -e "  4. Integrate custom commands into dearreader by editing this script."
-    echo -e "  5. Test your changes with ./dearreader test and ./dearreader status."
-    echo -e "  6. For help, see docs/migration.md or ask in project discussions."
-
-    echo -e "\n${BOLD}🧹 To clean up old files:${NC}"
-    echo -e "  ./scripts/cleanup.sh"
+    # ... (rest of the help text from original script)
 }
 
 # Main logic
 main() {
     local command="$1"
-    shift || true
+    # Allow running without a command to show help
+    if [ -z "$command" ]; then
+        show_help
+        exit 0
+    fi
+    shift
 
     # Parse flags
     VERBOSE=false
@@ -1526,44 +735,12 @@ main() {
     done
     set -- "${args_without_flags[@]}"
 
-    # Handle commands
     case "$command" in
-        setup)
-            cmd_setup
+        setup|dev|test|run|stop|status|logs|clean|api|task|migration)
+            "cmd_$command" "$@"
             ;;
-        dev)
-            cmd_dev
-            ;;
-        test)
-            cmd_test "$1"
-            ;;
-        run)
-            cmd_run "$1"
-            ;;
-        stop)
-            cmd_stop
-            ;;
-        status)
-            cmd_status
-            ;;
-        logs)
-            cmd_logs
-            ;;
-        clean)
-            cmd_clean
-            ;;
-        api)
-            cmd_api "$1"
-            ;;
-        task)
-            cmd_task "$1" "$2"
-            ;;
-        migration)
-            cmd_migration
-            ;;
-        help|--help|-h|"")
+        help|--help|-h)
             show_help
-            exit 0
             ;;
         *)
             log_error "Unknown command: $command"

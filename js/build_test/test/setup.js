@@ -157,4 +157,14 @@ after(async () => {
         }, 100);
     }
 });
+// Set OCR availability based on config
+import config from '../src/config.js';
+if (config.pdf?.enable_ocr || config.ocr?.enable_ocr) {
+    process.env.TESSERACT_AVAILABLE = 'true';
+    console.log('✅ OCR enabled based on config.yaml');
+}
+else {
+    process.env.TESSERACT_AVAILABLE = 'false';
+    console.log('⚠️  OCR disabled based on config.yaml');
+}
 //# sourceMappingURL=setup.js.map
