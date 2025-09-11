@@ -179,6 +179,11 @@ export class AIConsumer {
   }
 
   async createChatCompletion(messages: ChatMessage[], model?: string, opts: any = {}) {
+    // Fail fast when API key is missing to provide a consistent error message for tests
+    if (!this.apiKey || this.apiKey === '' || this.apiKey.includes('${')) {
+      throw new Error('API key missing for provider ' + this.provider);
+    }
+
     const endpoint = this.provider === 'gemini' ? 'generateContent' : 'chat/completions';
     const url = this.buildUrl(endpoint);
     const body = this.buildRequestBody(messages, model, opts);

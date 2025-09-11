@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # DearReader - Unified Project Manager
 # A delightful CLI for managing the DearReader web crawler
@@ -91,9 +91,9 @@ COMMANDS:
     task            📋  Manage pipeline tasks (list, status, enable, disable)
 
 OPTIONS:
-    --verbose, -v   Show detailed output
-    --force, -f     Continue despite errors
-    --follow, -F    Follow logs in real-time
+    --verbose|-v    Show detailed output
+    --force|-f      Continue despite errors
+    --follow|-F     Follow logs in real-time
 
 EXAMPLES:
     ./dearreader setup              # First-time setup
@@ -142,6 +142,13 @@ check_docker() {
 }
 
 # Cross-platform command execution with better feedback
+# Usage: run_cmd <command> <description> [show_output]
+# Arguments:
+#   $1 - command string or array (e.g. "ls -l" or "npm install")
+#   $2 - description (string shown in logs)
+#   $3 - show_output (optional, true/false; if true, output is shown)
+# Example:
+#   run_cmd "ls -l" "Listing files" true
 run_cmd() {
     local cmd="$1"
     local description="$2"
@@ -150,16 +157,16 @@ run_cmd() {
     if [ "$VERBOSE" = true ] || [ "$show_output" = true ]; then
         log_info "$description..."
         echo -e "${CYAN}  └─ ${cmd}${NC}"
-        eval "$cmd"
+        bash -c "$cmd"
+        return $?
     else
         log_info "$description..."
-        if ! eval "$cmd" >/dev/null 2>&1; then
-            log_error "Command failed: $cmd"
+        if ! bash -c "$cmd" >/dev/null 2>&1; then
+            log_error "Command failed: ${cmd}"
             return 1
         fi
     fi
 }
-
 # Setup command - comprehensive environment setup
 cmd_setup() {
     log_header "${ROCKET} Setting up DearReader Environment"
@@ -179,7 +186,7 @@ cmd_setup() {
 
     # Check available disk space (need at least 2GB)
     if [[ "$OSTYPE" != "msys" && "$OSTYPE" != "win32" ]]; then
-        local available_space=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G.*//')
+        local available_space=$(df --output=avail -BG . | tail -1 | sed 's/G//;s/^[[:space:]]*//')
         if [ "$available_space" -lt 2 ]; then
             log_error "Insufficient disk space. Need at least 2GB free."
             exit 1
@@ -192,23 +199,21 @@ cmd_setup() {
     check_docker
 
     # Check for Node.js and npm
-    if ! command -v node >/dev/null 2>&1; then
-        log_error "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org"
-        exit 1
-    fi
+    # Check for Node.js and npm
+        if ! command -v node >/dev/null 2>&1; then
+            log_error "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org"
+            exit 1
+        fi
 
-    if ! command -v npm >/dev/null 2>&1; then
-        log_error "npm is not installed. Please install npm (usually comes with Node.js)"
-        exit 1
-    fi
+        # capture node version (strip leading "v")
+        node_version=$(node -v 2>/dev/null | sed 's/^v//')
+        node_major_version=$(echo "${node_version%%.*}" | sed 's/[^0-9]*//g')
 
-    local node_version=$(node --version | sed 's/v//')
-    if [[ "$(printf '%s\n' "$node_version" "18.0.0" | sort -V | head -n1)" != "18.0.0" ]]; then
-        log_warn "Node.js version $node_version detected. Recommended: 18+"
-    fi
-
-    log_success "Node.js environment ready"
-
+        if [ -n "$node_major_version" ] && [ "$node_major_version" -lt 18 ]; then
+            log_warn "Node.js version ${node_version:-unknown} detected. Recommended: 18+"
+        else
+            log_success "Node.js environment ready"
+        fi
     # Check for Tesseract OCR (needed for PDF OCR functionality)
     if ! command -v tesseract >/dev/null 2>&1; then
         log_warn "Tesseract OCR not found. Installing Tesseract for PDF OCR functionality..."
@@ -337,19 +342,28 @@ EOF
 
     # Setup Python environment
     log_subheader "Setting up Python Environment"
-    log_info "USE_UV is: $USE_UV"
     if [ "$USE_UV" = true ]; then
         run_cmd "uv venv --clear" "Creating Python virtual environment"
     else
         run_cmd "python -m venv .venv" "Creating Python virtual environment (using venv)"
     fi
 
-    # Activate virtual environment (cross-platform)
     if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-        source .venv/Scripts/activate
+        # Detect shell and activate accordingly
+        if [[ "$SHELL" == *"bash"* || "$SHELL" == *"zsh"* ]]; then
+            source .venv/Scripts/activate
+        elif [[ "$COMSPEC" == *"cmd.exe"* ]]; then
+            .venv/Scripts/activate.bat
+        elif [[ "$SHELL" == *"powershell"* || "$SHELL" == *"pwsh"* ]]; then
+            .venv/Scripts/Activate.ps1
+        else
+            # Default to bash-style activation
+            source .venv/Scripts/activate
+        fi
     else
         source .venv/bin/activate
     fi
+    log_success "Python virtual environment ready"
     log_success "Python virtual environment ready"
 
     # Install Python dependencies
@@ -823,7 +837,7 @@ try {
     const configContent = fs.readFileSync(configPath, 'utf8');
     const config = yaml.load(configContent);
 
-    const taskName = process.argv[1];
+    const taskName = process.argv[2];
     let found = false;
 
     if (config.pipeline_tests && config.pipeline_tests.stage_tests && config.pipeline_tests.stage_tests[taskName]) found = true;
@@ -858,11 +872,6 @@ try {
                 exit 1
             fi
 
-            if [ ! -f "enabled_tasks.txt" ]; then
-                log_warn "No tasks are currently enabled."
-                exit 0
-            fi
-
             # Disable the task
             if grep -q "^$task_name$" enabled_tasks.txt; then
                 sed -i "/^$task_name$/d" enabled_tasks.txt
@@ -870,11 +879,7 @@ try {
             else
                 log_warn "Task '$task_name' is not enabled."
             fi
-            ;;
-        *)
-            log_error "Unknown task subcommand: $subcommand"
-            echo "Available: list, status, enable, disable"
-            exit 1
+            exit 0
             ;;
     esac
 }
@@ -1485,7 +1490,16 @@ cmd_migration() {
     echo -e "  ${MAGENTA}•${NC} ./dearreader clean - Safe cleanup"
 
     echo -e "\n${BOLD}📚 For detailed migration guide:${NC}"
-    echo -e "  cat docs/migration.md"
+    echo -e "  See: docs/migration.md"
+    echo -e "  Run: cat docs/migration.md"
+
+    echo -e "\n${BOLD}🛠️ Manual Migration Steps for Custom Scripts/Configs:${NC}"
+    echo -e "  1. Review your custom scripts for project-specific logic."
+    echo -e "  2. Move any custom environment variables to .env."
+    echo -e "  3. Update custom Docker Compose overrides to docker-compose.override.yml."
+    echo -e "  4. Integrate custom commands into dearreader by editing this script."
+    echo -e "  5. Test your changes with ./dearreader test and ./dearreader status."
+    echo -e "  6. For help, see docs/migration.md or ask in project discussions."
 
     echo -e "\n${BOLD}🧹 To clean up old files:${NC}"
     echo -e "  ./scripts/cleanup.sh"

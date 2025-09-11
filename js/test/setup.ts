@@ -121,25 +121,30 @@ process.env.PUPPETEER_ARGS = [
 process.env.PUPPETEER_HEADLESS = 'true';
 
 // Enhanced monitoring for test environments
+// Monitor for hanging processes during tests (module-scoped so it can be cleared from the after hook)
+let processMonitor: NodeJS.Timeout | undefined;
 if (process.env.NODE_ENV === 'test' || process.env.CI === 'true') {
-  let processMonitor: NodeJS.Timeout;
-
   // Monitor for hanging processes during tests
   const monitorProcesses = () => {
-    const handleCount = process._getActiveHandles().length;
-    const requestCount = process._getActiveRequests().length;
+    try {
+      const handleCount = (process as any)._getActiveHandles().length;
+      const requestCount = (process as any)._getActiveRequests().length;
 
-    if (handleCount > 50 || requestCount > 20) {
-      console.warn(`⚠️  High resource usage detected: ${handleCount} handles, ${requestCount} requests`);
+      if (handleCount > 50 || requestCount > 20) {
+        console.warn(`⚠️  High resource usage detected: ${handleCount} handles, ${requestCount} requests`);
+      }
+    } catch (e) {
+      // Some Node versions or environments may not expose these internals; ignore errors
     }
   };
 
   processMonitor = setInterval(monitorProcesses, 30000);
 
-  // Cleanup monitor on exit
+  // Best-effort cleanup if the process is exiting
   process.on('beforeExit', () => {
     if (processMonitor) {
       clearInterval(processMonitor);
+      processMonitor = undefined;
     }
   });
 }
@@ -149,6 +154,12 @@ if (process.env.NODE_ENV === 'test' || process.env.CI === 'true') {
 // Global after hook to close puppeteer
 after(async () => {
   await puppeteerControl.close();
+
+  // Ensure the monitor interval is cleared so the Node process can exit cleanly
+  if (processMonitor) {
+    clearInterval(processMonitor);
+    processMonitor = undefined;
+  }
 
   // Only do minimal cleanup in smart test mode
   if (process.env.SMART_TEST_CLEANUP === 'true') {
@@ -164,3 +175,13 @@ after(async () => {
     }, 100);
   }
 });
+
+// Set OCR availability based on config
+import config from '../src/config.js';
+if (config.pdf?.enable_ocr || config.ocr?.enable_ocr) {
+  process.env.TESSERACT_AVAILABLE = 'true';
+  console.log('✅ OCR enabled based on config.yaml');
+} else {
+  process.env.TESSERACT_AVAILABLE = 'false';
+  console.log('⚠️  OCR disabled based on config.yaml');
+}
