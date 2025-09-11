@@ -35,6 +35,7 @@ ai_providers:
     api_key: "${OPENROUTER_API_KEY}"
     temperature: 0.1
     max_tokens: 4096
+    rpm_limit: 10
 
   openrouter-small:
     base_url: "https://openrouter.ai/api/v1"
@@ -42,6 +43,7 @@ ai_providers:
     api_key: "${OPENROUTER_API_KEY}"
     temperature: 0.2
     max_tokens: 2048
+    rpm_limit: 20
 
 ai_tasks:
   parse_pdf: "openrouter-big"
@@ -106,3 +108,122 @@ ai_task_pipelines:
     - task: general_chat
       description: "Generate review comments and suggestions"
       depends_on: code_analysis
+
+# Pipeline test definitions
+pipeline_tests:
+  # Stage-level tests for individual pipeline components
+  stage_tests:
+    crawl:
+      name: "Web Crawling Stage"
+      tests:
+        - name: "basic_html_crawl"
+          test_url: "https://example.com/test.html"
+          expected_content_type: "text/html"
+          expected_selectors: ["h1", "p"]
+        - name: "json_api_crawl"
+          test_url: "https://api.example.com/data.json"
+          expected_content_type: "application/json"
+
+    text_extract:
+      name: "Text Extraction Stage"
+      tests:
+        - name: "basic_html_extraction"
+          test_html: "<html><body><h1>Test Article</h1><p>This is test content.</p><script>console.log('test');</script></body></html>"
+          expected_text_contains: ["Test Article", "This is test content"]
+          expected_text_excludes: ["console.log"]
+        - name: "complex_html_extraction"
+          test_html: "<html><body><nav>Navigation</nav><h1>Main Article</h1><p>Content here.</p><footer>Footer</footer></body></html>"
+          expected_text_contains: ["Main Article", "Content here"]
+          expected_text_excludes: ["Navigation", "Footer"]
+
+    content_filter:
+      name: "Content Filtering Stage"
+      tests:
+        - name: "duplicate_removal"
+          test_content: "This is duplicate text. This is duplicate text. Unique content here."
+          remove_duplicates: true
+          expected_content: "This is duplicate text. Unique content here."
+        - name: "content_length_filter"
+          test_content: "Short text"
+          min_length: 20
+          expected_filtered: true
+
+    json_format:
+      name: "JSON Formatting Stage"
+      tests:
+        - name: "basic_json_formatting"
+          test_data:
+            title: "Test Article"
+            content: "Test content"
+          expected_fields: ["success", "timestamp", "data", "metadata"]
+        - name: "comprehensive_json_formatting"
+          test_data:
+            title: "Test Article"
+            content: "Test content"
+            url: "https://example.com"
+            metadata:
+              author: "Test Author"
+          include_url: true
+          include_processing_stats: true
+          expected_fields: ["success", "timestamp", "data", "metadata", "url", "processing_stats"]
+          expected_nested_fields: ["metadata.author", "processing_stats.processing_time_ms"]
+
+    pdf_extract:
+      name: "PDF Text Extraction Stage"
+      tests:
+        - name: "valid_pdf_extraction"
+          test_pdf_content: "Mock PDF content with Hello World text"
+          expected_text_contains: ["Hello World"]
+        - name: "empty_pdf_handling"
+          test_pdf_content: ""
+          expected_error: "Empty buffer"
+
+  # End-to-end pipeline tests
+  pipeline_tests:
+    html_default:
+      name: "HTML Content Processing Pipeline"
+      description: "Complete pipeline for HTML content processing"
+      expected_fields: ["title", "content", "links", "metadata", "timestamp"]
+      expected_output_format: "json"
+
+    pdf_default:
+      name: "PDF Content Processing Pipeline"
+      description: "Complete pipeline for PDF content processing"
+      expected_fields: ["title", "content", "extracted_text", "quality_assessment", "metadata", "timestamp"]
+      expected_output_format: "json"
+
+    html_enhanced:
+      name: "Enhanced HTML Processing Pipeline"
+      description: "HTML pipeline with additional processing steps"
+      expected_fields: ["title", "content", "links", "metadata", "timestamp", "categorization", "markdown_content"]
+      expected_output_format: "json"
+
+  # AI task tests (mocked to avoid API calls)
+  ai_task_tests:
+    parse_pdf:
+      name: "PDF Parsing Task"
+      mock_response: "Mock PDF parsing result"
+      validate_task_routing: true
+      expected_provider: "openrouter-big"
+      expected_response_format: "text"
+
+    validate_format:
+      name: "Content Format Validation Task"
+      mock_response: "Mock format validation result"
+      validate_task_routing: true
+      expected_provider: "openrouter-small"
+      expected_response_format: "text"
+
+    general_chat:
+      name: "General Chat Task"
+      mock_response: "Mock chat response"
+      validate_task_routing: true
+      expected_provider: "openrouter-small"
+      expected_response_format: "text"
+
+    code_analysis:
+      name: "Code Analysis Task"
+      mock_response: "Mock code analysis result"
+      validate_task_routing: true
+      expected_provider: "openrouter-big"
+      expected_response_format: "text"

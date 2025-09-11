@@ -148,9 +148,13 @@ after(async () => {
         console.warn('⚠️  Error closing puppeteer:', error.message);
     }
 
-    // Always force exit after cleanup to prevent hanging
-    console.log('✅ Test cleanup complete, exiting...');
-    setTimeout(() => {
-        process.exit(0);
-    }, 50);
+    // Only force exit if not in smart cleanup mode
+    if (!process.env.SMART_TEST_CLEANUP) {
+        console.log('✅ Test cleanup complete, exiting...');
+        setTimeout(() => {
+            process.exit(0);
+        }, 50);
+    } else {
+        console.log('✅ Smart cleanup mode: letting script handle cleanup');
+    }
 });

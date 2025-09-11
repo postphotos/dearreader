@@ -1,5 +1,6 @@
 /* eslint-disable max-len */
 import { expect } from 'chai';
+import { CrawlerOptions } from '../../dto/scraping-options.js';
 
 // Mock dependencies
 const mockPuppeteerControl = {
@@ -191,6 +192,20 @@ class MockResponse {
   getHeaders() { return this._headers; }
   getContentType() { return this._contentType; }
 }
+
+// Mock CrawlerOptions.from to avoid civkit AutoCastable issues
+const originalFrom = CrawlerOptions.from;
+CrawlerOptions.from = function(req: any) {
+  // Return a simple object instead of using AutoCastable
+  const options = {
+    url: req.url,
+    method: req.method || 'GET',
+    query: req.query || {},
+    headers: req.headers || {},
+    hostname: req.hostname || 'localhost'
+  };
+  return options as any;
+};
 
 // Test suite using proper mocha functions
 describe('CrawlerHost JSON Response Format', () => {
