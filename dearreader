@@ -97,6 +97,7 @@ OPTIONS:
     --verbose|-v    Show detailed output
     --force|-f      Continue despite errors
     --follow|-F     Follow logs in real-time
+    --requests|-r   Use real AI API calls instead of mock responses (pipeline tests only)
 
 EXAMPLES:
     ./dearreader setup              # First-time setup
@@ -106,6 +107,7 @@ EXAMPLES:
     ./dearreader test js            # Run JavaScript tests only
     ./dearreader test python        # Run Python tests only
     ./dearreader test pipeline      # Run pipeline tests only
+    ./dearreader test pipeline --requests  # Run pipeline tests with real AI calls
     ./dearreader run prod           # Start production
     ./dearreader status             # Check system status
     ./dearreader api test           # Test API endpoints
@@ -113,6 +115,12 @@ EXAMPLES:
     ./dearreader task status        # Show task status (enabled/disabled)
     ./dearreader task enable <task> # Enable a specific task
     ./dearreader task disable <task># Disable a specific task
+
+URL EXAMPLES (when server is running):
+    localhost:3000/default_html/https://example.com     # HTML with markdown
+    localhost:3000/default_html_json/https://example.com # HTML to JSON
+    localhost:3000/default_pdf/https://example.com/doc.pdf # PDF with OCR
+    localhost:3000/json/https://example.com             # Legacy JSON format
 
 QUICK START:
     1. ./scripts/quickstart.sh    # 1-click setup (fastest!)
@@ -318,16 +326,11 @@ cmd_dev() {
     run_cmd "Cleaning up existing containers" docker-compose down --remove-orphans
     log_info "Running end-to-end tests before starting..."
 
-    if cmd_test "e2e"; then
-        log_success "End-to-end tests passed! Starting development environment..."
-    else
-        log_error "End-to-end tests failed."
-        if [ "$FORCE" != true ]; then
-            log_error "Exiting due to test failures. Use --force to continue anyway."
-            exit 1
-        fi
-        log_warn "Continuing despite test failures (--force used)"
-    fi
+    # Run E2E tests - the function will handle exit codes properly
+    cmd_test "e2e"
+
+    # If we get here, tests passed (or --force was used)
+    log_success "End-to-end tests passed! Starting development environment..."
 
     run_cmd "Starting development services" docker-compose --profile dev up --build -d
 
@@ -349,7 +352,6 @@ cmd_test() {
 
     # Count test types and number of tests for each
     local test_types=("js" "python" "e2e" "pipeline")
-    local total_types=0
     local js_count=0
     local python_count=0
     local e2e_count=0
@@ -387,7 +389,7 @@ cmd_test() {
 
     # Count E2E tests
     if [ -f "./scripts/e2e-test.sh" ]; then
-        e2e_count=$(grep -c "^pytest " ./scripts/e2e-test.sh 2>/dev/null | tr -d '[:space:]')
+        e2e_count=$(grep -c "test_start " ./scripts/e2e-test.sh 2>/dev/null | tr -d '[:space:]')
         if ! [[ "$e2e_count" =~ ^[0-9]+$ ]] || [ -z "$e2e_count" ]; then
             e2e_count=0
         fi
@@ -405,78 +407,232 @@ cmd_test() {
         pipeline_count=0
     fi
 
-    # Count enabled test types
-    for t in "${test_types[@]}"; do
-        case "$t" in
-            js) [ "$js_count" -gt 0 ] && total_types=$((total_types+1)) ;;
-            python) [ "$python_count" -gt 0 ] && total_types=$((total_types+1)) ;;
-            e2e) [ "$e2e_count" -gt 0 ] && total_types=$((total_types+1)) ;;
-            pipeline) [ "$pipeline_count" -gt 0 ] && total_types=$((total_types+1)) ;;
+    # Display test counts based on what's being run
+    if [ "$test_type" = "all" ]; then
+        echo -e "\n${BOLD}${CYAN}📊 Test Suite Overview${NC}"
+        echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+        [ "$js_count" -gt 0 ] && echo -e "${GREEN}JavaScript:${NC}   $(printf '%-3s' "$js_count") $(yes '🟩' | head -n "$js_count" | tr -d '\n')"
+        [ "$python_count" -gt 0 ] && echo -e "${YELLOW}Python:${NC}       $(printf '%-3s' "$python_count") $(yes '🟨' | head -n "$python_count" | tr -d '\n')"
+        [ "$e2e_count" -gt 0 ] && echo -e "${BLUE}End-to-End:${NC}   $(printf '%-3s' "$e2e_count") $(yes '🟦' | head -n "$e2e_count" | tr -d '\n')"
+        [ "$pipeline_count" -gt 0 ] && echo -e "${MAGENTA}Pipeline:${NC}     $(printf '%-3s' "$pipeline_count") $(yes '🟪' | head -n "$pipeline_count" | tr -d '\n')"
+        echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
+    else
+        # Show only the specific test type being run
+        case "$test_type" in
+            js)
+                [ "$js_count" -gt 0 ] && echo -e "\n${BOLD}${CYAN}📊 JavaScript Tests${NC}"
+                [ "$js_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+                [ "$js_count" -gt 0 ] && echo -e "${GREEN}JavaScript:${NC}   $(printf '%-3s' "$js_count") $(yes '🟩' | head -n "$js_count" | tr -d '\n')"
+                [ "$js_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
+                ;;
+            python)
+                [ "$python_count" -gt 0 ] && echo -e "\n${BOLD}${CYAN}📊 Python Tests${NC}"
+                [ "$python_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+                [ "$python_count" -gt 0 ] && echo -e "${YELLOW}Python:${NC}       $(printf '%-3s' "$python_count") $(yes '🟨' | head -n "$python_count" | tr -d '\n')"
+                [ "$python_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
+                ;;
+            e2e)
+                [ "$e2e_count" -gt 0 ] && echo -e "\n${BOLD}${CYAN}📊 End-to-End Tests${NC}"
+                [ "$e2e_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+                [ "$e2e_count" -gt 0 ] && echo -e "${BLUE}End-to-End:${NC}   $(printf '%-3s' "$e2e_count") $(yes '🟦' | head -n "$e2e_count" | tr -d '\n')"
+                [ "$e2e_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
+                ;;
+            pipeline)
+                [ "$pipeline_count" -gt 0 ] && echo -e "\n${BOLD}${CYAN}📊 Pipeline Tests${NC}"
+                [ "$pipeline_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+                [ "$pipeline_count" -gt 0 ] && echo -e "${MAGENTA}Pipeline:${NC}     $(printf '%-3s' "$pipeline_count") $(yes '🟪' | head -n "$pipeline_count" | tr -d '\n')"
+                [ "$pipeline_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
+                ;;
         esac
-    done
+    fi
 
-    # Display test counts in a delightful way
-    echo -e "\n${BOLD}${CYAN}📊 Test Suite Overview${NC}"
-    echo -e "${CYAN}──────────────────────────────────────────────${NC}"
-    echo -e "${GREEN}JavaScript:${NC}   $(printf '%-3s' "$js_count") $(yes '🟩' | head -n "$js_count" | tr -d '\n')"
-    echo -e "${YELLOW}Python:${NC}       $(printf '%-3s' "$python_count") $(yes '🟨' | head -n "$python_count" | tr -d '\n')"
-    echo -e "${BLUE}End-to-End:${NC}   $(printf '%-3s' "$e2e_count") $(yes '🟦' | head -n "$e2e_count" | tr -d '\n')"
-    echo -e "${MAGENTA}Pipeline:${NC}     $(printf '%-3s' "$pipeline_count") $(yes '🟪' | head -n "$pipeline_count" | tr -d '\n')"
-    echo -e "${CYAN}──────────────────────────────────────────────${NC}"
-    echo -e "${BOLD}Test types enabled:${NC} $total_types\n"
+    # Track test results
+    local overall_success=true
+    local test_results=()
 
-    run_test() {
+    run_single_test() {
         local test_name="$1"
-        shift
-        log_subheader "Running $test_name Tests"
-        if run_cmd "Running $test_name tests" "$@"; then
-            log_success "$test_name tests passed"
-            return 0
+        local test_count="$2"
+        local test_color="$3"
+        local test_emoji="$4"
+        shift 4
+        local test_cmd="$*"
+
+        echo -e "${BOLD}${test_color}Running $test_name Tests${NC}"
+
+        # Show progress bar with pending tests
+        echo -n "Progress: "
+        for ((i=1; i<=test_count; i++)); do
+            echo -n "${test_emoji}"
+        done
+        echo -n " "
+        echo -ne "\rProgress: "
+
+        # Run the test and capture output
+        local test_output=""
+        local test_exit_code=0
+
+        if [ "$VERBOSE" = true ]; then
+            # Show output in real-time
+            if "$@"; then
+                test_exit_code=0
+            else
+                test_exit_code=$?
+            fi
         else
-            log_error "$test_name tests failed"
-            echo -e "${RED}Details of failure:${NC}"
-            # Show output of the failed command for debugging
-            "$@"
-            [ "$FORCE" != true ] && exit 1
-            return 1
+            # Capture output for later analysis
+            test_output=$("$@" 2>&1)
+            test_exit_code=$?
         fi
+
+        # Check for warnings in output
+        local has_warnings=false
+        if echo "$test_output" | grep -qi "warn\|warning\|deprecated\|experimental" 2>/dev/null; then
+            has_warnings=true
+        fi
+
+        # Update progress bar based on result
+        if [ $test_exit_code -eq 0 ]; then
+            # Success - show green boxes
+            for ((i=1; i<=test_count; i++)); do
+                echo -n "${GREEN}🟩${NC}"
+            done
+            echo -e " ${GREEN}${CHECK} $test_name tests passed${NC}"
+            if [ "$has_warnings" = true ]; then
+                log_warn "$test_name tests passed with warnings"
+                echo "$test_output" | grep -i "warn\|warning\|deprecated\|experimental" | head -3
+            fi
+            test_results+=("$test_name:PASS")
+        else
+            # Failure - show red boxes
+            for ((i=1; i<=test_count; i++)); do
+                echo -n "${RED}🟥${NC}"
+            done
+            echo -e " ${RED}${CROSS} $test_name tests failed${NC}"
+            if [ "$VERBOSE" != true ]; then
+                echo -e "${RED}Error details:${NC}"
+                echo "$test_output" | head -10
+                if [ $(echo "$test_output" | wc -l) -gt 10 ]; then
+                    echo -e "${YELLOW}... (truncated, use --verbose for full output)${NC}"
+                fi
+            fi
+            test_results+=("$test_name:FAIL")
+            overall_success=false
+        fi
+        echo ""
     }
 
     case "$test_type" in
+        js|python|e2e|pipeline|all)
+            # Valid test types - continue processing
+            ;;
+        --help|-h|help)
+            echo -e "\n${BOLD}${CYAN}🧪 Test Command Help${NC}"
+            echo -e "${CYAN}═══════════════════════════════════════════════${NC}"
+            echo -e "${WHITE}Usage:${NC} ./dearreader test [type] [options]"
+            echo -e ""
+            echo -e "${WHITE}Test Types:${NC}"
+            echo -e "  ${GREEN}js${NC}        Run JavaScript tests only"
+            echo -e "  ${YELLOW}python${NC}    Run Python tests only"
+            echo -e "  ${BLUE}e2e${NC}       Run End-to-End tests only"
+            echo -e "  ${MAGENTA}pipeline${NC}  Run Pipeline tests only"
+            echo -e "  ${CYAN}all${NC}       Run all test types (default)"
+            echo -e ""
+            echo -e "${WHITE}Options:${NC}"
+            echo -e "  ${WHITE}--verbose, -v${NC}  Show detailed test output"
+            echo -e "  ${WHITE}--force, -f${NC}    Continue even if tests fail"
+            echo -e "  ${WHITE}--requests, -r${NC} Use real AI API calls instead of mock responses (pipeline tests only)"
+            echo -e "  ${WHITE}--help, -h${NC}     Show this help message"
+            echo -e ""
+            echo -e "${WHITE}Examples:${NC}"
+            echo -e "  ${WHITE}./dearreader test${NC}              # Run all tests"
+            echo -e "  ${WHITE}./dearreader test js${NC}           # Run only JS tests"
+            echo -e "  ${WHITE}./dearreader test python --verbose${NC}  # Run Python tests with details"
+            echo -e "  ${WHITE}./dearreader test pipeline --requests${NC}  # Run pipeline tests with real AI calls"
+            echo -e "  ${WHITE}./dearreader test all --force${NC}  # Run all tests, don't stop on failures"
+            exit 0
+            ;;
         js)
-            run_test "JavaScript" docker-compose --profile dev run --rm js-test
+            [ "$js_count" -gt 0 ] && run_single_test "JavaScript" "$js_count" "$GREEN" "🟩" docker-compose --profile dev run --rm js-test
             ;;
         python)
             if [ "$USE_UV" = true ]; then
-                run_test "Python" uv run python3 -m pytest py/tests --verbose
+                [ "$python_count" -gt 0 ] && run_single_test "Python" "$python_count" "$YELLOW" "🟨" uv run python3 -m pytest py/tests --verbose
             else
-                run_test "Python" bash -c "source .venv/bin/activate || source .venv/Scripts/activate; python3 -m pytest py/tests --verbose"
+                [ "$python_count" -gt 0 ] && run_single_test "Python" "$python_count" "$YELLOW" "🟨" bash -c "source .venv/bin/activate || source .venv/Scripts/activate; python3 -m pytest py/tests --verbose"
             fi
             ;;
         e2e)
-            run_test "End-to-End" ./scripts/e2e-test.sh
+            [ "$e2e_count" -gt 0 ] && run_single_test "End-to-End" "$e2e_count" "$BLUE" "🟦" ./scripts/e2e-test.sh
             ;;
         pipeline)
             if [ ! -f "js/src/test-pipeline.js" ]; then
                 log_error "Pipeline test runner script not found at js/src/test-pipeline.js"
                 log_info "Please ensure this file exists in your project and is checked into version control."
-                exit 1
+                overall_success=false
+                test_results+=("Pipeline:FAIL")
+            else
+                [ "$pipeline_count" -gt 0 ] && run_single_test "Pipeline" "$pipeline_count" "$MAGENTA" "🟪" node js/src/test-pipeline.js
             fi
-            run_test "Pipeline" node js/src/test-pipeline.js
             ;;
         all)
-            cmd_test js
-            cmd_test python
-            cmd_test e2e
-            cmd_test pipeline
-            log_success "All tests completed!"
+            # Run all tests and track overall success
+            [ "$js_count" -gt 0 ] && run_single_test "JavaScript" "$js_count" "$GREEN" "🟩" docker-compose --profile dev run --rm js-test
+
+            if [ "$USE_UV" = true ]; then
+                [ "$python_count" -gt 0 ] && run_single_test "Python" "$python_count" "$YELLOW" "🟨" uv run python3 -m pytest py/tests --verbose
+            else
+                [ "$python_count" -gt 0 ] && run_single_test "Python" "$python_count" "$YELLOW" "🟨" bash -c "source .venv/bin/activate || source .venv/Scripts/activate; python3 -m pytest py/tests --verbose"
+            fi
+
+            [ "$e2e_count" -gt 0 ] && run_single_test "End-to-End" "$e2e_count" "$BLUE" "🟦" ./scripts/e2e-test.sh
+
+            if [ ! -f "js/src/test-pipeline.js" ]; then
+                log_error "Pipeline test runner script not found at js/src/test-pipeline.js"
+                log_info "Please ensure this file exists in your project and is checked into version control."
+                overall_success=false
+                test_results+=("Pipeline:FAIL")
+            else
+                [ "$pipeline_count" -gt 0 ] && run_single_test "Pipeline" "$pipeline_count" "$MAGENTA" "🟪" node js/src/test-pipeline.js
+            fi
+
+            # Show final summary for "all" tests
+            echo -e "\n${BOLD}${CYAN}📊 Test Results Summary${NC}"
+            echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+            for result in "${test_results[@]}"; do
+                local test_name=$(echo "$result" | cut -d: -f1)
+                local status=$(echo "$result" | cut -d: -f2)
+                if [ "$status" = "PASS" ]; then
+                    echo -e "${GREEN}${CHECK} $test_name${NC}"
+                else
+                    echo -e "${RED}${CROSS} $test_name${NC}"
+                fi
+            done
+            echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+
+            if [ "$overall_success" = true ]; then
+                log_success "All tests completed successfully!"
+            else
+                log_error "Some tests failed!"
+                if [ "$FORCE" != true ]; then
+                    exit 1
+                fi
+            fi
             ;;
         *)
             log_error "Unknown test type: $test_type"
             echo "Available: js, python, e2e, pipeline, all"
+            echo "Use './dearreader test --help' for more information"
             exit 1
             ;;
     esac
+
+    # For individual test types, exit with error if they failed (unless --force is used)
+    if [ "$test_type" != "all" ] && [ "$overall_success" = false ]; then
+        if [ "$FORCE" != true ]; then
+            exit 1
+        fi
+    fi
 }
 
 # Run command

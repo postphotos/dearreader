@@ -109,6 +109,79 @@ ai_task_pipelines:
       description: "Generate review comments and suggestions"
       depends_on: code_analysis
 
+# Pipeline routing configuration for URL-based processing
+pipeline_routing:
+  # Default pipeline for regular requests
+  default: "default_html"
+
+  # URL route mappings to pipelines
+  routes:
+    "/default_html": "default_html"
+    "/default_html_json": "default_html_json"
+    "/default_pdf": "default_pdf"
+    "/json/": "default_html_json"  # Legacy support for /json/ URLs
+    "/": "default_html"  # Default for root URLs
+
+  # Pipeline definitions for URL-based processing
+  pipelines:
+    default_html:
+      name: "Default HTML Processing Pipeline"
+      description: "Default pipeline for HTML content that renders markdown"
+      content_type: "html"
+      ai_required: false
+      stages:
+        - type: "crawl"
+          description: "Fetch HTML content from URL"
+        - type: "text_extract"
+          description: "Extract clean text from HTML"
+        - type: "content_filter"
+          description: "Filter and clean content"
+        - type: "markdown_format"
+          description: "Convert to markdown format"
+      expected_fields: ["title", "content", "markdown_content", "links", "metadata", "timestamp"]
+      expected_output_format: "markdown"
+      render_markdown: true
+
+    default_html_json:
+      name: "Default HTML to JSON Processing Pipeline"
+      description: "Default pipeline for HTML content that renders markdown into JSON"
+      content_type: "html"
+      ai_required: false
+      stages:
+        - type: "crawl"
+          description: "Fetch HTML content from URL"
+        - type: "text_extract"
+          description: "Extract clean text from HTML"
+        - type: "content_filter"
+          description: "Filter and clean content"
+        - type: "markdown_format"
+          description: "Convert to markdown format"
+        - type: "json_format"
+          description: "Format as JSON response"
+      expected_fields: ["title", "content", "markdown_content", "links", "metadata", "timestamp"]
+      expected_output_format: "json"
+      render_markdown: true
+      convert_to_json: true
+
+    default_pdf:
+      name: "Default PDF Processing Pipeline"
+      description: "Default pipeline for PDF content using Tesseract OCR"
+      content_type: "pdf"
+      ai_required: false
+      stages:
+        - type: "crawl"
+          description: "Fetch PDF content from URL"
+        - type: "pdf_extract"
+          description: "Extract text using Tesseract OCR"
+        - type: "content_filter"
+          description: "Filter and clean extracted text"
+        - type: "json_format"
+          description: "Format as JSON response"
+      expected_fields: ["title", "content", "extracted_text", "ocr_quality", "metadata", "timestamp"]
+      expected_output_format: "json"
+      use_tesseract: true
+      enable_ai_fallback: false
+
 # Pipeline test definitions
 pipeline_tests:
   # Stage-level tests for individual pipeline components
@@ -180,6 +253,29 @@ pipeline_tests:
 
   # End-to-end pipeline tests
   pipeline_tests:
+    default_html:
+      name: "Default HTML Processing Pipeline"
+      description: "Default pipeline for HTML content that renders markdown"
+      expected_fields: ["title", "content", "markdown_content", "links", "metadata", "timestamp"]
+      expected_output_format: "markdown"
+      render_markdown: true
+
+    default_html_json:
+      name: "Default HTML to JSON Processing Pipeline"
+      description: "Default pipeline for HTML content that renders markdown into JSON"
+      expected_fields: ["title", "content", "markdown_content", "links", "metadata", "timestamp"]
+      expected_output_format: "json"
+      render_markdown: true
+      convert_to_json: true
+
+    default_pdf:
+      name: "Default PDF Processing Pipeline"
+      description: "Default pipeline for PDF content using Tesseract OCR"
+      expected_fields: ["title", "content", "extracted_text", "ocr_quality", "metadata", "timestamp"]
+      expected_output_format: "json"
+      use_tesseract: true
+      enable_ai_fallback: false
+
     html_default:
       name: "HTML Content Processing Pipeline"
       description: "Complete pipeline for HTML content processing"
