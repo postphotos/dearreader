@@ -1,948 +1,109 @@
-# DearReader AI-Enhanced Crawl Pipeline Configuration Template
-# ============================================================================
-# Copy this file to crawl_pipeline.yaml and customize for your specific needs
-# This template includes the latest features: rate limiting, pipeline routing, and AI processing
-# ============================================================================
+# DearReader AI Configuration
+# Simplified configuration for AI providers and tasks
 
-# ============================================================================
-# RATE LIMITING CONFIGURATION
-# ============================================================================
-# Track and limit API usage per provider/key to stay within rate limits
+ai_providers:
+  # OpenRouter free models (API key required)
+  deepseek/deepseek-r1:free:
+    base_url: "https://openrouter.ai/api/v1"
+    model: "deepseek/deepseek-r1:free"
+    api_key: "${OPENROUTER_API_KEY}"
 
-rate_limiting:
-  # Enable rate limiting
-  enabled: true
-  # Log file for tracking API usage per key
-  usage_log_path: "./logs/api_usage.log"
-  # Reset usage counters daily at midnight
-  daily_reset_hour: 0
-  # Warning threshold (percentage of limit)
-  warning_threshold: 80
-  # Strict enforcement (block requests when limit exceeded)
-  strict_enforcement: true
+  meta-llama/llama-3.3-70b-instruct:free:
+    base_url: "https://openrouter.ai/api/v1"
+    model: "meta-llama/llama-3.3-70b-instruct:free"
+    api_key: "${OPENROUTER_API_KEY}"
 
-  # Provider-specific rate limits (90% of actual limits recommended)
-  providers:
-    openrefine-free:
-      rpm_limit: 18  # 90% of 20 RPM free tier limit
-      rpd_limit: 900  # 90% of 1000 RPD free tier limit
-    openrefine-premium:
-      rpm_limit: 180
-      rpd_limit: 9000
+  qwen/qwen-2.5-72b-instruct:free:
+    base_url: "https://openrouter.ai/api/v1"
+    model: "qwen/qwen-2.5-72b-instruct:free"
+    api_key: "${OPENROUTER_API_KEY}"
 
-# ============================================================================
-# PIPELINE ROUTING CONFIGURATION
-# ============================================================================
-# Define how URLs map to processing pipelines
+  google/gemma-3-27b-it:free:
+    base_url: "https://openrouter.ai/api/v1"
+    model: "google/gemma-3-27b-it:free"
+    api_key: "${OPENROUTER_API_KEY}"
 
-pipeline_routing:
-  # Default pipeline for regular URLs (no AI processing)
-  default: "html_default"
+  mistralai/mistral-small-3.1-24b-instruct:free:
+    base_url: "https://openrouter.ai/api/v1"
+    model: "mistralai/mistral-small-3.1-24b-instruct:free"
+    api_key: "${OPENROUTER_API_KEY}"
 
-  # Pipeline-specific URL routing
-  routes:
-    # AI-enhanced processing routes
-    "/task/html_enhanced/": "html_enhanced"
-    "/task/pdf_enhanced/": "pdf_enhanced"
-    "/task/ai_processing/": "html_enhanced"
-    "/task/test_1/": "html_enhanced"
-
-  # Pipeline definitions
-  pipelines:
-
-  # HTML Default Pipeline (NO AI - for regular requests)
-  html_default:
-    name: "Universal HTML Content Processing (No AI)"
-    description: "Broad, unopinionated HTML processing that works with all types of web pages - fast and free"
-    content_type: "html"
-    ai_required: false
-    stages:
-      - name: "universal_crawl"
-        type: "crawl"
-        description: "Universal web page crawling with broad content detection"
-        config:
-          format: "html"
-          include_metadata: true
-          include_links: true
-          include_images: false
-          timeout_ms: 45000
-          # Broad content selectors that work across different site structures
-          wait_for_selector: "main, article, .content, .post, .entry, #content, #main, body"
-          # Fallback selectors if primary ones don't exist
-          fallback_selectors: [
-            "[role='main']",
-            ".article-content",
-            ".post-content",
-            ".entry-content",
-            ".blog-post",
-            ".news-article",
-            ".page-content",
-            "article",
-            ".article",
-            ".content-wrapper",
-            ".main-content",
-            "body"
-          ]
-          # User agent to avoid bot detection
-          user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-          # Accept various content types
-          accept_content_types: ["text/html", "text/plain", "application/xhtml+xml"]
-          # Follow redirects
-          follow_redirects: true
-          max_redirects: 5
-
-      - name: "universal_text_extraction"
-        type: "text_extract"
-        description: "Extract readable text from any web page structure"
-        config:
-          preserve_formatting: true
-          remove_scripts: true
-          remove_styles: true
-          remove_navigation: true
-          remove_ads: true
-          remove_comments: true
-          # Extract from multiple content areas
-          content_selectors: [
-            "main",
-            "article",
-            ".content",
-            ".post",
-            ".entry",
-            "#content",
-            "#main",
-            ".article-content",
-            ".post-content",
-            ".entry-content",
-            ".blog-post",
-            ".news-article",
-            ".page-content",
-            "[role='main']",
-            ".main-content",
-            ".content-wrapper"
-          ]
-          # Preserve important structural elements
-          preserve_headers: true
-          preserve_lists: true
-          preserve_tables: true
-          preserve_links: true
-          preserve_images: false
-          # Clean up common web artifacts
-          remove_common_artifacts: true
-          # Handle different encodings
-          encoding_detection: true
-          # Extract metadata from page
-          extract_title: true
-          extract_description: true
-          extract_keywords: true
-          extract_author: true
-          extract_date: true
-
-      - name: "universal_content_filtering"
-        type: "content_filter"
-        description: "Filter and clean extracted content for better readability"
-        config:
-          # Remove very short content (likely navigation/ads)
-          min_content_length: 100
-          # Remove duplicate content
-          remove_duplicates: true
-          # Language detection and filtering
-          language_filter: "auto"  # Keep content in detected language
-          # Quality filtering
-          quality_threshold: 0.3  # Basic quality check
-          # Content type detection
-          detect_content_type: true
-          # Boilerplate removal
-          remove_boilerplate: true
-
-      - name: "universal_json_formatting"
-        type: "json_format"
-        description: "Format result as comprehensive JSON with all extracted data"
-        config:
-          include_url: true
-          include_timestamp: true
-          include_request_metadata: true
-          include_response_metadata: true
-          include_content_metadata: true
-          include_extracted_metadata: true
-          include_processing_stats: true
-          # Structure the output
-          output_structure: "comprehensive"
-          # Include raw content for debugging
-          include_raw_content: false
-          # Include extracted text
-          include_cleaned_text: true
-          # Include detected language
-          include_language: true
-          # Include content quality score
-          include_quality_score: true
-          # Include processing warnings/errors
-          include_warnings: true
-
-  # HTML Enhanced Pipeline (with AI processing)
-  html_enhanced:
-    name: "Enhanced HTML Processing"
-    description: "Full AI-powered HTML processing with categorization"
-    content_type: "html"
-    ai_required: true
-    stages:
-      - name: "crawl_content"
-        type: "crawl"
-        description: "Crawl and extract HTML content"
-        config:
-          format: "html"
-          include_metadata: true
-          include_links: true
-          include_images: false
-          timeout_ms: 30000
-          wait_for_selector: "main, article, .content, body"
-
-      - name: "convert_to_markdown"
-        type: "llm_process"
-        description: "Convert HTML to clean Markdown"
-        llm_provider: "openrouter-big"
-        prompt: "html_to_markdown"
-        config:
-          input_field: "content"
-          output_field: "markdown_content"
-          preserve_links: true
-          clean_formatting: true
-
-      - name: "categorize_content"
-        type: "llm_process"
-        description: "Categorize content by type and topic"
-        llm_provider: "openrouter-small"
-        prompt: "content_categorization"
-        config:
-          input_field: "markdown_content"
-          output_field: "categorization"
-
-      - name: "format_as_json"
-        type: "llm_process"
-        description: "Format final result as JSON"
-        llm_provider: "openrouter-big"
-        prompt: "json_formatting"
-        config:
-          combine_fields: ["markdown_content", "categorization", "url", "crawl_timestamp"]
-          output_format: "structured_json"
-
-  # PDF Enhanced Pipeline (with AI processing)
-  pdf_enhanced:
-    name: "Enhanced PDF Processing"
-    description: "Full AI-powered PDF processing with OCR"
-    content_type: "pdf"
-    ai_required: true
-    stages:
-      - name: "download_pdf"
-        type: "crawl"
-        description: "Download PDF file"
-        config:
-          format: "binary"
-          include_metadata: true
-          timeout_ms: 60000
-          max_file_size_mb: 50
-
-      - name: "extract_text"
-        type: "pdf_extract"
-        description: "Extract text from PDF"
-        config:
-          enable_ocr_fallback: true
-          extract_tables: true
-          preserve_formatting: true
-          max_pages: 100
-
-      - name: "quality_check"
-        type: "llm_process"
-        description: "Check extraction quality"
-        llm_provider: "openrouter-small"
-        prompt: "pdf_quality_check"
-        config:
-          input_field: "extracted_text"
-          output_field: "quality_assessment"
-
-      - name: "content_analysis"
-        type: "llm_process"
-        description: "Analyze PDF content"
-        llm_provider: "openrouter-big"
-        prompt: "content_categorization"
-        config:
-          input_field: "final_text"
-          output_field: "content_analysis"
-
-      - name: "format_as_json"
-        type: "llm_process"
-        description: "Format final result as JSON"
-        llm_provider: "openrouter-big"
-        prompt: "json_formatting"
-        config:
-          combine_fields: ["final_text", "content_analysis", "metadata", "quality_assessment"]
-          output_format: "structured_json"
-
-# ============================================================================
-# LLM PROVIDER DEFINITIONS
-# ============================================================================
-# Configure your AI providers and their rate limits
-
-llm_providers:
-
-  # ============================================================================
-  # OPENAI PROVIDERS
-  # ============================================================================
-
-  # OpenAI GPT-4 Turbo
-  openai-gpt-4-turbo:
-    api_key: "${OPENAI_API_KEY}"
-    base_url: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
-    model: "gpt-4-turbo-preview"
-    temperature: 0.2
-    max_tokens: 4096
-    rpm_limit: 500  # OpenAI Tier 4 limit
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # OpenAI GPT-4
-  openai-gpt-4:
-    api_key: "${OPENAI_API_KEY}"
-    base_url: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
-    model: "gpt-4"
+  # Provider aliases for tests (using your actual free APIs)
+  openrouter-big:
+    base_url: "https://openrouter.ai/api/v1"
+    model: "deepseek/deepseek-r1:free"
+    api_key: "${OPENROUTER_API_KEY}"
     temperature: 0.1
     max_tokens: 4096
-    rpm_limit: 200  # GPT-4 rate limit
-    parsing_prompt: "Analyze and extract key information from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 60000
-    max_retries: 3
 
-  # OpenAI GPT-3.5 Turbo
-  openai-gpt-3.5-turbo:
-    api_key: "${OPENAI_API_KEY}"
-    base_url: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
-    model: "gpt-3.5-turbo"
-    temperature: 0.2
-    max_tokens: 2048
-    rpm_limit: 3500  # OpenAI Tier 1 limit
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # ============================================================================
-  # OPENROUTER PROVIDERS
-  # ============================================================================
-
-  # OpenRouter - Claude 3.5 Sonnet
-  openrouter-claude-3-5-sonnet:
-    api_key: "${OPENROUTER_API_KEY}"
-    base_url: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
-    model: "anthropic/claude-3.5-sonnet"
-    temperature: 0.2
-    max_tokens: 4096
-    rpm_limit: 50
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # OpenRouter - GPT-4 Turbo
-  openrouter-gpt-4-turbo:
-    api_key: "${OPENROUTER_API_KEY}"
-    base_url: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
-    model: "openai/gpt-4-turbo-preview"
-    temperature: 0.2
-    max_tokens: 4096
-    rpm_limit: 100
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # OpenRouter - Big Model (Sonoma Dusk Alpha)
-  openrouter-big:
-    api_key: "${OPENROUTER_API_KEY}"
-    base_url: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
-    model: "openrouter/sonoma-dusk-alpha"
-    temperature: 0.2
-    max_tokens: 100000
-    rpm_limit: 100
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # OpenRouter - Small Model (Kimi Dev)
   openrouter-small:
+    base_url: "https://openrouter.ai/api/v1"
+    model: "google/gemma-3-27b-it:free"
     api_key: "${OPENROUTER_API_KEY}"
-    base_url: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
-    model: "moonshotai/kimi-dev-72b:free"
-    temperature: 0.3
-    max_tokens: 4096
-    rpm_limit: 100
-    parsing_prompt: "Analyze this content and provide insights:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # ============================================================================
-  # OPENREFINE PROVIDERS
-  # ============================================================================
-
-  # OpenRefine Free Tier (90% of limits)
-  openrefine-free:
-    api_key: "${OPENREFINE_API_KEY}"
-    base_url: "${OPENREFINE_BASE_URL:-https://openrefine.ai/api/v1}"
-    model: "openrefine/free-model"
     temperature: 0.2
     max_tokens: 2048
-    rpm_limit: 18  # 90% of 20 RPM
-    rpd_limit: 900  # 90% of 1000 RPD
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
 
-  # OpenRefine Premium Tier
-  openrefine-premium:
-    api_key: "${OPENREFINE_API_KEY_2}"
-    base_url: "${OPENREFINE_BASE_URL:-https://openrefine.ai/api/v1}"
-    model: "openrefine/premium-model"
-    temperature: 0.2
-    max_tokens: 4096
-    rpm_limit: 180
-    rpd_limit: 9000
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # ============================================================================
-  # GOOGLE GEMINI PROVIDERS
-  # ============================================================================
-
-  # Google Gemini Pro
-  gemini-pro:
-    api_key: "${GEMINI_API_KEY}"
-    base_url: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1}"
-    model: "gemini-pro"
-    temperature: 0.2
-    max_tokens: 2048
-    rpm_limit: 60  # Gemini rate limit
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # Google Gemini Pro Vision
-  gemini-pro-vision:
-    api_key: "${GEMINI_API_KEY}"
-    base_url: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1}"
-    model: "gemini-pro-vision"
-    temperature: 0.2
-    max_tokens: 2048
-    rpm_limit: 60  # Gemini rate limit
-    parsing_prompt: "Analyze this image and text content:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # ============================================================================
-  # ANTHROPIC CLAUDE PROVIDERS
-  # ============================================================================
-
-  # Anthropic Claude 3 Opus
-  claude-3-opus:
-    api_key: "${ANTHROPIC_API_KEY}"
-    base_url: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}"
-    model: "claude-3-opus-20240229"
-    temperature: 0.2
-    max_tokens: 4096
-    rpm_limit: 50
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # Anthropic Claude 3 Sonnet
-  claude-3-sonnet:
-    api_key: "${ANTHROPIC_API_KEY}"
-    base_url: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}"
-    model: "claude-3-sonnet-20240229"
-    temperature: 0.2
-    max_tokens: 4096
-    rpm_limit: 50
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # Anthropic Claude 3 Haiku
-  claude-3-haiku:
-    api_key: "${ANTHROPIC_API_KEY}"
-    base_url: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}"
-    model: "claude-3-haiku-20240307"
-    temperature: 0.2
-    max_tokens: 4096
-    rpm_limit: 50
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # ============================================================================
-  # OTHER PROVIDERS
-  # ============================================================================
-
-  # Grok (xAI)
-  grok:
-    api_key: "${GROK_API_KEY}"
-    base_url: "${GROK_BASE_URL:-https://api.x.ai/v1}"
-    model: "grok-1"
-    temperature: 0.2
-    max_tokens: 4096
-    rpm_limit: 30
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # Cohere Command
-  cohere-command:
-    api_key: "${COHERE_API_KEY}"
-    base_url: "${COHERE_BASE_URL:-https://api.cohere.ai/v1}"
-    model: "command"
-    temperature: 0.2
-    max_tokens: 4096
-    rpm_limit: 100
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # Mistral Large
-  mistral-large:
-    api_key: "${MISTRAL_API_KEY}"
-    base_url: "${MISTRAL_BASE_URL:-https://api.mistral.ai/v1}"
-    model: "mistral-large-latest"
-    temperature: 0.2
-    max_tokens: 4096
-    rpm_limit: 50
-    parsing_prompt: "Extract structured data from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # ============================================================================
-  # FAST/CHEAP PROVIDERS (for basic tasks)
-  # ============================================================================
-
-  # Fast processing provider (use cheapest/fastest available)
-  fast_processing:
-    api_key: "${OPENROUTER_API_KEY}"
-    base_url: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
-    model: "microsoft/wizardlm-2-8x22b"
-    temperature: 0.3
-    max_tokens: 2048
-    rpm_limit: 100
-    parsing_prompt: "Process this content quickly:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 20000
-    max_retries: 1
-
-  # Primary text processing (balanced quality/speed)
-  primary_text:
-    api_key: "${OPENROUTER_API_KEY}"
-    base_url: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
-    model: "anthropic/claude-3-haiku"
-    temperature: 0.2
-    max_tokens: 4096
-    rpm_limit: 50
-    parsing_prompt: "Analyze and extract information from the following text:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-  # Primary vision processing (for images/OCR)
-  primary_vision:
-    api_key: "${GEMINI_API_KEY}"
-    base_url: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1}"
-    model: "gemini-pro-vision"
-    temperature: 0.2
-    max_tokens: 2048
-    rpm_limit: 60
-    parsing_prompt: "Analyze this image and extract text/information:"
-    prompt_options:
-      top_p: 1.0
-      frequency_penalty: 0.0
-      presence_penalty: 0.0
-    request_timeout_ms: 30000
-    max_retries: 2
-
-# ============================================================================
-# AI TASK ASSIGNMENTS
-# ============================================================================
-# Map task names to specific LLM providers
-
+# Task to provider mappings
 ai_tasks:
-  # Content processing tasks
   parse_pdf: "openrouter-big"
+  parse_pdf_backup: "openrouter-small"
   validate_format: "openrouter-small"
+  validate_format_backup: "openrouter-big"
   edit_crawl: "openrouter-big"
+  edit_crawl_backup: "openrouter-small"
   general_chat: "openrouter-small"
-
-  # Specialized tasks
-  ocr_processing: "gemini-pro-vision"
-  sentiment_analysis: "openrouter-small"
-  content_classification: "openrouter-small"
+  general_chat_backup: "openrouter-big"
   code_analysis: "openrouter-big"
-
-  # HTML processing tasks
-  html_to_markdown: "fast_processing"
-  content_categorization: "primary_text"
-  business_info_extraction: "primary_text"
-  extract_metadata: "openrouter-small"
-
-  # PDF processing tasks
-  pdf_quality_check: "openrouter-small"
-  pdf_ocr_extraction: "gemini-pro-vision"
-  pdf_content_analysis: "primary_text"
-
-  # JSON processing tasks
-  json_formatting: "fast_processing"
-  json_validation: "openrouter-small"
-
-  # Default fallbacks (by priority)
+  code_analysis_backup: "openrouter-small"
+  ocr_processing: "openrouter-small"
+  ocr_processing_backup: "openrouter-big"
+  sentiment_analysis: "openrouter-small"
+  sentiment_analysis_backup: "openrouter-big"
+  content_classification: "openrouter-small"
+  content_classification_backup: "openrouter-big"
   default: "openrouter-small"
-  default_backup: "openrefine-free"
-  default_fallback: "fast_processing"
+  default_backup: "openrouter-big"
 
-  # High-quality processing (when quality matters most)
-  high_quality: "openai-gpt-4"
-  high_quality_backup: "claude-3-opus"
+# Task pipelines - allow tasks to nest other tasks
+ai_task_pipelines:
+  # Complex PDF processing pipeline
+  process_pdf_comprehensive:
+    - task: parse_pdf
+      description: "Extract raw text from PDF"
+    - task: validate_format
+      description: "Validate extracted content format"
+      depends_on: parse_pdf
+    - task: content_classification
+      description: "Classify content type and structure"
+      depends_on: validate_format
 
-  # Fast processing (when speed matters most)
-  fast: "fast_processing"
-  fast_backup: "openrouter-small"
+  # OCR-enhanced PDF processing
+  process_pdf_with_ocr:
+    - task: parse_pdf
+      description: "Extract text from PDF"
+    - task: ocr_processing
+      description: "Apply OCR for better text extraction"
+      depends_on: parse_pdf
+      condition: "low_confidence_text"
+    - task: validate_format
+      description: "Validate final content"
+      depends_on: [parse_pdf, ocr_processing]
 
-  # Vision processing (for images/OCR)
-  vision: "gemini-pro-vision"
-  vision_backup: "openrouter-big"
+  # Content analysis pipeline
+  analyze_content:
+    - task: content_classification
+      description: "Determine content type"
+    - task: sentiment_analysis
+      description: "Analyze sentiment and tone"
+      depends_on: content_classification
+    - task: general_chat
+      description: "Generate insights and summary"
+      depends_on: [content_classification, sentiment_analysis]
 
-# ============================================================================
-# PROMPTS CONFIGURATION
-# ============================================================================
-# Define reusable prompts for different processing tasks
-
-prompts:
-
-  # Content Processing Prompts
-  html_to_markdown:
-    name: "HTML to Markdown Conversion"
-    description: "Convert HTML content to clean Markdown"
-    template: |
-      Convert the following HTML content to clean, readable Markdown.
-      Preserve important formatting like headers, lists, and links.
-      Remove unnecessary HTML tags, scripts, and styling.
-      Focus on the main content and structure.
-
-      HTML Content:
-      {content}
-
-      Return only the Markdown content, no explanations.
-
-  content_categorization:
-    name: "Content Categorization"
-    description: "Categorize content by type and topic"
-    template: |
-      Analyze the following content and categorize it.
-
-      Content: {content}
-      Title: {title}
-
-      Determine:
-      1. Content Type: (article, blog, tutorial, news, documentation, etc.)
-      2. Main Category: (technology, business, health, education, etc.)
-      3. Sub-categories: (specific sub-topics)
-      4. Target Audience: (beginners, experts, general public, etc.)
-      5. Content Quality: (1-10 score)
-
-      Return as structured JSON.
-
-  json_formatting:
-    name: "Format as JSON"
-    description: "Format processed content as structured JSON"
-    template: |
-      Format the following processed content into a structured JSON object.
-
-      Content: {content}
-      Metadata: {metadata}
-      Additional Info: {additional_info}
-
-      Create a JSON structure with:
-      - Basic content information
-      - Extracted metadata
-      - Processing results
-      - Quality metrics
-      - Timestamps
-
-      Ensure the JSON is valid and well-structured.
-
-  pdf_quality_check:
-    name: "PDF Quality Assessment"
-    description: "Check if extracted PDF content makes sense"
-    template: |
-      Analyze the following text extracted from a PDF document.
-      Assess whether this text represents readable, coherent content.
-
-      Extracted Text:
-      {extracted_text}
-
-      Rate the quality from 1-10 and explain any issues found.
-      Consider: readability, coherence, completeness, formatting preservation.
-
-  # Additional comprehensive prompts
-  sentiment_analysis:
-    name: "Sentiment Analysis"
-    description: "Analyze sentiment and emotional tone"
-    template: |
-      Analyze the sentiment and emotional tone of the following content.
-
-      Content: {content}
-      Title: {title}
-
-      Provide:
-      1. overall_sentiment: (positive, negative, neutral, mixed)
-      2. sentiment_score: Score from -1 (very negative) to +1 (very positive)
-      3. confidence: Confidence in the analysis (0-1)
-      4. key_positive_aspects: Array of positive elements
-      5. key_negative_aspects: Array of negative elements
-
-      Return as JSON.
-
-  business_info_extraction:
-    name: "Business Information Extraction"
-    description: "Extract business-related information"
-    template: |
-      Extract business information from the following content.
-
-      Content: {content}
-
-      Look for and extract:
-      - Business Name
-      - Address
-      - Phone Number
-      - Email
-      - Website
-      - Hours of Operation
-      - Services Offered
-
-      Return as JSON object.
-
-  extract_metadata:
-    name: "Metadata Extraction"
-    description: "Extract key metadata from content"
-    template: |
-      Extract key metadata from the following content.
-
-      Content: {content}
-
-      Extract:
-      - title: Main title or headline
-      - author: Content author (if available)
-      - date: Publication date (if available)
-      - description: Brief summary or description
-      - keywords: Key topics or tags
-
-      Return as JSON object.
-
-  pdf_ocr_extraction:
-    name: "PDF OCR Text Extraction"
-    description: "Extract text from PDF using OCR"
-    template: |
-      You have access to OCR capabilities for processing PDF content.
-      The following PDF content appears to have extraction issues.
-
-      Original Content:
-      {content}
-
-      Instructions:
-      - Use OCR to extract text from the PDF
-      - Focus on readable text content
-      - Preserve document structure where possible
-      - Return clean, readable text
-
-  json_validation:
-    name: "JSON Validation"
-    description: "Validate JSON structure and content"
-    template: |
-      Validate the following JSON data and ensure it meets standards.
-
-      JSON Data:
-      {json_data}
-
-      Check for:
-      - Valid JSON syntax
-      - Required fields present
-      - Data type consistency
-      - Proper structure
-
-      Return validated JSON.
-
-# ============================================================================
-# USAGE EXAMPLES
-# ============================================================================
-
-# API Usage Examples:
-#
-# Basic crawling (no AI):
-# GET localhost:3000/json/https://example.com/article
-#
-# AI-enhanced processing:
-# GET localhost:3000/task/html_enhanced/https://example.com/article
-# GET localhost:3000/task/pdf_enhanced/https://example.com/document.pdf
-#
-# List available tasks:
-# GET localhost:3000/tasks
-#
-# Rate limiting is automatically enforced per API key.
-# Check usage statistics:
-# GET localhost:3000/rate-limit/stats
-  name: "My Custom Content Pipeline"
-  version: "1.0"
-  description: "Customize this pipeline for your content processing needs"
-
-  # Input sources - define where to get URLs
-  sources:
-    - type: "url_list"
-      name: "my_articles"
-      urls:
-        - "https://example.com/article1"
-        - "https://example.com/article2"
-      priority: "high"
-
-    # Add more sources as needed:
-    # - type: "sitemap"
-    #   url: "https://example.com/sitemap.xml"
-    # - type: "pdf_batch"
-    #   pattern: "https://example.com/docs/*.pdf"
-
-  # Processing stages - define what to do with content
-  stages:
-    # Basic crawling (required)
-    - name: "crawl"
-      type: "crawl_only"
-      config:
-        format: "json"
-        include_metadata: true
-        timeout_ms: 30000
-      when: "always"
-
-    # Add AI processing stages as needed:
-    # - name: "validate"
-    #   type: "ai_process"
-    #   task: "validate_format"
-    #   when: "content_extracted"
-
-    # - name: "enhance"
-    #   type: "ai_process"
-    #   task: "edit_crawl"
-    #   when: "validation_passed"
-
-  # Output destinations - define where to save results
-  outputs:
-    - type: "json_file"
-      path: "./output/results.json"
-      format: "structured"
-
-    # Add more outputs as needed:
-    # - type: "markdown_files"
-    #   path: "./output/articles/"
-    # - type: "database"
-    #   connection: "postgresql://localhost:5432/my_db"
-
-  # Error handling (optional)
-  error_handling:
-    max_retries: 3
-    retry_delay_ms: 5000
-
-  # Performance tuning (optional)
-  performance:
-    max_concurrent_requests: 3
-    rate_limiting:
-      requests_per_minute: 30
-
-# Quick Start Examples:
-#
-# 1. Simple crawling only:
-#    Remove all AI stages, keep just the "crawl" stage
-#
-# 2. Content validation:
-#    Add validate_format task after crawl
-#
-# 3. Full AI processing:
-#    Add validate → enhance → classify → qa_check stages
-#
-# 4. PDF processing:
-#    Add pdf_extract stage with when: "content_type == 'pdf'"
-#
-# 5. Database storage:
-#    Configure database output with your connection string
-#
-# 6. Vector embeddings:
-#    Add vector_store output for RAG applications
+  # Code review pipeline
+  review_code:
+    - task: code_analysis
+      description: "Analyze code structure and quality"
+    - task: general_chat
+      description: "Generate review comments and suggestions"
+      depends_on: code_analysis

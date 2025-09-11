@@ -21,8 +21,8 @@ describe('AI Task Manager', () => {
             it('should return primary consumer for parse_pdf task', () => {
                 const consumer = getAIConsumerForTask('parse_pdf', false);
                 expect(consumer).to.not.be.null;
-                expect(consumer?.provider).to.equal('openai');
-                expect(consumer?.baseUrl).to.include('127.0.0.1');
+                expect(consumer?.provider).to.equal('openrouter');
+                expect(consumer?.baseUrl).to.include('openrouter.ai');
             });
             it('should return backup consumer for parse_pdf task', () => {
                 const consumer = getAIConsumerForTask('parse_pdf', true);
@@ -38,12 +38,12 @@ describe('AI Task Manager', () => {
             it('should return backup consumer for validate_format task', () => {
                 const consumer = getAIConsumerForTask('validate_format', true);
                 expect(consumer).to.not.be.null;
-                expect(consumer?.provider).to.equal('openai');
+                expect(consumer?.provider).to.equal('openrouter');
             });
             it('should return default consumer for unknown task', () => {
                 const consumer = getAIConsumerForTask('unknown_task', false);
                 expect(consumer).to.not.be.null;
-                expect(consumer?.provider).to.equal('openai'); // default
+                expect(consumer?.provider).to.equal('openrouter'); // default
             });
             it('should return default backup consumer for unknown task', () => {
                 const consumer = getAIConsumerForTask('unknown_task', true);
@@ -64,7 +64,7 @@ describe('AI Task Manager', () => {
             it('should return primary consumer when available', () => {
                 const consumer = getAIConsumerWithFallback('parse_pdf');
                 expect(consumer).to.not.be.null;
-                expect(consumer?.provider).to.equal('openai');
+                expect(consumer?.provider).to.equal('openrouter');
             });
             it('should fallback to backup when primary fails', () => {
                 // Temporarily modify config to simulate primary failure
@@ -90,7 +90,7 @@ describe('AI Task Manager', () => {
                 };
                 const consumer = getAIConsumerWithFallback('test_double_fallback');
                 expect(consumer).to.not.be.null;
-                expect(consumer?.provider).to.equal('openai'); // default
+                expect(consumer?.provider).to.equal('openrouter'); // default
                 // Restore original config
                 config.ai_tasks = originalTasks;
             });
@@ -114,14 +114,14 @@ describe('AI Task Manager', () => {
         });
         describe('getTaskConfig', () => {
             it('should return primary and backup config for parse_pdf', () => {
-                const config = getTaskConfig('parse_pdf');
-                expect(config.primary).to.equal('openai-gpt-3.5-turbo');
-                expect(config.backup).to.equal('openrouter-gpt-4');
+                const taskConfig = getTaskConfig('parse_pdf');
+                expect(taskConfig.primary).to.equal('openrouter-big');
+                expect(taskConfig.backup).to.equal('openrouter-small');
             });
             it('should return primary and backup config for validate_format', () => {
-                const config = getTaskConfig('validate_format');
-                expect(config.primary).to.equal('openrouter-gpt-4');
-                expect(config.backup).to.equal('openai-gpt-4');
+                const taskConfig = getTaskConfig('validate_format');
+                expect(taskConfig.primary).to.equal('openrouter-small');
+                expect(taskConfig.backup).to.equal('openrouter-big');
             });
             it('should return null for unknown task', () => {
                 const config = getTaskConfig('unknown_task');
@@ -149,7 +149,7 @@ describe('AI Task Manager', () => {
                 tasks.forEach(task => {
                     const consumer = getAIConsumerWithFallback(task);
                     expect(consumer).to.not.be.null;
-                    expect(consumer?.provider).to.be.oneOf(['openai', 'openrouter', 'gemini']);
+                    expect(consumer?.provider).to.be.oneOf(['openai', 'openrouter', 'gemini', 'anthropic']);
                 });
             });
             it('should maintain consumer properties', () => {
