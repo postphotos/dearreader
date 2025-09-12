@@ -95,9 +95,10 @@ COMMANDS:
 
 OPTIONS:
     --verbose|-v    Show detailed output
+    -vv             Show debug level output with full details
     --force|-f      Continue despite errors
     --follow|-F     Follow logs in real-time
-    --requests|-r   Use real AI API calls instead of mock responses (pipeline tests only)
+    --requests|-r   Use real AI API calls instead of mock responses
 
 EXAMPLES:
     ./dearreader setup              # First-time setup
@@ -108,6 +109,7 @@ EXAMPLES:
     ./dearreader test python        # Run Python tests only
     ./dearreader test pipeline      # Run pipeline tests only
     ./dearreader test pipeline --requests  # Run pipeline tests with real AI calls
+    ./dearreader test all --requests     # Run all tests with real AI calls
     ./dearreader run prod           # Start production
     ./dearreader status             # Check system status
     ./dearreader api test           # Test API endpoints
@@ -117,10 +119,15 @@ EXAMPLES:
     ./dearreader task disable <task># Disable a specific task
 
 URL EXAMPLES (when server is running):
-    localhost:3000/default_html/https://example.com     # HTML with markdown
+    localhost:3000/https://example.com                    # Default HTML processing
+    localhost:3000/default_html/https://example.com      # Explicit HTML processing
     localhost:3000/default_html_json/https://example.com # HTML to JSON
     localhost:3000/default_pdf/https://example.com/doc.pdf # PDF with OCR
-    localhost:3000/json/https://example.com             # Legacy JSON format
+    localhost:3000/default_html_ai/https://example.com   # HTML with AI enhancement
+    localhost:3000/default_pdf_ai/https://example.com/doc.pdf # PDF with AI enhancement
+    localhost:3000/json/https://example.com              # Legacy JSON format
+    localhost:3000/task/default_html/https://example.com # Task-based routing
+    localhost:3000/task/default_html/https://example.com # Task-based routing
 
 QUICK START:
     1. ./scripts/quickstart.sh    # 1-click setup (fastest!)
@@ -160,23 +167,27 @@ run_cmd() {
 
     log_info "$description..."
 
-    if [ "$VERBOSE" = true ]; then
+    if [ "$VERBOSE" -ge 1 ]; then
         echo -e "${CYAN}  └─ ${cmd_str}${NC}"
         # Execute with output visible
-        "$@"
-        return $?
+        if ! "$@"; then
+            local exit_code=$?
+            log_error "Failed: $description"
+            return $exit_code
+        fi
     else
-        # Execute and capture stderr on failure
-        local stderr
-        stderr=$("$@" 2>&1 >/dev/null)
+        # Execute and capture all output, display only on failure
+        local output
+        output=$("$@" 2>&1)
         local exit_code=$?
         if [ $exit_code -ne 0 ]; then
             log_error "Failed: $description"
-            echo -e "${RED}Error details:${NC}\n$stderr" >&2
+            echo -e "${RED}Error details:${NC}\n$output" >&2
             return $exit_code
         fi
     fi
 }
+
 
 # Checks for a command and provides installation instructions if missing.
 check_dependency() {
@@ -348,18 +359,23 @@ cmd_dev() {
 # Test command
 cmd_test() {
     local test_type="${1:-all}"
+    shift  # Remove test_type from arguments
+    local additional_args="$*"  # Collect remaining arguments
     log_header "${TEST} Running Tests ($test_type)"
 
     # Count test types and number of tests for each
-    local test_types=("js" "python" "e2e" "pipeline")
+    local test_types=("js" "python" "demo" "speedtest" "e2e" "pipeline")
     local js_count=0
     local python_count=0
+    local demo_count=0
+    local speedtest_count=0
     local e2e_count=0
     local pipeline_count=0
 
     # Count JS tests (count actual test cases, not just files)
     if [ -d "js/src" ]; then
-        if command -v bc >/dev/null 2>&1; then
+        if command -v bc >/dev/null 2>&1;
+ then
             js_count=$(find js/src -name "*.test.ts" -exec grep -c "it(" {} \; | paste -sd+ | bc 2>/dev/null)
         else
             # Fallback if bc is not available
@@ -374,7 +390,8 @@ cmd_test() {
 
     # Count Python tests (count actual test functions, not just files)
     if [ -d "py/tests" ]; then
-        if command -v bc >/dev/null 2>&1; then
+        if command -v bc >/dev/null 2>&1;
+ then
             python_count=$(find py/tests -name "test_*.py" -exec grep -c "def test_" {} \; | paste -sd+ | bc 2>/dev/null)
         else
             # Fallback if bc is not available
@@ -385,6 +402,41 @@ cmd_test() {
         fi
     else
         python_count=0
+    fi
+
+    # Count Demo tests (demo.py script)
+    if [ -f "py/demo.py" ]; then
+        demo_count=1
+    else
+        demo_count=0
+    fi
+
+    # Count Speedtest tests (speedtest.py script)
+    if [ -f "py/speedtest.py" ]; then
+        speedtest_count=1
+    else
+        speedtest_count=0
+    fi
+
+    # Count Meta tests (meta-test.sh script)
+    if [ -f "./scripts/meta-test.sh" ]; then
+        meta_count=1
+    else
+        meta_count=0
+    fi
+
+    # Count Verify tests (verify.sh script)
+    if [ -f "./scripts/verify.sh" ]; then
+        verify_count=1
+    else
+        verify_count=0
+    fi
+
+    # Count Verify Tesseract tests (verify-tesseract.sh script)
+    if [ -f "./scripts/verify-tesseract.sh" ]; then
+        verify_tesseract_count=1
+    else
+        verify_tesseract_count=0
     fi
 
     # Count E2E tests
@@ -413,8 +465,13 @@ cmd_test() {
         echo -e "${CYAN}──────────────────────────────────────────────${NC}"
         [ "$js_count" -gt 0 ] && echo -e "${GREEN}JavaScript:${NC}   $(printf '%-3s' "$js_count") $(yes '🟩' | head -n "$js_count" | tr -d '\n')"
         [ "$python_count" -gt 0 ] && echo -e "${YELLOW}Python:${NC}       $(printf '%-3s' "$python_count") $(yes '🟨' | head -n "$python_count" | tr -d '\n')"
-        [ "$e2e_count" -gt 0 ] && echo -e "${BLUE}End-to-End:${NC}   $(printf '%-3s' "$e2e_count") $(yes '🟦' | head -n "$e2e_count" | tr -d '\n')"
-        [ "$pipeline_count" -gt 0 ] && echo -e "${MAGENTA}Pipeline:${NC}     $(printf '%-3s' "$pipeline_count") $(yes '🟪' | head -n "$pipeline_count" | tr -d '\n')"
+        [ "$demo_count" -gt 0 ] && echo -e "${BLUE}Demo:${NC}         $(printf '%-3s' "$demo_count") $(yes '🟦' | head -n "$demo_count" | tr -d '\n')"
+        [ "$speedtest_count" -gt 0 ] && echo -e "${MAGENTA}Speedtest:${NC}    $(printf '%-3s' "$speedtest_count") $(yes '🟪' | head -n "$speedtest_count" | tr -d '\n')"
+        [ "$meta_count" -gt 0 ] && echo -e "${CYAN}Meta:${NC}         $(printf '%-3s' "$meta_count") $(yes '🔵' | head -n "$meta_count" | tr -d '\n')"
+        [ "$verify_count" -gt 0 ] && echo -e "${YELLOW}Verify:${NC}       $(printf '%-3s' "$verify_count") $(yes '🟡' | head -n "$verify_count" | tr -d '\n')"
+        [ "$verify_tesseract_count" -gt 0 ] && echo -e "${RED}Verify-Tesseract:${NC} $(printf '%-3s' "$verify_tesseract_count") $(yes '🔴' | head -n "$verify_tesseract_count" | tr -d '\n')"
+        [ "$e2e_count" -gt 0 ] && echo -e "${CYAN}End-to-End:${NC}   $(printf '%-3s' "$e2e_count") $(yes '🔶' | head -n "$e2e_count" | tr -d '\n')"
+        [ "$pipeline_count" -gt 0 ] && echo -e "${RED}Pipeline:${NC}     $(printf '%-3s' "$pipeline_count") $(yes '🔶' | head -n "$pipeline_count" | tr -d '\n')"
         echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
     else
         # Show only the specific test type being run
@@ -431,16 +488,46 @@ cmd_test() {
                 [ "$python_count" -gt 0 ] && echo -e "${YELLOW}Python:${NC}       $(printf '%-3s' "$python_count") $(yes '🟨' | head -n "$python_count" | tr -d '\n')"
                 [ "$python_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
                 ;;
+            demo)
+                [ "$demo_count" -gt 0 ] && echo -e "\n${BOLD}${CYAN}📊 Demo Tests${NC}"
+                [ "$demo_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+                [ "$demo_count" -gt 0 ] && echo -e "${BLUE}Demo:${NC}         $(printf '%-3s' "$demo_count") $(yes '🟦' | head -n "$demo_count" | tr -d '\n')"
+                [ "$demo_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
+                ;;
+            speedtest)
+                [ "$speedtest_count" -gt 0 ] && echo -e "\n${BOLD}${CYAN}📊 Speedtest Tests${NC}"
+                [ "$speedtest_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+                [ "$speedtest_count" -gt 0 ] && echo -e "${MAGENTA}Speedtest:${NC}    $(printf '%-3s' "$speedtest_count") $(yes '🟪' | head -n "$speedtest_count" | tr -d '\n')"
+                [ "$speedtest_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
+                ;;
+            meta)
+                [ "$meta_count" -gt 0 ] && echo -e "\n${BOLD}${CYAN}📊 Meta Tests${NC}"
+                [ "$meta_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+                [ "$meta_count" -gt 0 ] && echo -e "${CYAN}Meta:${NC}         $(printf '%-3s' "$meta_count") $(yes '🔵' | head -n "$meta_count" | tr -d '\n')"
+                [ "$meta_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
+                ;;
+            verify)
+                [ "$verify_count" -gt 0 ] && echo -e "\n${BOLD}${CYAN}📊 Verify Tests${NC}"
+                [ "$verify_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+                [ "$verify_count" -gt 0 ] && echo -e "${YELLOW}Verify:${NC}       $(printf '%-3s' "$verify_count") $(yes '🟡' | head -n "$verify_count" | tr -d '\n')"
+                [ "$verify_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
+                ;;
+            verify-tesseract)
+                [ "$verify_tesseract_count" -gt 0 ] && echo -e "\n${BOLD}${CYAN}📊 Verify Tesseract Tests${NC}"
+                [ "$verify_tesseract_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}"
+                [ "$verify_tesseract_count" -gt 0 ] && echo -e "${RED}Verify-Tesseract:${NC} $(printf '%-3s' "$verify_tesseract_count") $(yes '🔴' | head -n "$verify_tesseract_count" | tr -d '\n')"
+                [ "$verify_tesseract_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
+                ;;
             e2e)
                 [ "$e2e_count" -gt 0 ] && echo -e "\n${BOLD}${CYAN}📊 End-to-End Tests${NC}"
                 [ "$e2e_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}"
-                [ "$e2e_count" -gt 0 ] && echo -e "${BLUE}End-to-End:${NC}   $(printf '%-3s' "$e2e_count") $(yes '🟦' | head -n "$e2e_count" | tr -d '\n')"
+                [ "$e2e_count" -gt 0 ] && echo -e "${CYAN}End-to-End:${NC}   $(printf '%-3s' "$e2e_count") $(yes '🔶🔶' | head -n "$e2e_count" | tr -d '\n')"
                 [ "$e2e_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
                 ;;
             pipeline)
                 [ "$pipeline_count" -gt 0 ] && echo -e "\n${BOLD}${CYAN}📊 Pipeline Tests${NC}"
                 [ "$pipeline_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}"
-                [ "$pipeline_count" -gt 0 ] && echo -e "${MAGENTA}Pipeline:${NC}     $(printf '%-3s' "$pipeline_count") $(yes '🟪' | head -n "$pipeline_count" | tr -d '\n')"
+                [ "$pipeline_count" -gt 0 ] && echo -e "${RED}Pipeline:${NC}     $(printf '%-3s' "$pipeline_count") $(yes '🔶' | head -n "$pipeline_count" | tr -d '\n')"
                 [ "$pipeline_count" -gt 0 ] && echo -e "${CYAN}──────────────────────────────────────────────${NC}\n"
                 ;;
         esac
@@ -460,6 +547,27 @@ cmd_test() {
 
         echo -e "${BOLD}${test_color}Running $test_name Tests${NC}"
 
+        # Show debug info for -vv
+        if [ "$VERBOSE" -ge 2 ]; then
+            echo -e "${CYAN}🔍 Debug Info:${NC}"
+            echo -e "  ${CYAN}• Test Type:${NC} $test_name"
+            echo -e "  ${CYAN}• Test Count:${NC} $test_count"
+            echo -e "  ${CYAN}• Command:${NC} $test_cmd"
+            echo -e "  ${CYAN}• Working Directory:${NC} $(pwd)"
+            echo -e "  ${CYAN}• Environment:${NC}"
+            echo -e "    ${CYAN}• VERBOSE:${NC} $VERBOSE"
+            echo -e "    ${CYAN}• REQUESTS:${NC} $REQUESTS"
+            echo -e "    ${CYAN}• FORCE:${NC} $FORCE"
+            echo ""
+        fi
+
+        # Show API request info when --requests is enabled
+        if [ "$REQUESTS" = true ]; then
+            echo -e "${MAGENTA}🔗 API Requests Enabled${NC}"
+            echo -e "${CYAN}📡 Will show real API request/response details${NC}"
+            echo ""
+        fi
+
         # Show progress bar with pending tests
         echo -n "Progress: "
         for ((i=1; i<=test_count; i++)); do
@@ -468,26 +576,49 @@ cmd_test() {
         echo -n " "
         echo -ne "\rProgress: "
 
-        # Run the test and capture output
-        local test_output=""
+        # Run the test and capture output.
+        # For verbose modes, we need to show the output live AND capture it.
+        # For normal mode, we just capture it.
+        local test_output
         local test_exit_code=0
 
-        if [ "$VERBOSE" = true ]; then
-            # Show output in real-time
-            if "$@"; then
-                test_exit_code=0
-            else
-                test_exit_code=$?
+        if [ "$VERBOSE" -ge 1 ]; then
+            # For -v and -vv, show output in real-time and capture it simultaneously.
+            echo -e "\n${CYAN}📝 Command Output:${NC}"
+            echo -e "${YELLOW}  └─ $test_cmd${NC}"
+            echo ""
+            local log_file
+            log_file=$(mktemp)
+
+            # Use pipefail to get the exit code of the first command in the pipe.
+            set -o pipefail
+            # The command's stdout and stderr are piped to tee.
+            # tee writes to the log file for capture and to stdout to be seen live.
+            eval "$test_cmd" 2>&1 | tee "$log_file"
+            test_exit_code=${PIPESTATUS[0]}
+            set +o pipefail
+
+            test_output=$(<"$log_file")
+            rm "$log_file"
+
+            # For -vv, show additional execution details post-run
+            if [ "$VERBOSE" -ge 2 ]; then
+                echo -e "\n${CYAN}🔧 Execution Details:${NC}"
+                echo -e "  ${CYAN}• Exit Code:${NC} $test_exit_code"
+                echo -e "  ${CYAN}• Process ID:${NC} $"
+                echo -e "  ${CYAN}• Timestamp:${NC} $(date)"
+                echo ""
             fi
         else
-            # Capture output for later analysis
-            test_output=$("$@" 2>&1)
+            # For normal mode, just capture silently.
+            test_output=$(eval "$test_cmd" 2>&1)
             test_exit_code=$?
         fi
 
         # Check for warnings in output
         local has_warnings=false
-        if echo "$test_output" | grep -qi "warn\|warning\|deprecated\|experimental" 2>/dev/null; then
+        if echo "$test_output" | grep -qi "warn\|warning\|deprecated\|experimental" 2>/dev/null;
+ then
             has_warnings=true
         fi
 
@@ -509,11 +640,13 @@ cmd_test() {
                 echo -n "${RED}🟥${NC}"
             done
             echo -e " ${RED}${CROSS} $test_name tests failed${NC}"
-            if [ "$VERBOSE" != true ]; then
+            # Only show the captured error details snippet in non-verbose mode.
+            # In verbose modes, the user saw the full error live.
+            if [ "$VERBOSE" -eq 0 ]; then
                 echo -e "${RED}Error details:${NC}"
                 echo "$test_output" | head -10
                 if [ $(echo "$test_output" | wc -l) -gt 10 ]; then
-                    echo -e "${YELLOW}... (truncated, use --verbose for full output)${NC}"
+                    echo -e "${YELLOW}... (truncated, use -v for full output)${NC}"
                 fi
             fi
             test_results+=("$test_name:FAIL")
@@ -523,7 +656,7 @@ cmd_test() {
     }
 
     case "$test_type" in
-        js|python|e2e|pipeline|all)
+        js|python|demo|speedtest|meta|verify|verify-tesseract|e2e|pipeline|all)
             # Valid test types - continue processing
             ;;
         --help|-h|help)
@@ -534,36 +667,57 @@ cmd_test() {
             echo -e "${WHITE}Test Types:${NC}"
             echo -e "  ${GREEN}js${NC}        Run JavaScript tests only"
             echo -e "  ${YELLOW}python${NC}    Run Python tests only"
+            echo -e "  ${BLUE}demo${NC}       Run Demo script only"
+            echo -e "  ${MAGENTA}speedtest${NC}  Run Speedtest script only"
+            echo -e "  ${CYAN}meta${NC}       Run Meta test script only"
+            echo -e "  ${YELLOW}verify${NC}     Run Verify script only"
+            echo -e "  ${RED}verify-tesseract${NC} Run Verify Tesseract script only"
             echo -e "  ${BLUE}e2e${NC}       Run End-to-End tests only"
             echo -e "  ${MAGENTA}pipeline${NC}  Run Pipeline tests only"
             echo -e "  ${CYAN}all${NC}       Run all test types (default)"
             echo -e ""
             echo -e "${WHITE}Options:${NC}"
             echo -e "  ${WHITE}--verbose, -v${NC}  Show detailed test output"
+            echo -e "  ${WHITE}-vv${NC}             Show debug level output with full details"
             echo -e "  ${WHITE}--force, -f${NC}    Continue even if tests fail"
-            echo -e "  ${WHITE}--requests, -r${NC} Use real AI API calls instead of mock responses (pipeline tests only)"
+            echo -e "  ${WHITE}--requests, -r${NC} Use real AI API calls instead of mock responses"
             echo -e "  ${WHITE}--help, -h${NC}     Show this help message"
             echo -e ""
             echo -e "${WHITE}Examples:${NC}"
             echo -e "  ${WHITE}./dearreader test${NC}              # Run all tests"
             echo -e "  ${WHITE}./dearreader test js${NC}           # Run only JS tests"
             echo -e "  ${WHITE}./dearreader test python --verbose${NC}  # Run Python tests with details"
+            echo -e "  ${WHITE}./dearreader test python -vv${NC}       # Run Python tests with debug output"
+            echo -e "  ${WHITE}./dearreader test demo${NC}         # Run only Demo script"
+            echo -e "  ${WHITE}./dearreader test speedtest${NC}    # Run only Speedtest script"
+            echo -e "  ${WHITE}./dearreader test meta${NC}         # Run only Meta tests"
+            echo -e "  ${WHITE}./dearreader test verify${NC}       # Run only Verify tests"
+            echo -e "  ${WHITE}./dearreader test verify-tesseract${NC} # Run only Verify Tesseract tests"
             echo -e "  ${WHITE}./dearreader test pipeline --requests${NC}  # Run pipeline tests with real AI calls"
+            echo -e "  ${WHITE}./dearreader test all --requests${NC}     # Run all tests with real AI calls"
             echo -e "  ${WHITE}./dearreader test all --force${NC}  # Run all tests, don't stop on failures"
             exit 0
             ;;
         js)
-            [ "$js_count" -gt 0 ] && run_single_test "JavaScript" "$js_count" "$GREEN" "🟩" docker-compose --profile dev run --rm js-test
+            local js_command="docker-compose --profile dev run --rm js-test"
+            if [ "$REQUESTS" = true ]; then
+                js_command="docker-compose --profile dev run --rm js-test bash -lc 'cd /app/js && npm run test:precompile-cjs -- --requests'"
+            fi
+            [ "$js_count" -gt 0 ] && run_single_test "JavaScript" "$js_count" "$GREEN" "🟩" bash -c "$js_command"
             ;;
         python)
+            local pytest_cmd="python3 -m pytest py/tests --verbose"
+            if [ "$REQUESTS" = true ]; then
+                pytest_cmd="$pytest_cmd --requests"
+            fi
             if [ "$USE_UV" = true ]; then
-                [ "$python_count" -gt 0 ] && run_single_test "Python" "$python_count" "$YELLOW" "🟨" uv run python3 -m pytest py/tests --verbose
+                [ "$python_count" -gt 0 ] && run_single_test "Python" "$python_count" "$YELLOW" "🟨" uv run $pytest_cmd
             else
-                [ "$python_count" -gt 0 ] && run_single_test "Python" "$python_count" "$YELLOW" "🟨" bash -c "source .venv/bin/activate || source .venv/Scripts/activate; python3 -m pytest py/tests --verbose"
+                [ "$python_count" -gt 0 ] && run_single_test "Python" "$python_count" "$YELLOW" "🟨" bash -c "source .venv/bin/activate || source .venv/Scripts/activate; $pytest_cmd"
             fi
             ;;
         e2e)
-            [ "$e2e_count" -gt 0 ] && run_single_test "End-to-End" "$e2e_count" "$BLUE" "🟦" ./scripts/e2e-test.sh
+            [ "$e2e_count" -gt 0 ] && run_single_test "End-to-End" "$e2e_count" "$BLUE" "🟦" ./scripts/e2e-test.sh ${REQUESTS:+--requests}
             ;;
         pipeline)
             if [ ! -f "js/src/test-pipeline.js" ]; then
@@ -572,20 +726,77 @@ cmd_test() {
                 overall_success=false
                 test_results+=("Pipeline:FAIL")
             else
-                [ "$pipeline_count" -gt 0 ] && run_single_test "Pipeline" "$pipeline_count" "$MAGENTA" "🟪" node js/src/test-pipeline.js
+                [ "$pipeline_count" -gt 0 ] && run_single_test "Pipeline" "$pipeline_count" "$MAGENTA" "🟪" node js/src/test-pipeline.js ${REQUESTS:+--requests}
+            fi
+            ;;
+        demo)
+            if [ ! -f "py/demo.py" ]; then
+                log_error "Demo script not found at py/demo.py"
+                overall_success=false
+                test_results+=("Demo:FAIL")
+            else
+                [ "$demo_count" -gt 0 ] && run_single_test "Demo" "$demo_count" "$BLUE" "🟦" python3 py/demo.py $additional_args ${REQUESTS:+--requests}
+            fi
+            ;;
+        speedtest)
+            if [ ! -f "py/speedtest.py" ]; then
+                log_error "Speedtest script not found at py/speedtest.py"
+                overall_success=false
+                test_results+=("Speedtest:FAIL")
+            else
+                [ "$speedtest_count" -gt 0 ] && run_single_test "Speedtest" "$speedtest_count" "$MAGENTA" "🟪" python3 py/speedtest.py $additional_args ${REQUESTS:+--requests}
+            fi
+            ;;
+        meta)
+            if [ ! -f "./scripts/meta-test.sh" ]; then
+                log_error "Meta test script not found at scripts/meta-test.sh"
+                overall_success=false
+                test_results+=("Meta:FAIL")
+            else
+                [ "$meta_count" -gt 0 ] && run_single_test "Meta" "$meta_count" "$CYAN" "🔵" ./scripts/meta-test.sh $additional_args ${REQUESTS:+--requests}
+            fi
+            ;;
+        verify)
+            if [ ! -f "./scripts/verify.sh" ]; then
+                log_error "Verify script not found at scripts/verify.sh"
+                overall_success=false
+                test_results+=("Verify:FAIL")
+            else
+                [ "$verify_count" -gt 0 ] && run_single_test "Verify" "$verify_count" "$YELLOW" "🟡" ./scripts/verify.sh $additional_args ${REQUESTS:+--requests}
+            fi
+            ;;
+        verify-tesseract)
+            if [ ! -f "./scripts/verify-tesseract.sh" ]; then
+                log_error "Verify Tesseract script not found at scripts/verify-tesseract.sh"
+                overall_success=false
+                test_results+=("Verify-Tesseract:FAIL")
+            else
+                [ "$verify_tesseract_count" -gt 0 ] && run_single_test "Verify-Tesseract" "$verify_tesseract_count" "$RED" "🔴" ./scripts/verify-tesseract.sh $additional_args ${REQUESTS:+--requests}
             fi
             ;;
         all)
             # Run all tests and track overall success
-            [ "$js_count" -gt 0 ] && run_single_test "JavaScript" "$js_count" "$GREEN" "🟩" docker-compose --profile dev run --rm js-test
-
-            if [ "$USE_UV" = true ]; then
-                [ "$python_count" -gt 0 ] && run_single_test "Python" "$python_count" "$YELLOW" "🟨" uv run python3 -m pytest py/tests --verbose
-            else
-                [ "$python_count" -gt 0 ] && run_single_test "Python" "$python_count" "$YELLOW" "🟨" bash -c "source .venv/bin/activate || source .venv/Scripts/activate; python3 -m pytest py/tests --verbose"
+            if [ "$js_count" -gt 0 ]; then
+                local js_command="docker-compose --profile dev run --rm js-test"
+                if [ "$REQUESTS" = true ]; then
+                    js_command="docker-compose --profile dev run --rm js-test bash -lc 'cd /app/js && npm run test:precompile-cjs -- --requests'"
+                fi
+                run_single_test "JavaScript" "$js_count" "$GREEN" "🟩" bash -c "$js_command"
             fi
 
-            [ "$e2e_count" -gt 0 ] && run_single_test "End-to-End" "$e2e_count" "$BLUE" "🟦" ./scripts/e2e-test.sh
+            if [ "$python_count" -gt 0 ]; then
+                local pytest_cmd="python3 -m pytest py/tests --verbose"
+                if [ "$REQUESTS" = true ]; then
+                    pytest_cmd="$pytest_cmd --requests"
+                fi
+                if [ "$USE_UV" = true ]; then
+                    run_single_test "Python" "$python_count" "$YELLOW" "🟨" uv run $pytest_cmd
+                else
+                    run_single_test "Python" "$python_count" "$YELLOW" "🟨" bash -c "source .venv/bin/activate || source .venv/Scripts/activate; $pytest_cmd"
+                fi
+            fi
+
+            [ "$e2e_count" -gt 0 ] && run_single_test "End-to-End" "$e2e_count" "$BLUE" "🟦" ./scripts/e2e-test.sh ${REQUESTS:+--requests}
 
             if [ ! -f "js/src/test-pipeline.js" ]; then
                 log_error "Pipeline test runner script not found at js/src/test-pipeline.js"
@@ -593,7 +804,52 @@ cmd_test() {
                 overall_success=false
                 test_results+=("Pipeline:FAIL")
             else
-                [ "$pipeline_count" -gt 0 ] && run_single_test "Pipeline" "$pipeline_count" "$MAGENTA" "🟪" node js/src/test-pipeline.js
+                [ "$pipeline_count" -gt 0 ] && run_single_test "Pipeline" "$pipeline_count" "$MAGENTA" "🟪" node js/src/test-pipeline.js ${REQUESTS:+--requests}
+            fi
+
+            # Run demo tests
+            if [ ! -f "py/demo.py" ]; then
+                log_error "Demo script not found at py/demo.py"
+                overall_success=false
+                test_results+=("Demo:FAIL")
+            else
+                [ "$demo_count" -gt 0 ] && run_single_test "Demo" "$demo_count" "$BLUE" "🟦" python3 py/demo.py $additional_args ${REQUESTS:+--requests}
+            fi
+
+            # Run speedtest tests
+            if [ ! -f "py/speedtest.py" ]; then
+                log_error "Speedtest script not found at py/speedtest.py"
+                overall_success=false
+                test_results+=("Speedtest:FAIL")
+            else
+                [ "$speedtest_count" -gt 0 ] && run_single_test "Speedtest" "$speedtest_count" "$MAGENTA" "🟪" python3 py/speedtest.py $additional_args ${REQUESTS:+--requests}
+            fi
+
+            # Run meta tests
+            if [ ! -f "./scripts/meta-test.sh" ]; then
+                log_error "Meta test script not found at scripts/meta-test.sh"
+                overall_success=false
+                test_results+=("Meta:FAIL")
+            else
+                [ "$meta_count" -gt 0 ] && run_single_test "Meta" "$meta_count" "$CYAN" "🔵" ./scripts/meta-test.sh $additional_args ${REQUESTS:+--requests}
+            fi
+
+            # Run verify tests
+            if [ ! -f "./scripts/verify.sh" ]; then
+                log_error "Verify script not found at scripts/verify.sh"
+                overall_success=false
+                test_results+=("Verify:FAIL")
+            else
+                [ "$verify_count" -gt 0 ] && run_single_test "Verify" "$verify_count" "$YELLOW" "🟡" ./scripts/verify.sh $additional_args ${REQUESTS:+--requests}
+            fi
+
+            # Run verify-tesseract tests
+            if [ ! -f "./scripts/verify-tesseract.sh" ]; then
+                log_error "Verify Tesseract script not found at scripts/verify-tesseract.sh"
+                overall_success=false
+                test_results+=("Verify-Tesseract:FAIL")
+            else
+                [ "$verify_tesseract_count" -gt 0 ] && run_single_test "Verify-Tesseract" "$verify_tesseract_count" "$RED" "🔴" ./scripts/verify-tesseract.sh $additional_args ${REQUESTS:+--requests}
             fi
 
             # Show final summary for "all" tests
@@ -634,6 +890,7 @@ cmd_test() {
         fi
     fi
 }
+
 
 # Run command
 cmd_run() {
@@ -867,6 +1124,25 @@ cmd_migration() {
 
 # Main logic
 main() {
+    # Parse flags first from all arguments
+    VERBOSE=0  # 0=none, 1=output, 2=debug
+    FORCE=false
+    FOLLOW=false
+    REQUESTS=false
+
+    local args_without_flags=()
+    for arg in "$@"; do
+        case "$arg" in
+            --verbose|-v) VERBOSE=1 ;;
+            -vv) VERBOSE=2 ;;
+            --force|-f) FORCE=true ;;
+            --follow|-F) FOLLOW=true ;;
+            --requests|-r) REQUESTS=true ;;
+            *) args_without_flags+=("$arg") ;;
+        esac
+    done
+    set -- "${args_without_flags[@]}"
+
     local command="$1"
     # Allow running without a command to show help
     if [ -z "$command" ]; then
@@ -874,22 +1150,6 @@ main() {
         exit 0
     fi
     shift
-
-    # Parse flags
-    VERBOSE=false
-    FORCE=false
-    FOLLOW=false
-
-    local args_without_flags=()
-    for arg in "$@"; do
-        case "$arg" in
-            --verbose|-v) VERBOSE=true ;;
-            --force|-f) FORCE=true ;;
-            --follow|-F) FOLLOW=true ;;
-            *) args_without_flags+=("$arg") ;;
-        esac
-    done
-    set -- "${args_without_flags[@]}"
 
     case "$command" in
         setup|dev|test|run|stop|status|logs|clean|api|task|migration)

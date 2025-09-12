@@ -8,7 +8,7 @@ describe('CrawlerHost Robots Checker Edge Cases', () => {
     const crawler = new CrawlerHost(
       // minimal mocks: puppeteerControl, jsdomControl, pdfExtractor, robotsChecker, storage, threadLocal
   ({ scrape: async function* (_: URL) { yield { title: 'X', href: 'http://example/', html: '<html></html>', text: 'X', parsed: { title: 'X', content: 'X', excerpt: 'X' }, imgs: [] }; }, _sn: 'mock', browser: null, logger: console, startTime: Date.now(), circuitBreakerHosts: new Set(), on: () => {}, emit: () => {} } as any),
-  ( { inferSnapshot: (s:any) => s, narrowSnapshot: (s:any) => s, runTurndown: () => 'ok' } as any),
+  ( { inferSnapshot: (s:any) => s, narrowSnapshot: (s:any) => s, runTurndown: () => 'ok', snippetToElement: (snippet?: string) => ({ querySelectorAll: () => [], innerHTML: snippet || '', textContent: snippet || '' }) } as any),
   ( { extract: async () => ({ content: 'pdf' }) } as any),
   // robotsChecker provided but without isAllowed/getCrawlDelay
   ( { check: async () => true } as any),

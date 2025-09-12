@@ -2,7 +2,35 @@
 # Simplified configuration for AI providers and tasks
 
 ai_providers:
-  # OpenRouter free models (API key required)
+  # OpenRout# Pipeline routing configuration for URL-based processing
+pipeline_routing:
+  # Default pipeline for regular requests
+  default: "default_html"
+
+  # URL route mappings to pipelines
+  routes:
+    "/default_html": "default_html"
+    "/default_html_json": "default_html_json"
+    "/default_pdf": "default_pdf"
+    "/default_html_ai": "default_html_ai"
+    "/default_pdf_ai": "default_pdf_ai"
+    "/json/": "default_html_json"  # Legacy support for /json/ URLs
+    "/": "default_html"  # Default for root URLs (makes /https://example.com work)
+
+  # Quick AI Enhancement Examples:
+  # To enable AI in default_html pipeline, change ai_enhancement.enabled to true:
+  #   ai_enhancement:
+  #     enabled: true
+  #     task: "content_classification"
+  #     condition: "always"
+  #
+  # To enable AI in default_pdf pipeline, change:
+  #   ai_enhancement:
+  #     enabled: true
+  #     task: "parse_pdf"
+  #     condition: "low_ocr_confidence"
+
+  # Pipeline definitions for URL-based processingAPI key required)
   deepseek/deepseek-r1:free:
     base_url: "https://openrouter.ai/api/v1"
     model: "deepseek/deepseek-r1:free"
@@ -119,8 +147,10 @@ pipeline_routing:
     "/default_html": "default_html"
     "/default_html_json": "default_html_json"
     "/default_pdf": "default_pdf"
+    "/default_html_ai": "default_html_ai"
+    "/default_pdf_ai": "default_pdf_ai"
     "/json/": "default_html_json"  # Legacy support for /json/ URLs
-    "/": "default_html"  # Default for root URLs
+    "/": "default_html"  # Default for root URLs (makes /https://example.com work) (makes /https://example.com work)
 
   # Pipeline definitions for URL-based processing
   pipelines:
@@ -131,13 +161,50 @@ pipeline_routing:
       ai_required: false
       stages:
         - type: "crawl"
+          name: "crawl_html"
           description: "Fetch HTML content from URL"
+          config:
+            timeout_ms: 30000
+            wait_for_network_idle: true
+            respect_robots_txt: true
+            user_agent: "DearReader-Bot/1.0"
         - type: "text_extract"
-          description: "Extract clean text from HTML"
+          name: "extract_text"
+          description: "Extract clean text from HTML using readability"
+          config:
+            use_readability: true
+            remove_selectors: ["script", "style", "noscript", "link", "meta", "textarea", "select"]
+            target_selectors: ["article", "main", ".content", "#content"]
+            min_content_length: 100
+            max_content_length: 1000000
         - type: "content_filter"
-          description: "Filter and clean content"
+          name: "filter_content"
+          description: "Filter and clean extracted content"
+          config:
+            remove_duplicates: true
+            normalize_whitespace: true
+            remove_empty_lines: true
+            trim_whitespace: true
+            min_line_length: 10
         - type: "markdown_format"
-          description: "Convert to markdown format"
+          name: "convert_markdown"
+          description: "Convert HTML to markdown format"
+          config:
+            code_block_style: "fenced"
+            heading_style: "atx"
+            bullet_list_marker: "-"
+            emphasis_delimiter: "_"
+            strong_delimiter: "**"
+            link_style: "inlined"
+            link_reference_style: "full"
+            img_data_url_to_object_url: true
+            keep_img_data_url: false
+            generate_alt_text: false
+          ai_enhancement:
+            enabled: false
+            task: "content_classification"
+            condition: "low_quality_content"
+            fallback_task: "general_chat"
       expected_fields: ["title", "content", "markdown_content", "links", "metadata", "timestamp"]
       expected_output_format: "markdown"
       render_markdown: true
@@ -149,15 +216,61 @@ pipeline_routing:
       ai_required: false
       stages:
         - type: "crawl"
+          name: "crawl_html"
           description: "Fetch HTML content from URL"
+          config:
+            timeout_ms: 30000
+            wait_for_network_idle: true
+            respect_robots_txt: true
+            user_agent: "DearReader-Bot/1.0"
         - type: "text_extract"
-          description: "Extract clean text from HTML"
+          name: "extract_text"
+          description: "Extract clean text from HTML using readability"
+          config:
+            use_readability: true
+            remove_selectors: ["script", "style", "noscript", "link", "meta", "textarea", "select"]
+            target_selectors: ["article", "main", ".content", "#content"]
+            min_content_length: 100
+            max_content_length: 1000000
         - type: "content_filter"
-          description: "Filter and clean content"
+          name: "filter_content"
+          description: "Filter and clean extracted content"
+          config:
+            remove_duplicates: true
+            normalize_whitespace: true
+            remove_empty_lines: true
+            trim_whitespace: true
+            min_line_length: 10
         - type: "markdown_format"
-          description: "Convert to markdown format"
+          name: "convert_markdown"
+          description: "Convert HTML to markdown format"
+          config:
+            code_block_style: "fenced"
+            heading_style: "atx"
+            bullet_list_marker: "-"
+            emphasis_delimiter: "_"
+            strong_delimiter: "**"
+            link_style: "inlined"
+            link_reference_style: "full"
+            img_data_url_to_object_url: true
+            keep_img_data_url: false
+            generate_alt_text: false
+          ai_enhancement:
+            enabled: false
+            task: "sentiment_analysis"
+            condition: "content_too_short"
+            fallback_task: "general_chat"
         - type: "json_format"
-          description: "Format as JSON response"
+          name: "format_json"
+          description: "Format content as JSON response"
+          config:
+            include_metadata: true
+            include_links: true
+            include_images: true
+            include_timestamps: true
+            include_processing_stats: true
+            pretty_print: false
+            calculate_token_usage: true
       expected_fields: ["title", "content", "markdown_content", "links", "metadata", "timestamp"]
       expected_output_format: "json"
       render_markdown: true
@@ -170,17 +283,180 @@ pipeline_routing:
       ai_required: false
       stages:
         - type: "crawl"
+          name: "crawl_pdf"
           description: "Fetch PDF content from URL"
+          config:
+            timeout_ms: 30000
+            respect_robots_txt: true
+            user_agent: "DearReader-Bot/1.0"
+            enable_pdf_parsing: true
+            max_file_size_mb: 50
         - type: "pdf_extract"
-          description: "Extract text using Tesseract OCR"
+          name: "extract_pdf_text"
+          description: "Extract text from PDF using OCR when needed"
+          config:
+            use_tesseract_ocr: true
+            ocr_languages: ["eng"]
+            extract_metadata: true
+            max_pages: 100
+            processing_timeout_seconds: 30
+            confidence_threshold: 0.7
+            enable_ai_fallback: false
+          ai_enhancement:
+            enabled: false
+            task: "parse_pdf"
+            condition: "low_ocr_confidence"
+            fallback_task: "ocr_processing"
         - type: "content_filter"
-          description: "Filter and clean extracted text"
+          name: "filter_pdf_content"
+          description: "Filter and clean extracted PDF text"
+          config:
+            remove_duplicates: true
+            normalize_whitespace: true
+            remove_empty_lines: true
+            trim_whitespace: true
+            min_line_length: 5
+            remove_page_numbers: true
+            remove_headers_footers: true
         - type: "json_format"
-          description: "Format as JSON response"
+          name: "format_pdf_json"
+          description: "Format PDF content as JSON response"
+          config:
+            include_metadata: true
+            include_ocr_quality: true
+            include_processing_stats: true
+            include_timestamps: true
+            pretty_print: false
+            calculate_token_usage: true
       expected_fields: ["title", "content", "extracted_text", "ocr_quality", "metadata", "timestamp"]
       expected_output_format: "json"
       use_tesseract: true
       enable_ai_fallback: false
+
+    # AI-enhanced pipeline variants
+    default_html_ai:
+      name: "AI-Enhanced HTML Processing Pipeline"
+      description: "HTML pipeline with AI content classification and enhancement"
+      content_type: "html"
+      ai_required: true
+      stages:
+        - type: "crawl"
+          name: "crawl_html"
+          description: "Fetch HTML content from URL"
+          config:
+            timeout_ms: 30000
+            wait_for_network_idle: true
+            respect_robots_txt: true
+            user_agent: "DearReader-Bot/1.0"
+        - type: "text_extract"
+          name: "extract_text"
+          description: "Extract clean text from HTML using readability"
+          config:
+            use_readability: true
+            remove_selectors: ["script", "style", "noscript", "link", "meta", "textarea", "select"]
+            target_selectors: ["article", "main", ".content", "#content"]
+            min_content_length: 100
+            max_content_length: 1000000
+        - type: "content_filter"
+          name: "filter_content"
+          description: "Filter and clean extracted content"
+          config:
+            remove_duplicates: true
+            normalize_whitespace: true
+            remove_empty_lines: true
+            trim_whitespace: true
+            min_line_length: 10
+        - type: "ai_process"
+          name: "ai_content_enhancement"
+          description: "Enhance content with AI processing"
+          config:
+            primary_task: "content_classification"
+            secondary_tasks: ["sentiment_analysis", "general_chat"]
+            enhancement_mode: "comprehensive"
+            max_tokens: 2048
+        - type: "markdown_format"
+          name: "convert_markdown"
+          description: "Convert HTML to markdown format"
+          config:
+            code_block_style: "fenced"
+            heading_style: "atx"
+            bullet_list_marker: "-"
+            emphasis_delimiter: "_"
+            strong_delimiter: "**"
+            link_style: "inlined"
+            link_reference_style: "full"
+            img_data_url_to_object_url: true
+            keep_img_data_url: false
+            generate_alt_text: true
+      expected_fields: ["title", "content", "markdown_content", "links", "metadata", "timestamp", "ai_insights", "sentiment", "classification"]
+      expected_output_format: "markdown"
+      render_markdown: true
+
+    default_pdf_ai:
+      name: "AI-Enhanced PDF Processing Pipeline"
+      description: "PDF pipeline with AI parsing and OCR enhancement"
+      content_type: "pdf"
+      ai_required: true
+      stages:
+        - type: "crawl"
+          name: "crawl_pdf"
+          description: "Fetch PDF content from URL"
+          config:
+            timeout_ms: 30000
+            respect_robots_txt: true
+            user_agent: "DearReader-Bot/1.0"
+            enable_pdf_parsing: true
+            max_file_size_mb: 50
+        - type: "pdf_extract"
+          name: "extract_pdf_text"
+          description: "Extract text from PDF using OCR when needed"
+          config:
+            use_tesseract_ocr: true
+            ocr_languages: ["eng"]
+            extract_metadata: true
+            max_pages: 100
+            processing_timeout_seconds: 30
+            confidence_threshold: 0.7
+            enable_ai_fallback: true
+          ai_enhancement:
+            enabled: true
+            task: "parse_pdf"
+            condition: "low_ocr_confidence"
+            fallback_task: "ocr_processing"
+        - type: "ai_process"
+          name: "ai_pdf_analysis"
+          description: "Analyze PDF content with AI"
+          config:
+            primary_task: "parse_pdf"
+            secondary_tasks: ["content_classification", "sentiment_analysis"]
+            enhancement_mode: "document_analysis"
+            max_tokens: 4096
+        - type: "content_filter"
+          name: "filter_pdf_content"
+          description: "Filter and clean extracted PDF text"
+          config:
+            remove_duplicates: true
+            normalize_whitespace: true
+            remove_empty_lines: true
+            trim_whitespace: true
+            min_line_length: 5
+            remove_page_numbers: true
+            remove_headers_footers: true
+        - type: "json_format"
+          name: "format_pdf_json"
+          description: "Format PDF content as JSON response"
+          config:
+            include_metadata: true
+            include_ocr_quality: true
+            include_processing_stats: true
+            include_timestamps: true
+            include_ai_insights: true
+            pretty_print: false
+            calculate_token_usage: true
+      expected_fields: ["title", "content", "extracted_text", "ocr_quality", "metadata", "timestamp", "ai_analysis", "classification"]
+      expected_output_format: "json"
+      use_tesseract: true
+      enable_ai_fallback: true
 
 # Pipeline test definitions
 pipeline_tests:

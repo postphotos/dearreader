@@ -243,6 +243,19 @@ run_meta_tests() {
 
     # Test 20: Force flag with safe command
     run_test "force_flag" "./dearreader status --force" 0 "Force flag should be accepted by commands that support it"
+
+    # Test 21: Requests flag propagation to python test
+    if check_python_available;
+    then
+        run_test "requests_flag_python" \
+            "./dearreader test python --requests -vv 2>&1 | grep -q 'Command:.*--requests'"
+            0 \
+            "The --requests flag should be passed to the python test command"
+    else
+        log_warn "Skipping requests flag test for python (Python not available)"
+        TEST_RESULTS+=("requests_flag_python: SKIP (Python not available)")
+        ((SKIPPED++))
+    fi
 }
 
 # Print test summary

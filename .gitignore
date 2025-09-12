@@ -21,3 +21,18 @@ screenshots/
 # scripts/legacy/run.sh
 config.yaml
 crawl_pipeline.yaml
+py/*venv*
+py/*venv*/
+py/__pycache__/
+py/*.pyc
+py/.env
+py/.pytest_cache/
+py/.mypy_cache/
+py/.vscode/
+py/storage/
+py/logs/
+py/.aider*
+py/.uv/
+py/.uv.lock
+py/reader/static/
+py/screenshots/
