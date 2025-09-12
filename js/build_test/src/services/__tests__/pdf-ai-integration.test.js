@@ -1,7 +1,21 @@
 import { expect } from 'chai';
 import PDFExtractor from '../pdf-extract.js';
+import { AIConsumer } from '../openai-consumer.js';
 import config from '../../config.js';
+import { before, after } from 'mocha';
+// Keep the original method
+const originalParseText = AIConsumer.prototype.parseText;
 describe('PDF + AI Integration', () => {
+    before(() => {
+        // Mock the parseText method before all tests in this suite
+        AIConsumer.prototype.parseText = async function (text, prompt) {
+            return `Mocked AI response for: ${text.substring(0, 20)}...`;
+        };
+    });
+    after(() => {
+        // Restore the original method after all tests in this suite
+        AIConsumer.prototype.parseText = originalParseText;
+    });
     // Check if AI is enabled and providers are configured
     const aiEnabled = config.ai_enabled !== false;
     console.log('Config AI providers keys:', Object.keys(config.ai_providers || {}));
@@ -131,7 +145,7 @@ describe('PDF + AI Integration', () => {
                     this.skip();
                     return;
                 }
-                // Create a simple PDF with minimal content that won't require OCR
+                // Create a simple PDF with minimal content that won\'t require OCR
                 const simplePdf = Buffer.from('%PDF-1.4\n' +
                     '1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n' +
                     '2 0 obj\n<<\n/Type /Pages\n/Kids [3 0 R]\n/Count 1\n>>\nendobj\n' +

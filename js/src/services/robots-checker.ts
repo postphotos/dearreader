@@ -1,5 +1,5 @@
 import axios from 'axios';
-import RobotsTxtParser from 'robots-txt-parser';
+import { RobotsParser } from 'robots';
 
 export interface RobotsCheckerResult {
     allowed: boolean;
@@ -14,9 +14,11 @@ export class RobotsChecker {
 
             const response = await axios.get(robotsUrl);
             const robotsTxt = response.data as string;
-            const robots = new RobotsTxtParser(robotsUrl, robotsTxt);
+            const parser = new RobotsParser();
+            const lines = robotsTxt.split('\n');
+            parser.parse(lines);
 
-            const allowed = robots.isAllowed(path, userAgent);
+            const allowed = parser.canFetchSync(userAgent, path);
             return { allowed };
         } catch (error) {
             return { allowed: true, reason: 'Failed to fetch or parse robots.txt' };
@@ -35,9 +37,11 @@ export class RobotsChecker {
 
             const response = await axios.get(robotsUrl);
             const robotsTxt = response.data as string;
-            const robots = new RobotsTxtParser(robotsUrl, robotsTxt);
+            const parser = new RobotsParser();
+            const lines = robotsTxt.split('\n');
+            parser.parse(lines);
 
-            const crawlDelay = robots.getCrawlDelay(userAgent);
+            const crawlDelay = parser.getCrawlDelay(userAgent);
             return crawlDelay || 1; // Default to 1 second if no crawl-delay is specified
         } catch (error) {
             return 1; // 1 second default delay

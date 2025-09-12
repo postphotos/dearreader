@@ -3,18 +3,15 @@ import { RobotsChecker } from '../robots-checker.js';
 import axios from 'axios';
 import { before } from 'mocha';
 import { RobotsParser } from 'robots';
-
 describe('RobotsChecker', () => {
-    let checker: RobotsChecker;
-
+    let checker;
     before(() => {
         checker = new RobotsChecker();
     });
-
     it('should disallow access to a disallowed path', async () => {
         const originalAxiosGet = axios.get;
         const robotsTxt = 'User-agent: *\nDisallow: /private';
-        (axios.get as any) = async () => Promise.resolve({ data: robotsTxt });
+        axios.get = async () => Promise.resolve({ data: robotsTxt });
         const parser = new RobotsParser();
         const lines = robotsTxt.split('\n');
         parser.parse(lines);
@@ -24,22 +21,21 @@ describe('RobotsChecker', () => {
         expect(result.allowed).to.be.false;
         axios.get = originalAxiosGet;
     });
-
     it('should allow access to allowed paths', async () => {
         const originalAxiosGet = axios.get;
         const robotsTxt = 'User-agent: *\nDisallow: /private';
-        (axios.get as any) = async () => Promise.resolve({ data: robotsTxt });
+        axios.get = async () => Promise.resolve({ data: robotsTxt });
         const result = await checker.checkAccess('http://example.com/public', '*', '/public');
         expect(result.allowed).to.be.true;
         axios.get = originalAxiosGet;
     });
-
     it('should handle missing robots.txt gracefully', async () => {
         const originalAxiosGet = axios.get;
-        (axios.get as any) = async () => { throw new Error('Not found'); };
+        axios.get = async () => { throw new Error('Not found'); };
         const result = await checker.checkAccess('http://example.com/test', '*', '/test');
         expect(result.allowed).to.be.true;
         expect(result.reason).to.include('Failed to fetch');
         axios.get = originalAxiosGet;
     });
 });
+//# sourceMappingURL=robots-checker.test.js.map
